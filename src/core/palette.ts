@@ -125,4 +125,8 @@ export const PROPS = {
   hullDark: '#4A4A52',
   sail: '#F4EFE4',
   funnel: '#B86B5A',
+  train: '#5E7366',
+  trainRoof: '#3E3E46',
+  trim: '#E8DEC3',
+  fuselage: '#4A5062',
 };

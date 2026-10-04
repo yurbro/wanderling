@@ -16,7 +16,8 @@ coarse coordinates, or picked by hand) and walk the nearest of three real routes
 (London to the sea, Tokyo to the hot springs, Paris down the Seine), at a steady 6 km/h
 day and night, resting three hours at each place. When a route is done they carry on to
 the nearest route not yet walked, on foot, by train or by plane depending on the
-distance, and once every route is walked they head home and start again. The land
+distance (seen from a carriage window with the land rushing past, or from a porthole
+above a sea of clouds), and once every route is walked they head home and start again. The land
 flattens on the plains and at the coast the sea appears, with boats and gulls. Towns have a cottage and a lamp that
 light up after dark. Now and then the wanderer stops to look at the sky, or glances at
 you. Every place reached sends a postcard, painted with the sky and weather of that

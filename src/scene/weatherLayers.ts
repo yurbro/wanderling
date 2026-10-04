@@ -303,7 +303,7 @@ export class WeatherPainter {
  * one line, like a paper cloud glued to a page. Drawn in white so the renderer
  * can tint it. Returns the drawn width.
  */
-function drawCloud(g: Graphics, scale: number, rng: () => number): number {
+export function drawCloud(g: Graphics, scale: number, rng: () => number): number {
   const puffs = 4 + Math.floor(rng() * 3);
   const radii: number[] = [];
   const xs: number[] = [];
