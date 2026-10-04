@@ -2,6 +2,7 @@ import { Application, Container, FillGradient, Graphics } from 'pixi.js';
 import { mix } from '../core/color';
 import { CELESTIAL } from '../core/palette';
 import type { RenderState } from '../core/types';
+import { WeatherPainter } from './weatherLayers';
 
 /** Fraction of the screen height where the sky meets the land. */
 const HORIZON = 0.62;
@@ -29,8 +30,8 @@ interface HillSpec {
  * Draws the scene from a RenderState. All layout is proportional so the same
  * code works on a phone in portrait and in a desktop browser.
  *
- * Layer order, back to front: sky, stars, sun, moon, far hills, mid hills,
- * near hills, ground + path.
+ * Layer order, back to front: sky, stars, sun, moon, clouds, far hills, fog,
+ * mid hills, fog, near hills, ground + path, fog, rain or snow, lightning.
  */
 export class SceneRenderer {
   private app = new Application();
@@ -45,6 +46,7 @@ export class SceneRenderer {
   private hillMid = new Graphics();
   private hillNear = new Graphics();
   private ground = new Graphics();
+  private weather = new WeatherPainter();
   private state: RenderState | null = null;
   private w = 1;
   private h = 1;
@@ -76,10 +78,16 @@ export class SceneRenderer {
       this.sunDisc,
       this.moonDisc,
       this.moonShadow,
+      this.weather.clouds,
       this.hillFar,
+      this.weather.fogFar,
       this.hillMid,
+      this.weather.fogMid,
       this.hillNear,
       this.ground,
+      this.weather.fogNear,
+      this.weather.precip,
+      this.weather.flash,
     );
 
     this.app.renderer.on('resize', () => this.layout());
@@ -89,6 +97,7 @@ export class SceneRenderer {
 
   setState(state: RenderState): void {
     this.state = state;
+    this.weather.setState(state);
     this.redraw();
   }
 
@@ -111,6 +120,7 @@ export class SceneRenderer {
     this.w = Math.max(1, this.app.screen.width);
     this.h = Math.max(1, this.app.screen.height);
     this.makeStars();
+    this.weather.layout(this.app.renderer, this.w, this.h, this.h * HORIZON);
     this.redraw();
   }
 
@@ -140,7 +150,10 @@ export class SceneRenderer {
 
   private frame(deltaMS: number): void {
     if (this.paused || !this.state) return;
-    this.elapsed += deltaMS / 1000;
+    // Clamp the step so a tab that was asleep does not fling particles around.
+    const dt = Math.min(0.1, deltaMS / 1000);
+    this.elapsed += dt;
+    this.weather.frame(dt, this.elapsed);
     const base = this.state.starAlpha;
     if (base <= 0.001) {
       if (this.starLayer.visible) this.starLayer.visible = false;
@@ -180,7 +193,9 @@ export class SceneRenderer {
     const sunColor = mix(CELESTIAL.sunDay, CELESTIAL.sunLow, st.sun.warmth);
     this.sunDisc.clear();
     this.sunHalo.clear();
-    if (st.sun.visible) {
+    this.sunDisc.alpha = st.sun.alpha;
+    this.sunHalo.alpha = st.sun.alpha;
+    if (st.sun.visible && st.sun.alpha > 0.01) {
       const sx = st.sun.x * w;
       const sy = st.sun.y * skyH;
       this.sunHalo.circle(sx, sy, sunR * 2.6).fill({ color: sunColor, alpha: 0.14 });
@@ -192,12 +207,11 @@ export class SceneRenderer {
     const moonR = unit * 0.034;
     this.moonDisc.clear();
     this.moonShadow.clear();
-    const moonVisible = st.moon.visible && st.starAlpha > 0.02;
+    const moonVisible = st.moon.visible && st.moon.alpha > 0.02;
     if (moonVisible) {
       const mx = st.moon.x * w;
       const my = st.moon.y * skyH;
-      const alpha = Math.min(1, 0.25 + st.starAlpha);
-      this.moonDisc.circle(mx, my, moonR).fill({ color: CELESTIAL.moon, alpha });
+      this.moonDisc.circle(mx, my, moonR).fill({ color: CELESTIAL.moon, alpha: st.moon.alpha });
       const skyHere = mix(st.sky.top, st.sky.horizon, st.moon.y);
       const offset = moonR * 2 * st.moon.fraction;
       const dir = st.moon.phase < 0.5 ? -1 : 1;

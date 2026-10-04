@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hexToRgb } from '../src/core/color';
 import { skyAt } from '../src/core/palette';
 import { direct } from '../src/core/sceneDirector';
+import { demoWeather } from '../src/core/weather';
 import { buildWorldState } from '../src/core/world';
 
 const LONDON = { lat: 51.51, lon: -0.13, name: 'London' };
@@ -73,5 +74,90 @@ describe('direct', () => {
         expect(c.y).toBeLessThanOrEqual(1);
       }
     }
+  });
+});
+
+describe('direct with weather', () => {
+  const noon = new Date(Date.UTC(2026, 5, 21, 12, 0, 0));
+  const midnight = new Date(Date.UTC(2026, 0, 15, 0, 30, 0));
+  const lum = (c: number): number => {
+    const { r, g, b } = hexToRgb(c);
+    return r + g + b;
+  };
+
+  it('draws nothing weather-related when the weather is unknown', () => {
+    const rs = direct(buildWorldState(noon, LONDON, null));
+    expect(rs.weather.cloud).toBe(0);
+    expect(rs.weather.rain).toBe(0);
+    expect(rs.weather.snow).toBe(0);
+    expect(rs.weather.fog).toBe(0);
+    expect(rs.sun.alpha).toBe(1);
+    expect(rs.sky).toEqual(skyAt(buildWorldState(noon, LONDON).sun.altitude));
+  });
+
+  it('greys and dims an overcast noon but keeps the ink dark', () => {
+    const clear = direct(buildWorldState(noon, LONDON, null));
+    const grey = direct(buildWorldState(noon, LONDON, demoWeather('overcast', noon)));
+    expect(lum(grey.sky.horizon)).toBeLessThan(lum(clear.sky.horizon));
+    expect(grey.light).toBeLessThan(clear.light);
+    expect(grey.darkInk).toBe(true);
+    expect(grey.weather.cloud).toBeGreaterThanOrEqual(0.85);
+    expect(grey.sun.alpha).toBeLessThan(0.2);
+  });
+
+  it('hides the stars and veils the moon under a cloudy night', () => {
+    const clear = direct(buildWorldState(midnight, LONDON, null));
+    const cloudy = direct(buildWorldState(midnight, LONDON, demoWeather('overcast', midnight)));
+    expect(clear.starAlpha).toBe(1);
+    expect(cloudy.starAlpha).toBeLessThan(0.05);
+    expect(cloudy.moon.alpha).toBeLessThan(clear.moon.alpha);
+    expect(cloudy.darkInk).toBe(false);
+  });
+
+  it('rain wets the ground and sets the rain layer', () => {
+    const dry = direct(buildWorldState(noon, LONDON, null));
+    const wet = direct(buildWorldState(noon, LONDON, demoWeather('heavy-rain', noon)));
+    expect(wet.weather.rain).toBeGreaterThan(0.5);
+    expect(lum(wet.ground)).toBeLessThan(lum(dry.ground));
+    expect(wet.weather.lightning).toBe(0);
+    const storm = direct(buildWorldState(noon, LONDON, demoWeather('thunderstorm', noon)));
+    expect(storm.weather.lightning).toBe(1);
+  });
+
+  it('fog pulls the far hills towards the fog color', () => {
+    const clear = direct(buildWorldState(noon, LONDON, null));
+    const foggy = direct(buildWorldState(noon, LONDON, demoWeather('fog', noon)));
+    const dist = (a: number, b: number): number => {
+      const x = hexToRgb(a);
+      const y = hexToRgb(b);
+      return Math.abs(x.r - y.r) + Math.abs(x.g - y.g) + Math.abs(x.b - y.b);
+    };
+    expect(foggy.weather.fog).toBeGreaterThan(0.7);
+    expect(dist(foggy.hills.far, foggy.weather.fogColor)).toBeLessThan(dist(clear.hills.far, foggy.weather.fogColor));
+    expect(dist(foggy.hills.far, foggy.weather.fogColor)).toBeLessThan(dist(foggy.hills.near, foggy.weather.fogColor));
+  });
+
+  it('snow whitens the ground only when it is cold', () => {
+    const base = direct(buildWorldState(noon, LONDON, null));
+    const cold = direct(buildWorldState(noon, LONDON, demoWeather('heavy-snow', noon, { temperature: -1 })));
+    const warm = direct(buildWorldState(noon, LONDON, demoWeather('heavy-snow', noon, { temperature: 8 })));
+    expect(cold.weather.snow).toBeGreaterThan(0.6);
+    expect(lum(cold.ground)).toBeGreaterThan(lum(base.ground));
+    expect(lum(warm.ground)).toBeLessThanOrEqual(lum(base.ground) + 1);
+  });
+
+  it('wind direction becomes a screen drift', () => {
+    const west = direct(buildWorldState(noon, LONDON, demoWeather('partly-cloudy', noon, { windDirection: 270, windSpeed: 30 })));
+    const east = direct(buildWorldState(noon, LONDON, demoWeather('partly-cloudy', noon, { windDirection: 90, windSpeed: 30 })));
+    expect(west.weather.wind).toBeLessThan(0);
+    expect(east.weather.wind).toBeGreaterThan(0);
+  });
+
+  it('tells dawn from dusk', () => {
+    // Sun at about 2 degrees: morning around 06:20 UTC, evening around 18:20 UTC on 4 Oct.
+    const morning = direct(buildWorldState(new Date(Date.UTC(2026, 9, 4, 6, 20, 0)), LONDON));
+    const evening = direct(buildWorldState(new Date(Date.UTC(2026, 9, 4, 17, 50, 0)), LONDON));
+    expect(morning.phase).toBe('dawn');
+    expect(evening.phase).toBe('dusk');
   });
 });
