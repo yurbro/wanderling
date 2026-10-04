@@ -9,6 +9,8 @@ export interface HudOptions {
   onWeather?: (condition: WeatherCondition | null) => void;
   onAlbum?: () => void;
   onMap?: () => void;
+  /** Tapping the place name: choose a city by hand. */
+  onPlace?: () => void;
 }
 
 export interface Hud {
@@ -112,6 +114,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     opts.onAlbum?.();
   });
   map.addEventListener('click', () => opts.onMap?.());
+  place.addEventListener('click', () => opts.onPlace?.());
 
   if (weatherSelect && opts.onWeather) {
     weatherSelect.addEventListener('change', () => {

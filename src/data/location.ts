@@ -3,6 +3,11 @@ import type { GeoPoint } from '../core/types';
 /** Where the sky is drawn from until the person shares their location. */
 export const DEFAULT_LOCATION: GeoPoint = { lat: 51.51, lon: -0.13, name: 'London' };
 
+/** True for the built-in default, which is nobody's home. */
+export function isDefaultLocation(p: GeoPoint): boolean {
+  return Math.abs(p.lat - DEFAULT_LOCATION.lat) < 1e-9 && Math.abs(p.lon - DEFAULT_LOCATION.lon) < 1e-9;
+}
+
 const KEY = 'wanderling.location';
 
 /** Coarse coordinates only: two decimals is roughly a kilometre, plenty for the sky. */

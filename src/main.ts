@@ -1,17 +1,20 @@
 import './style.css';
 import { direct } from './core/sceneDirector';
-import type { GeoPoint, RenderState, WeatherCondition, WeatherState, WorldState } from './core/types';
+import type { GeoPoint, JourneyState, RenderState, Route, WeatherCondition, WeatherState, WorldState } from './core/types';
+import { homeFrom, nearestRoute, routeFromHome } from './core/geo';
 import { advance, describeJourney, locate, startJourney } from './core/journey';
 import { demoPostcards, makePostcard, missingArrivals } from './core/postcards';
 import { CONDITIONS, conditionFromCode, demoWeather } from './core/weather';
 import { buildWorldState } from './core/world';
+import { reverseGeocode, searchCity } from './data/geocode';
 import { loadJourney, saveJourney } from './data/journeyStore';
 import { clearPostcards, loadPostcards, savePostcards } from './data/postcardStore';
-import { DEFAULT_LOCATION, loadLocation, requestLocation, saveLocation } from './data/location';
-import { TO_THE_SEA, routeById } from './data/routes';
+import { DEFAULT_LOCATION, isDefaultLocation, loadLocation, requestLocation, saveLocation } from './data/location';
+import { ROUTES, TO_THE_SEA, routeById } from './data/routes';
 import { WeatherService } from './data/weather';
 import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
+import { createCityChooser } from './ui/city';
 import { createHud } from './ui/hud';
 import { setupInstallHint } from './ui/install';
 import { createMap } from './ui/map';
@@ -55,16 +58,15 @@ async function main(): Promise<void> {
     demo: params.get('demo') === '1',
     onLocate: async () => {
       try {
-        location = await requestLocation();
-        saveLocation(location);
+        const found = await requestLocation();
         hud.setNote('');
         hud.hideLocate();
-        tick();
-        void weather.refresh(location);
+        await moveTo(found);
       } catch {
-        hud.setNote('No location this time. The sky is drawn for London instead.');
+        hud.setNote('No location this time. Tap the place name to pick a city instead.', 8000);
       }
     },
+    onPlace: () => city.open(),
     onScrub: (m) => {
       minutesOverride = m;
       tick();
@@ -84,6 +86,10 @@ async function main(): Promise<void> {
   });
   const album = createAlbum(root, hud.unit);
   const map = createMap(root);
+  const city = createCityChooser(root, searchCity, (picked) => {
+    hud.hideLocate();
+    void moveTo({ lat: picked.lat, lon: picked.lon, name: picked.name, region: picked.region });
+  });
 
   if (loadLocation()) hud.hideLocate();
 
@@ -99,12 +105,26 @@ async function main(): Promise<void> {
   // Weather arrives whenever it arrives; the sky is drawn clear until then.
   const weather = new WeatherService(() => tick());
 
-  // The journey: continue the saved one, or set out from the first place.
+  // The journey: continue the saved one, or set out from home (the person's
+  // own city when known, else the first place of the nearest route).
   const resetJourney = params.get('journey') === 'reset';
   if (resetJourney) clearPostcards();
   const saved = resetJourney ? null : loadJourney();
-  const route = (saved && routeById(saved.routeId)) || TO_THE_SEA;
-  let journey = saved && saved.routeId === route.id ? saved : startJourney(route, Date.now());
+  const freshJourney = (from: GeoPoint): { route: Route; journey: JourneyState } => {
+    const home = homeFrom(from, isDefaultLocation(from));
+    const base = home ? nearestRoute(ROUTES, home).route : TO_THE_SEA;
+    const route = routeFromHome(base, home);
+    return { route, journey: { ...startJourney(route, Date.now()), home } };
+  };
+  let route: Route;
+  let journey: JourneyState;
+  const savedBase = saved ? routeById(saved.routeId) : undefined;
+  if (saved && savedBase) {
+    route = routeFromHome(savedBase, saved.home);
+    journey = saved;
+  } else {
+    ({ route, journey } = freshJourney(location));
+  }
   const kmJump = Number(params.get('km'));
   const demoJourney = params.has('km') && Number.isFinite(kmJump);
   if (demoJourney) {
@@ -139,6 +159,47 @@ async function main(): Promise<void> {
 
   let world: WorldState;
   let render: RenderState;
+
+  /** A journey that has barely begun restarts from the new home; an old one carries on. */
+  const barelyStarted = (): boolean => journey.km < 2 && journey.arrivals.length <= 1 && !demoJourney;
+
+  const moveTo = async (p: GeoPoint): Promise<void> => {
+    location = p;
+    saveLocation(location);
+    tick();
+    void weather.refresh(location);
+    if (!p.name || p.name === 'Your sky') {
+      const named = await reverseGeocode(p);
+      if (named) {
+        location = { ...location, name: named.name, region: named.region };
+        saveLocation(location);
+      }
+    }
+    if (barelyStarted()) {
+      ({ route, journey } = freshJourney(location));
+      postcards = [];
+      clearPostcards();
+      saveJourney(journey);
+      hud.setPostcards(0, false);
+    }
+    tick();
+  };
+
+  // A location saved before names existed gets its city name now.
+  if (!isDefaultLocation(location) && (!location.name || location.name === 'Your sky')) {
+    void reverseGeocode(location).then((named) => {
+      if (!named) return;
+      location = { ...location, name: named.name, region: named.region };
+      saveLocation(location);
+      if (journey.home && journey.home.name === 'Home' && barelyStarted()) {
+        ({ route, journey } = freshJourney(location));
+        postcards = [];
+        clearPostcards();
+        saveJourney(journey);
+      }
+      tick();
+    });
+  }
 
   const tick = (): void => {
     const t = now();
