@@ -290,7 +290,8 @@ export class SceneRenderer {
       .lineTo(w, pathY + pathH * 1.15)
       .quadraticCurveTo(w * 0.5, pathY + pathH * 0.7, 0, pathY + pathH * 1.3)
       .closePath()
-      .fill({ color: st.path });
+      .fill({ color: st.path })
+      .stroke({ color: mix(st.path, WANDERER.ink, 0.4), width: 1, alpha: 0.35 });
   }
 
   /** Advance the walk: the wanderer strides, the world slides past. */
@@ -414,6 +415,12 @@ export class SceneRenderer {
     }
     pts.push(w + step, h);
     g.poly(pts).fill({ color });
+    // A pencil line along the ridge, like an outline in a sketchbook.
+    if (relief > 0.05) {
+      g.moveTo(pts[2], pts[3]);
+      for (let i = 4; i < pts.length - 2; i += 2) g.lineTo(pts[i], pts[i + 1]);
+      g.stroke({ color: mix(color, WANDERER.ink, 0.45), width: 1.1, alpha: 0.5, join: 'round', cap: 'round' });
+    }
   }
 
   /**
