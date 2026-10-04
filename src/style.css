@@ -339,3 +339,26 @@ canvas.scene {
   justify-content: center;
   flex-wrap: wrap;
 }
+
+/* Footprint map */
+
+.map-paper {
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(20, 24, 40, 0.35);
+  overflow: hidden;
+  transform: rotate(-0.4deg);
+}
+
+.map-paper svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.map-progress {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  opacity: 0.85;
+}

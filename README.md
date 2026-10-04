@@ -16,7 +16,8 @@ day and night, resting three hours at each place; the land flattens on the plain
 the coast the sea appears, with boats and gulls. Towns have a cottage and a lamp that
 light up after dark. Now and then the wanderer stops to look at the sky, or glances at
 you. Every place reached sends a postcard, painted with the sky and weather of that
-moment, into an album you can open from the main screen. A map comes next.
+moment, into an album you can open from the main screen, and a footprint map shows the
+route on paper with the walked stretch in red and each place lit as it is reached.
 
 Live preview: https://yurbro.github.io/wanderling/
 
@@ -37,7 +38,8 @@ Live preview: https://yurbro.github.io/wanderling/
   minutes and reused as an hourly forecast when the network is gone), the route
   data and the saved journey.
 - `src/ui/` is a thin DOM overlay for the clock, place name and buttons, plus the
-  postcard album (`ui/album.ts`).
+  postcard album (`ui/album.ts`) and the footprint map (`ui/map.ts`, plain SVG laid
+  out by `core/map.ts`).
 
 Useful URL parameters for demos and screenshots:
 

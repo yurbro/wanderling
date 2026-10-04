@@ -13,6 +13,7 @@ import { WeatherService } from './data/weather';
 import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
 import { createHud } from './ui/hud';
+import { createMap } from './ui/map';
 
 /**
  * Query parameters (useful for demos and screenshots):
@@ -75,8 +76,13 @@ async function main(): Promise<void> {
       album.setCards(allCards());
       album.open();
     },
+    onMap: () => {
+      map.update(route, locate(route, journey, Date.now()), allCards());
+      map.open();
+    },
   });
   const album = createAlbum(root, hud.unit);
+  const map = createMap(root);
 
   if (loadLocation()) hud.hideLocate();
 
@@ -150,6 +156,7 @@ async function main(): Promise<void> {
     renderer.setState(render);
     hud.update(world, render);
     hud.setJourney(describeJourney(position));
+    if (map.isOpen) map.update(route, position, allCards());
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', '#' + render.sky.top.toString(16).padStart(6, '0'));
@@ -161,7 +168,7 @@ async function main(): Promise<void> {
   if (postcards.length > 1 || sampleCards.length > 0) hud.setPostcards(allCards().length, freshCards);
   // A read-only peek for debugging and screenshots: window.__wanderling.render
   Object.defineProperty(window, '__wanderling', {
-    value: { get world() { return world; }, get render() { return render; }, get journey() { return journey; }, get postcards() { return allCards(); }, renderer, album },
+    value: { get world() { return world; }, get render() { return render; }, get journey() { return journey; }, get postcards() { return allCards(); }, renderer, album, map },
     configurable: true,
   });
   if (first.arrived.length > 0) {
