@@ -97,8 +97,8 @@ export function direct(ws: WorldState): RenderState {
     lantern: alt < -4,
     lanternGlow: 1 - smoothstep(-10, -2, alt),
     scarf: (temperature !== undefined && temperature < 10) || fx.snow > 0,
-    // Standing still while resting at a place or once the route is walked.
-    pace: journey && (journey.resting || journey.finished) ? 0 : 1,
+    // Standing still while resting, once the route is walked, or aboard a train or plane.
+    pace: journey && (journey.resting || journey.finished || journey.mode !== 'walk') ? 0 : 1,
     tint: mix(mix('#FFFFFF', tint, night * 0.55), WEATHER_TONES.landGreyDay, gloom * 0.12),
   };
 
@@ -113,7 +113,7 @@ export function direct(ws: WorldState): RenderState {
 
   // The nearest place's marker: behind us just after leaving, ahead when close.
   let marker: PlaceMarker | null = null;
-  if (journey) {
+  if (journey && (journey.mode === 'walk' || journey.resting || journey.finished)) {
     const behind = journey.resting || journey.finished || journey.kmIntoLeg <= journey.kmToNext;
     const place = behind || !journey.to ? journey.from : journey.to;
     const offsetKm = journey.resting || journey.finished ? 0 : behind ? -journey.kmIntoLeg : journey.kmToNext;

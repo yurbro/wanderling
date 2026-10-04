@@ -1,4 +1,4 @@
-import type { Arrival, JourneyState, Place, Position, Route, Terrain } from './types';
+import type { Arrival, JourneyState, Leg, LegMode, Place, Position, Route, Terrain } from './types';
 
 /**
  * The journey engine, pure and clock-driven.
@@ -20,8 +20,22 @@ import type { Arrival, JourneyState, Place, Position, Route, Terrain } from './t
 export const KM_PER_HOUR = 6;
 /** How long the wanderer lingers at each place before walking on. */
 export const REST_MS = 3 * 60 * 60_000;
+/** Between routes the wanderer may take a train, or a plane across the sea. */
+export const RIDE_KM_PER_HOUR = 60;
+export const FLY_KM_PER_HOUR = 700;
 
 const HOUR_MS = 3_600_000;
+
+export function legSpeed(leg: Leg | undefined): number {
+  switch (leg?.mode) {
+    case 'ride':
+      return RIDE_KM_PER_HOUR;
+    case 'fly':
+      return FLY_KM_PER_HOUR;
+    default:
+      return KM_PER_HOUR;
+  }
+}
 
 /** Journey km at which each place sits, starting at 0. */
 export function placeKms(route: Route): number[] {
@@ -34,15 +48,19 @@ export function totalKm(route: Route): number {
   return route.legs.reduce((sum, leg) => sum + leg.km, 0);
 }
 
-/** A fresh journey: standing at the first place, about to leave. */
-export function startJourney(route: Route, now: number): JourneyState {
+/**
+ * A fresh journey: standing at the first place, about to leave. The first
+ * place counts as reached unless `arrived` is false (a chained segment that
+ * starts where the last one ended, already on the album).
+ */
+export function startJourney(route: Route, now: number, opts: { arrived?: boolean } = {}): JourneyState {
   return {
     routeId: route.id,
     startedAt: now,
     km: 0,
     updatedAt: now,
     restingUntil: null,
-    arrivals: [{ placeId: route.places[0].id, at: now }],
+    arrivals: opts.arrived === false ? [] : [{ placeId: route.places[0].id, at: now }],
     bonusKm: 0,
   };
 }
@@ -78,14 +96,16 @@ export function advance(route: Route, state: JourneyState, now: number): Advance
     }
     const nextIndex = kms.findIndex((k) => k > km + 1e-9);
     const nextKm = nextIndex === -1 ? end : kms[nextIndex];
-    const kmAvailable = ((now - t) / HOUR_MS) * KM_PER_HOUR;
+    // The leg we are on sets the speed: feet, train or plane.
+    const speed = legSpeed(route.legs[Math.max(0, nextIndex - 1)]);
+    const kmAvailable = ((now - t) / HOUR_MS) * speed;
     const kmNeeded = nextKm - km;
     if (kmAvailable < kmNeeded) {
       km += kmAvailable;
       t = now;
       break;
     }
-    const arriveAt = t + (kmNeeded / KM_PER_HOUR) * HOUR_MS;
+    const arriveAt = t + (kmNeeded / speed) * HOUR_MS;
     km = nextKm;
     t = arriveAt;
     const place = route.places[nextIndex];
@@ -145,6 +165,7 @@ export function locate(route: Route, state: JourneyState, now: number): Position
       fraction: 1,
       resting: false,
       finished: true,
+      mode: 'walk',
       km,
       totalKm: total,
     };
@@ -167,17 +188,21 @@ export function locate(route: Route, state: JourneyState, now: number): Position
     fraction: legKm > 0 ? kmIntoLeg / legKm : 1,
     resting,
     finished: false,
+    mode: route.legs[legIndex].mode ?? 'walk',
     km,
     totalKm: total,
   };
 }
 
+const VERB: Record<LegMode, string> = { walk: 'Walking to', ride: 'On the train to', fly: 'Flying to' };
+const NEAR_KM: Record<LegMode, number> = { walk: 1, ride: 10, fly: 50 };
+
 /** The HUD line, in English, e.g. "Walking to Brighton · 31 km to go". */
 export function describeJourney(pos: Position): string {
   if (pos.finished) return `Journey's end: ${pos.from.name}`;
   if (pos.resting) return `Resting in ${pos.from.name}`;
-  const left = pos.kmToNext < 1 ? 'almost there' : `${Math.round(pos.kmToNext)} km to go`;
-  return `Walking to ${pos.to!.name} · ${left}`;
+  const left = pos.kmToNext < NEAR_KM[pos.mode] ? 'almost there' : `${Math.round(pos.kmToNext).toLocaleString('en-US')} km to go`;
+  return `${VERB[pos.mode]} ${pos.to!.name} · ${left}`;
 }
 
 /** The last arrival, handy for "arrived while you were away" notes. */

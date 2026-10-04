@@ -1,8 +1,9 @@
 import './style.css';
 import { direct } from './core/sceneDirector';
 import type { GeoPoint, JourneyState, RenderState, Route, WeatherCondition, WeatherState, WorldState } from './core/types';
+import { buildSegmentRoute, departureNote, nextSegment } from './core/chain';
 import { homeFrom, nearestRoute, routeFromHome } from './core/geo';
-import { advance, describeJourney, locate, startJourney } from './core/journey';
+import { REST_MS, advance, describeJourney, lastArrival, locate, startJourney } from './core/journey';
 import { demoPostcards, makePostcard, missingArrivals } from './core/postcards';
 import { CONDITIONS, conditionFromCode, demoWeather } from './core/weather';
 import { buildWorldState } from './core/world';
@@ -10,7 +11,7 @@ import { reverseGeocode, searchCity } from './data/geocode';
 import { loadJourney, saveJourney } from './data/journeyStore';
 import { clearPostcards, loadPostcards, savePostcards } from './data/postcardStore';
 import { DEFAULT_LOCATION, isDefaultLocation, loadLocation, requestLocation, saveLocation } from './data/location';
-import { ROUTES, TO_THE_SEA, routeById } from './data/routes';
+import { ROUTES, TO_THE_SEA } from './data/routes';
 import { WeatherService } from './data/weather';
 import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
@@ -28,6 +29,7 @@ import { createMap } from './ui/map';
  *   ?temp=-3&wind=30   tweak the forced weather (Celsius, km/h)
  *   ?km=120            jump the journey to a kilometre mark (not saved)
  *   ?journey=reset     start the journey again from the first place
+ *   ?journey=next      jump to the next segment of the chain right away (not saved)
  *   ?postcards=demo    add three sample postcards to the album (not saved)
  */
 async function main(): Promise<void> {
@@ -114,19 +116,27 @@ async function main(): Promise<void> {
     const home = homeFrom(from, isDefaultLocation(from));
     const base = home ? nearestRoute(ROUTES, home).route : TO_THE_SEA;
     const route = routeFromHome(base, home);
-    return { route, journey: { ...startJourney(route, Date.now()), home } };
+    return { route, journey: { ...startJourney(route, Date.now()), home, from: null, walked: [] } };
   };
   let route: Route;
   let journey: JourneyState;
-  const savedBase = saved ? routeById(saved.routeId) : undefined;
-  if (saved && savedBase) {
-    route = routeFromHome(savedBase, saved.home);
+  const savedRoute = saved ? buildSegmentRoute(saved, ROUTES) : null;
+  if (saved && savedRoute) {
+    route = savedRoute;
     journey = saved;
   } else {
     ({ route, journey } = freshJourney(location));
   }
   const kmJump = Number(params.get('km'));
-  const demoJourney = params.has('km') && Number.isFinite(kmJump);
+  const jumpNext = params.get('journey') === 'next';
+  const demoJourney = (params.has('km') && Number.isFinite(kmJump)) || jumpNext;
+  let departure: string | null = null;
+  if (jumpNext) {
+    // A demo peek at the chain: finish this segment and set off on the next.
+    const done = advance(route, { ...journey, km: 1e9, restingUntil: null, updatedAt: Date.now() - 1 }, Date.now());
+    ({ route, journey } = nextSegment(done.state, route, ROUTES, Date.now()));
+    departure = departureNote(route.legs[0]?.mode ?? 'walk', route.places[1]?.name ?? route.name);
+  }
   if (demoJourney) {
     // A demo peek: walk to that kilometre and rest there for a moment.
     journey = { ...journey, km: Math.max(0, kmJump), restingUntil: null, updatedAt: Date.now() };
@@ -210,6 +220,17 @@ async function main(): Promise<void> {
       if (!demoJourney) saveJourney(journey);
       const place = step.arrived[step.arrived.length - 1];
       hud.setNote(place.note ?? `Arrived in ${place.name}.`, 20_000);
+    }
+    // A finished route, rest over: set off on the next segment of the chain.
+    const posNow = locate(route, journey, wall);
+    const rested = lastArrival(journey);
+    if (posNow.finished && rested && wall >= rested.at + REST_MS) {
+      const seg = nextSegment(journey, route, ROUTES, wall);
+      route = seg.route;
+      journey = seg.journey;
+      if (!demoJourney) saveJourney(journey);
+      const firstLeg = route.legs[0];
+      hud.setNote(departureNote(firstLeg?.mode ?? 'walk', route.places[1]?.name ?? route.name), 15_000);
     }
     syncPostcards();
     const position = locate(route, journey, wall);

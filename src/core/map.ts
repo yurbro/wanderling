@@ -21,6 +21,8 @@ export interface MapLayout {
   width: number;
   height: number;
   points: MapPoint[];
+  /** Places left off the sheet at the start (the far-away place a flight came from). */
+  skip: number;
 }
 
 export interface XY {
@@ -34,7 +36,9 @@ export interface XY {
  * down the page so a route never fails to draw.
  */
 export function layoutRoute(route: Route, width = 320, height = 440, padding = 48): MapLayout {
-  const places = route.places;
+  // A flight in from another country would squash the route to a dot: leave that place off.
+  const skip = route.legs[0]?.mode === 'fly' && route.places.length > 2 ? 1 : 0;
+  const places = route.places.slice(skip);
   const hasCoords = places.every((p) => typeof p.lat === 'number' && typeof p.lon === 'number');
   let raw: XY[];
   if (hasCoords && places.length > 0) {
@@ -63,7 +67,7 @@ export function layoutRoute(route: Route, width = 320, height = 440, padding = 4
     return { id: p.id, name: p.name, terrain: p.terrain, x, y, labelSide: x < width / 2 ? 'right' : 'left' };
   });
   placeLabels(points, width, height);
-  return { width, height, points };
+  return { width, height, points, skip };
 }
 
 /* ---------------------------------------------------------------- labels */
@@ -174,10 +178,15 @@ export function mapProgress(layout: MapLayout, pos: Position | null): MapProgres
       placeCount: pts.length,
     };
   }
-  const lastReached = pos.finished ? pts.length - 1 : Math.min(pos.legIndex, pts.length - 1);
-  const reached = pts.slice(0, lastReached + 1).map((p) => p.id);
+  // Place indices on the route become point indices on the sheet.
+  const lastReachedPlace = pos.finished ? pos.legIndex + 1 : pos.legIndex;
+  const lastReached = Math.min(lastReachedPlace - layout.skip, pts.length - 1);
+  const reached = lastReached >= 0 ? pts.slice(0, lastReached + 1).map((p) => p.id) : [];
   let current: XY;
-  if (pos.finished || lastReached >= pts.length - 1) {
+  if (lastReached < 0) {
+    // Still flying in: the wanderer is not on the sheet yet, show the first place.
+    current = { x: pts[0].x, y: pts[0].y };
+  } else if (pos.finished || lastReached >= pts.length - 1) {
     current = { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y };
   } else {
     const a = pts[lastReached];
@@ -185,8 +194,8 @@ export function mapProgress(layout: MapLayout, pos: Position | null): MapProgres
     const f = Math.max(0, Math.min(1, pos.fraction));
     current = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
   }
-  const walked = [...pts.slice(0, lastReached + 1).map(({ x, y }) => ({ x, y })), current];
-  const ahead = [current, ...pts.slice(lastReached + 1).map(({ x, y }) => ({ x, y }))];
+  const walked = lastReached >= 0 ? [...pts.slice(0, lastReached + 1).map(({ x, y }) => ({ x, y })), current] : [current];
+  const ahead = [current, ...pts.slice(Math.max(0, lastReached + 1)).map(({ x, y }) => ({ x, y }))];
   return {
     reached,
     current,

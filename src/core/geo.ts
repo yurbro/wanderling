@@ -1,4 +1,4 @@
-import type { GeoPoint, Home, Place, Route } from './types';
+import type { GeoPoint, Home, LegMode, Place, Route } from './types';
 
 /**
  * Geography, the pure part: distances, which route is closest to home, the
@@ -30,40 +30,53 @@ export function nearestRoute(routes: Route[], p: { lat: number; lon: number }): 
   return best;
 }
 
-/** Closer than this and you already live at the route's first place. */
+/** Closer than this and you already stand at the route's first place. */
 export const HOME_LEG_MIN_KM = 3;
-/** Farther than this and the walk to the route would take weeks; start on the route instead. */
-export const HOME_LEG_MAX_KM = 400;
+/** Up to here the wanderer walks to the route; beyond, a train; far beyond, a plane. */
+export const WALK_MAX_KM = 400;
+export const RIDE_MAX_KM = 1500;
+
+export function transferMode(km: number): LegMode {
+  if (km <= WALK_MAX_KM) return 'walk';
+  if (km <= RIDE_MAX_KM) return 'ride';
+  return 'fly';
+}
 
 export function homeNote(name: string): string {
   return `Left ${name} before the streets woke up.`;
 }
 
 /**
- * The route the wanderer actually walks: the base route with the person's
- * city in front of it when it is a reasonable walk away. The id stays the
- * base route's, so saved journeys and postcards keep working.
+ * The route as actually travelled: the base route with a starting point in
+ * front of it (the person's city, or where the last route ended), joined by
+ * a leg of real distance, on foot when near, by train or plane when far.
+ * The id stays the base route's, so saved journeys and postcards keep working.
  */
-export function routeFromHome(base: Route, home: Home | null | undefined): Route {
-  if (!home) return base;
+export function withTransfer(base: Route, start: Home | null | undefined, startId = 'home', note?: string): Route {
+  if (!start) return base;
   const first = base.places[0];
   if (!first || typeof first.lat !== 'number' || typeof first.lon !== 'number') return base;
-  const km = haversineKm(home, { lat: first.lat, lon: first.lon });
-  if (km < HOME_LEG_MIN_KM || km > HOME_LEG_MAX_KM) return base;
-  const homePlace: Place = {
-    id: 'home',
-    name: home.name,
-    region: home.region,
+  const km = haversineKm(start, { lat: first.lat, lon: first.lon });
+  if (km < HOME_LEG_MIN_KM) return base;
+  const startPlace: Place = {
+    id: startId,
+    name: start.name,
+    region: start.region,
     terrain: 'city',
-    lat: home.lat,
-    lon: home.lon,
-    note: homeNote(home.name),
+    lat: start.lat,
+    lon: start.lon,
+    note: note ?? homeNote(start.name),
   };
   return {
     ...base,
-    places: [homePlace, ...base.places],
-    legs: [{ km: Math.round(km), terrain: 'plain' }, ...base.legs],
+    places: [startPlace, ...base.places],
+    legs: [{ km: Math.round(km), terrain: 'plain', mode: transferMode(km) }, ...base.legs],
   };
+}
+
+/** The route from the person's home city. */
+export function routeFromHome(base: Route, home: Home | null | undefined): Route {
+  return withTransfer(base, home, 'home');
 }
 
 /* ------------------------------------------------------------- geocoding */
