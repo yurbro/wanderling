@@ -64,3 +64,27 @@ export const CELESTIAL = {
   moon: '#ECE7D6',
   star: '#F6F1E3',
 };
+
+/**
+ * Tones the weather pulls the scene towards. Kept grey and quiet on purpose:
+ * a rainy day in the journal is soft pencil, not a storm poster.
+ */
+export const WEATHER_TONES = {
+  greyDayTop: '#A4ABB2',
+  greyDayHorizon: '#CBCFD1',
+  stormDayTop: '#858D96',
+  stormDayHorizon: '#B2B7BB',
+  greyNightTop: '#232737',
+  greyNightHorizon: '#2E3345',
+  landGreyDay: '#8F938F',
+  fogDay: '#D9DBD8',
+  fogNight: '#2A2F40',
+  cloudDay: '#F4EFE4',
+  cloudNight: '#303652',
+  cloudGreyDay: '#C3C7CB',
+  cloudGreyNight: '#2A2E40',
+  snowDay: '#E9E6DC',
+  snowNight: '#4A5068',
+  wetGround: '#6F7466',
+  paper: '#F4EFE4',
+};

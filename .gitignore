@@ -1,0 +1,12 @@
+# Dependencies and build output
+node_modules/
+dist/
+.vite/
+
+# Local visual self-check output
+screenshots/
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*.log
