@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KM_PER_HOUR, advance, locate, startJourney } from '../src/core/journey';
-import { describeProgress, layoutRoute, mapProgress, wobble } from '../src/core/map';
-import { TO_THE_SEA } from '../src/data/routes';
+import { describeProgress, labelBox, layoutRoute, mapProgress, wobble } from '../src/core/map';
+import { ROUTES, TO_THE_SEA } from '../src/data/routes';
 import type { Route } from '../src/core/types';
 
 const H = 3_600_000;
@@ -33,9 +33,32 @@ describe('layoutRoute', () => {
     expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(320 - 96);
   });
 
-  it('labels left of dots on the right half and vice versa', () => {
+  it('keeps names off each other and off other dots on every bundled route', () => {
+    for (const route of ROUTES) {
+      const layout = layoutRoute(route, 320, 440, 48);
+      const boxes = layout.points.map((p) => labelBox(p, p.labelSide));
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i];
+          const b = boxes[j];
+          // A sliver of a few square pixels is invisible; a real overlap is not.
+          const area = Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1)) * Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1));
+          expect(area, `${route.id}: ${layout.points[i].name} vs ${layout.points[j].name}`).toBeLessThan(20);
+        }
+        for (let j = 0; j < layout.points.length; j++) {
+          if (j === i) continue;
+          const q = layout.points[j];
+          const hits = boxes[i].x1 < q.x + 6 && q.x - 6 < boxes[i].x2 && boxes[i].y1 < q.y + 6 && q.y - 6 < boxes[i].y2;
+          expect(hits, `${route.id}: ${layout.points[i].name} label over ${q.name}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('prefers the side away from the nearer edge when there is room', () => {
     const layout = layoutRoute(TO_THE_SEA, 320, 440, 48);
-    for (const p of layout.points) expect(p.labelSide).toBe(p.x < 160 ? 'right' : 'left');
+    const london = layout.points.find((p) => p.id === 'london')!;
+    expect(london.labelSide).toBe(london.x < 160 ? 'right' : 'left');
   });
 
   it('spaces places without coordinates evenly', () => {
