@@ -87,6 +87,18 @@ export function direct(ws: WorldState): RenderState {
 
   const dropColor = mix(sky.mid, WEATHER_TONES.paper, 0.45);
 
+  // The traveler: umbrella when it rains, lantern once the sun is well down,
+  // a scarf when it is cold, and the same night tint as the land.
+  const temperature = ws.weather?.temperature;
+  const wanderer = {
+    umbrella: fx.rain > 0.05,
+    lantern: alt < -4,
+    lanternGlow: 1 - smoothstep(-10, -2, alt),
+    scarf: (temperature !== undefined && temperature < 10) || fx.snow > 0,
+    pace: 1,
+    tint: mix(mix('#FFFFFF', tint, night * 0.55), WEATHER_TONES.landGreyDay, gloom * 0.12),
+  };
+
   return {
     phase: phaseOf(alt, ws.sun.azimuth),
     sky,
@@ -109,6 +121,7 @@ export function direct(ws: WorldState): RenderState {
       fogColor,
       dropColor,
     },
+    wanderer,
     darkInk: luminance(sky.top) > 0.55,
   };
 }

@@ -118,6 +118,19 @@ export interface WeatherLayers {
   dropColor: number;
 }
 
+/** What the little traveler carries and wears right now. */
+export interface WandererState {
+  umbrella: boolean;
+  lantern: boolean;
+  /** 0..1 strength of the lantern's glow (grows as the night deepens). */
+  lanternGlow: number;
+  scarf: boolean;
+  /** Walking pace multiplier, 0 stands still. */
+  pace: number;
+  /** Multiplicative tint for the whole figure: white by day, bluish by night. */
+  tint: number;
+}
+
 export interface RenderState {
   phase: DayPhase;
   sky: SkyPalette;
@@ -131,6 +144,7 @@ export interface RenderState {
   ground: number;
   path: number;
   weather: WeatherLayers;
+  wanderer: WandererState;
   /** True when the HUD text should be dark ink instead of pale paper. */
   darkInk: boolean;
 }

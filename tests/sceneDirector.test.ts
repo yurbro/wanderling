@@ -161,3 +161,38 @@ describe('direct with weather', () => {
     expect(evening.phase).toBe('dusk');
   });
 });
+
+describe('direct decides what the wanderer carries', () => {
+  const noon = new Date(Date.UTC(2026, 5, 21, 12, 0, 0));
+  const midnight = new Date(Date.UTC(2026, 0, 15, 0, 30, 0));
+
+  it('opens the umbrella in rain and drizzle only', () => {
+    expect(direct(buildWorldState(noon, LONDON, demoWeather('rain', noon))).wanderer.umbrella).toBe(true);
+    expect(direct(buildWorldState(noon, LONDON, demoWeather('drizzle', noon))).wanderer.umbrella).toBe(true);
+    expect(direct(buildWorldState(noon, LONDON, demoWeather('overcast', noon))).wanderer.umbrella).toBe(false);
+    expect(direct(buildWorldState(noon, LONDON, null)).wanderer.umbrella).toBe(false);
+  });
+
+  it('lights the lantern at night, not at noon', () => {
+    const night = direct(buildWorldState(midnight, LONDON, null)).wanderer;
+    const day = direct(buildWorldState(noon, LONDON, null)).wanderer;
+    expect(night.lantern).toBe(true);
+    expect(night.lanternGlow).toBeGreaterThan(0.9);
+    expect(day.lantern).toBe(false);
+    expect(day.lanternGlow).toBe(0);
+  });
+
+  it('wears a scarf when it is cold or snowing', () => {
+    expect(direct(buildWorldState(noon, LONDON, demoWeather('clear', noon, { temperature: 4 }))).wanderer.scarf).toBe(true);
+    expect(direct(buildWorldState(noon, LONDON, demoWeather('snow', noon, { temperature: 1 }))).wanderer.scarf).toBe(true);
+    expect(direct(buildWorldState(noon, LONDON, demoWeather('clear', noon, { temperature: 22 }))).wanderer.scarf).toBe(false);
+    expect(direct(buildWorldState(noon, LONDON, null)).wanderer.scarf).toBe(false);
+  });
+
+  it('tints the figure darker at night', () => {
+    const night = hexToRgb(direct(buildWorldState(midnight, LONDON, null)).wanderer.tint);
+    const day = hexToRgb(direct(buildWorldState(noon, LONDON, null)).wanderer.tint);
+    expect(night.r + night.g + night.b).toBeLessThan(day.r + day.g + day.b);
+    expect(day.r + day.g + day.b).toBeGreaterThan(740);
+  });
+});
