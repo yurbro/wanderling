@@ -2,11 +2,16 @@ import { Application, Container, FillGradient, Graphics } from 'pixi.js';
 import { mix } from '../core/color';
 import { CELESTIAL } from '../core/palette';
 import type { RenderState } from '../core/types';
+import { KM_PER_HOUR } from '../core/journey';
 import { Wanderer } from './wanderer';
 import { WeatherPainter } from './weatherLayers';
 
 /** Fraction of the screen height where the sky meets the land. */
 const HORIZON = 0.62;
+/** How fast the ground slides past while the wanderer walks, in px/s. */
+const GROUND_SPEED = 36;
+/** The same walk measured in journey km, so signposts line up with the ground. */
+const PX_PER_KM = GROUND_SPEED / (KM_PER_HOUR / 3600);
 
 interface Star {
   x: number;
@@ -64,6 +69,11 @@ export class SceneRenderer {
   private detailLayer = new Container();
   private details: Detail[] = [];
   private wanderer = new Wanderer();
+  private signpost = new Graphics();
+  /** The signpost slides with the ground between state updates. */
+  private signpostX = 0;
+  private signpostHome = 0;
+  private signpostAhead = false;
   private weather = new WeatherPainter();
   /** Hill wave phase offsets, in fractions of the screen width. */
   private scroll = { far: 0, mid: 0, near: 0 };
@@ -106,6 +116,7 @@ export class SceneRenderer {
       this.hillNear,
       this.ground,
       this.detailLayer,
+      this.signpost,
       this.wanderer.glow,
       this.wanderer.view,
       this.weather.fogNear,
@@ -147,6 +158,7 @@ export class SceneRenderer {
     this.makeStars();
     this.makeDetails();
     this.placeWanderer();
+    this.drawSignpost();
     this.weather.layout(this.app.renderer, this.w, this.h, this.h * HORIZON);
     this.redraw();
   }
@@ -249,6 +261,7 @@ export class SceneRenderer {
     }
 
     this.drawHills();
+    this.placeSignpost();
 
     // Ground and a lighter path band.
     this.ground.clear();
@@ -272,7 +285,23 @@ export class SceneRenderer {
     const pace = st.wanderer.pace;
     if (pace <= 0) return;
     // Ground speed in pixels per second; the hills lag behind by depth.
-    const groundSpeed = 36 * pace;
+    const groundSpeed = GROUND_SPEED * pace;
+    // The next place's signpost slides in with the ground. When it reaches
+    // the wanderer's side we have arrived: hold everything there until the
+    // journey engine confirms the rest on its next update.
+    if (this.signpost.visible || this.signpostAhead) {
+      let x = this.signpostX - groundSpeed * dt;
+      if (this.signpostAhead && x <= this.signpostHome) {
+        x = this.signpostHome;
+        this.signpostX = x;
+        this.signpost.x = x;
+        this.signpost.visible = true;
+        return;
+      }
+      this.signpostX = x;
+      this.signpost.x = x;
+      this.signpost.visible = x > -this.w * 0.5 && x < this.w * 1.5;
+    }
     const perWidth = (groundSpeed / this.w) * dt;
     this.scroll.far += perWidth * 0.03;
     this.scroll.mid += perWidth * 0.08;
@@ -324,7 +353,8 @@ export class SceneRenderer {
 
   private moveDetails(dt: number, groundSpeed: number): void {
     for (const d of this.details) {
-      d.x -= groundSpeed * dt * (0.5 + d.depth * 0.8);
+      // Things at the path's depth move with the path; nearer ones a bit faster.
+      d.x -= groundSpeed * dt * (0.62 + d.depth * 0.8);
       if (d.x < -40) {
         d.x = this.w + 20 + Math.random() * 60;
         this.dropDetail(d, Math.random());
@@ -345,26 +375,79 @@ export class SceneRenderer {
   private drawHills(): void {
     const st = this.state;
     if (!st) return;
-    this.drawHill(this.hillFar, this.hillSpecs.far, st.hills.far, this.scroll.far);
-    this.drawHill(this.hillMid, this.hillSpecs.mid, st.hills.mid, this.scroll.mid);
-    this.drawHill(this.hillNear, this.hillSpecs.near, st.hills.near, this.scroll.near);
+    const { relief, sea, seaColor } = st.land;
+    // At the coast the far layer lies down flat and turns to water.
+    this.drawHill(this.hillFar, this.hillSpecs.far, mix(st.hills.far, seaColor, sea), this.scroll.far, relief * (1 - sea));
+    this.drawHill(this.hillMid, this.hillSpecs.mid, st.hills.mid, this.scroll.mid, relief * (1 - 0.5 * sea));
+    this.drawHill(this.hillNear, this.hillSpecs.near, st.hills.near, this.scroll.near, relief);
   }
 
-  private drawHill(g: Graphics, spec: HillSpec, color: number, offset: number): void {
+  private drawHill(g: Graphics, spec: HillSpec, color: number, offset: number, relief: number): void {
     const { w, h } = this;
     g.clear();
     const step = 8;
     const pts: number[] = [0, h];
+    // Flatter land sits a little lower, so the layers still stack cleanly.
+    const base = spec.base + (1 - Math.min(1, relief)) * 0.02;
     for (let x = 0; x <= w + step; x += step) {
       const u = x / w + offset;
-      let y = h * spec.base;
+      let y = h * base;
       for (let i = 0; i < spec.amps.length; i++) {
-        y += h * spec.amps[i] * Math.sin(u * spec.freqs[i] * Math.PI + spec.phases[i]);
+        y += h * spec.amps[i] * relief * Math.sin(u * spec.freqs[i] * Math.PI + spec.phases[i]);
       }
       pts.push(x, y);
     }
     pts.push(w + step, h);
     g.poly(pts).fill({ color });
+  }
+
+  /** A wooden signpost with an arrow board, no words: it marks a place. */
+  private drawSignpost(): void {
+    const g = this.signpost;
+    g.clear();
+    const ground = this.h - this.h * HORIZON;
+    const s = ground * 0.36; // same unit as the wanderer's height
+    const ink = 0x4a4a52;
+    const line = { color: ink, width: s * 0.012, join: 'round' as const };
+    g.roundRect(-s * 0.03, -s * 0.78, s * 0.06, s * 0.8, s * 0.015).fill({ color: 0x8c7355 }).stroke(line);
+    g.moveTo(-s * 0.2, -s * 0.72)
+      .lineTo(s * 0.14, -s * 0.72)
+      .lineTo(s * 0.24, -s * 0.64)
+      .lineTo(s * 0.14, -s * 0.56)
+      .lineTo(-s * 0.2, -s * 0.56)
+      .closePath()
+      .fill({ color: 0xd9cfae })
+      .stroke(line);
+    g.moveTo(-s * 0.16, -s * 0.5)
+      .lineTo(s * 0.1, -s * 0.5)
+      .lineTo(s * 0.18, -s * 0.43)
+      .lineTo(s * 0.1, -s * 0.36)
+      .lineTo(-s * 0.16, -s * 0.36)
+      .closePath()
+      .fill({ color: 0xd9cfae })
+      .stroke(line);
+    this.placeSignpost();
+  }
+
+  /** Sync the signpost from the journey engine's exact offset. */
+  private placeSignpost(): void {
+    const st = this.state;
+    if (!st || st.signpostKm === null) {
+      this.signpost.visible = false;
+      this.signpostAhead = false;
+      return;
+    }
+    const { w, h } = this;
+    const skyH = h * HORIZON;
+    const ground = h - skyH;
+    const feetY = skyH + ground * 0.42 + ground * 0.1 * 0.6;
+    // Just ahead of the wanderer when at the place.
+    this.signpostHome = w * 0.42 + ground * 0.36 * 0.55;
+    this.signpostAhead = st.signpostKm > 0;
+    this.signpostX = this.signpostHome + st.signpostKm * PX_PER_KM;
+    this.signpost.visible = this.signpostX > -w * 0.5 && this.signpostX < w * 1.5;
+    this.signpost.position.set(this.signpostX, feetY + ground * 0.015);
+    this.signpost.tint = st.wanderer.tint;
   }
 }
 

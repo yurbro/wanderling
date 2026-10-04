@@ -1,9 +1,12 @@
 import './style.css';
 import { direct } from './core/sceneDirector';
 import type { GeoPoint, RenderState, WeatherCondition, WeatherState, WorldState } from './core/types';
+import { advance, describeJourney, locate, startJourney } from './core/journey';
 import { CONDITIONS, conditionFromCode, demoWeather } from './core/weather';
 import { buildWorldState } from './core/world';
+import { loadJourney, saveJourney } from './data/journeyStore';
 import { DEFAULT_LOCATION, loadLocation, requestLocation, saveLocation } from './data/location';
+import { TO_THE_SEA, routeById } from './data/routes';
 import { WeatherService } from './data/weather';
 import { SceneRenderer } from './scene/renderer';
 import { createHud } from './ui/hud';
@@ -15,6 +18,8 @@ import { createHud } from './ui/hud';
  *   ?lat=..&lon=..     override the location
  *   ?weather=rain      force a weather look (a condition name or a WMO code)
  *   ?temp=-3&wind=30   tweak the forced weather (Celsius, km/h)
+ *   ?km=120            jump the journey to a kilometre mark (not saved)
+ *   ?journey=reset     start the journey again from the first place
  */
 async function main(): Promise<void> {
   const root = document.getElementById('app')!;
@@ -78,6 +83,20 @@ async function main(): Promise<void> {
   // Weather arrives whenever it arrives; the sky is drawn clear until then.
   const weather = new WeatherService(() => tick());
 
+  // The journey: continue the saved one, or set out from the first place.
+  const saved = params.get('journey') === 'reset' ? null : loadJourney();
+  const route = (saved && routeById(saved.routeId)) || TO_THE_SEA;
+  let journey = saved && saved.routeId === route.id ? saved : startJourney(route, Date.now());
+  const kmJump = Number(params.get('km'));
+  const demoJourney = params.has('km') && Number.isFinite(kmJump);
+  if (demoJourney) {
+    // A demo peek: walk to that kilometre and rest there for a moment.
+    journey = { ...journey, km: Math.max(0, kmJump), restingUntil: null, updatedAt: Date.now() };
+  }
+  const first = advance(route, journey, Date.now());
+  journey = first.state;
+  if (!demoJourney) saveJourney(journey);
+
   const weatherFor = (t: Date): WeatherState | null =>
     forcedWeather ? demoWeather(forcedWeather, t, forcedTweaks) : weather.current(t);
 
@@ -86,20 +105,41 @@ async function main(): Promise<void> {
 
   const tick = (): void => {
     const t = now();
-    world = buildWorldState(t, location, weatherFor(t));
+    const wall = Date.now();
+    const step = advance(route, journey, wall);
+    journey = step.state;
+    if (step.arrived.length > 0) {
+      if (!demoJourney) saveJourney(journey);
+      const place = step.arrived[step.arrived.length - 1];
+      hud.setNote(place.note ?? `Arrived in ${place.name}.`, 20_000);
+    }
+    const position = locate(route, journey, wall);
+    world = buildWorldState(t, location, weatherFor(t), position);
     render = direct(world);
     renderer.setState(render);
     hud.update(world, render);
+    hud.setJourney(describeJourney(position));
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', '#' + render.sky.top.toString(16).padStart(6, '0'));
   };
 
   tick();
+  // A read-only peek for debugging and screenshots: window.__wanderling.render
+  Object.defineProperty(window, '__wanderling', {
+    value: { get world() { return world; }, get render() { return render; }, get journey() { return journey; }, renderer },
+    configurable: true,
+  });
+  if (first.arrived.length > 0) {
+    // Arrived while the app was closed: say so, once, on opening.
+    const place = first.arrived[first.arrived.length - 1];
+    hud.setNote(place.note ?? `Arrived in ${place.name}.`, 20_000);
+  }
   void weather.refresh(location);
 
-  // The sun moves about a quarter of a degree per minute; every 20 s is plenty.
-  window.setInterval(tick, 20_000);
+  // The sun barely moves in a few seconds, but the journey engine needs to
+  // notice arrivals promptly, and a redraw is cheap. Every 5 s.
+  window.setInterval(tick, 5_000);
   // The weather cache lasts 45 minutes; checking every 5 is cheap and catches it.
   window.setInterval(() => void weather.refresh(location), 5 * 60_000);
 
