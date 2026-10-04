@@ -1,0 +1,135 @@
+:root {
+  --paper: #f4efe4;
+  --ink: #343a4d;
+  --text: var(--paper);
+  --pill-bg: rgba(255, 255, 255, 0.16);
+  --pill-border: rgba(255, 255, 255, 0.38);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #1c2240;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+canvas.scene {
+  position: fixed;
+  inset: 0;
+  display: block;
+  touch-action: none;
+}
+
+.hud {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  padding: calc(env(safe-area-inset-top, 0px) + 22px) 22px calc(env(safe-area-inset-bottom, 0px) + 26px);
+  color: var(--text);
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  text-shadow: 0 1px 2px rgba(20, 24, 40, 0.18);
+  transition: color 1.2s ease;
+}
+
+.hud.dark-ink {
+  --text: var(--ink);
+  --pill-bg: rgba(52, 58, 77, 0.1);
+  --pill-border: rgba(52, 58, 77, 0.32);
+  text-shadow: none;
+}
+
+.hud-top,
+.hud-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hud-bottom {
+  align-items: center;
+  gap: 12px;
+}
+
+.wordmark {
+  font-size: 15px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.82;
+}
+
+.clock {
+  font-size: 44px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.place {
+  font-size: 16px;
+  opacity: 0.85;
+}
+
+.note {
+  font-size: 13px;
+  opacity: 0.8;
+  min-height: 1em;
+  text-align: center;
+}
+
+.pill {
+  pointer-events: auto;
+  appearance: none;
+  border: 1px solid var(--pill-border);
+  background: var(--pill-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  padding: 11px 20px;
+  border-radius: 999px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: background 0.3s ease, color 1.2s ease, border-color 1.2s ease;
+}
+
+.pill:disabled {
+  opacity: 0.7;
+}
+
+.pill[hidden] {
+  display: none;
+}
+
+.demo {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 360px);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.demo input {
+  flex: 1;
+}
