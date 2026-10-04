@@ -17,7 +17,7 @@ body {
   padding: 0;
   height: 100%;
   overflow: hidden;
-  background: #1c2240;
+  background: transparent;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
@@ -33,6 +33,75 @@ canvas.scene {
   inset: 0;
   display: block;
   touch-action: none;
+  opacity: 0;
+  transition: opacity 0.7s ease;
+}
+
+#app.ready canvas.scene {
+  opacity: 1;
+}
+
+/* Paper grain over everything: a tiled noise, multiplied in very lightly. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0.16;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.42 0 0 0 0 0.38 0 0 0 0.55 0'/></filter><rect width='220' height='220' filter='url(%23n)'/></svg>");
+  background-size: 220px 220px;
+}
+
+/* Add-to-home-screen hint */
+
+.install {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  z-index: 8;
+  background: rgba(244, 239, 228, 0.94);
+  color: #343a4d;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  font-size: 14px;
+  line-height: 1.45;
+  box-shadow: 0 10px 30px rgba(20, 24, 40, 0.3);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  transform: translateY(20px);
+  opacity: 0;
+  transition: transform 0.5s ease, opacity 0.5s ease;
+}
+
+.install.show {
+  transform: none;
+  opacity: 1;
+}
+
+.install[hidden] {
+  display: none;
+}
+
+.install-text {
+  flex: 1;
+}
+
+.install-text b {
+  font-weight: 600;
+}
+
+.install .pill {
+  --text: #343a4d;
+  --pill-bg: rgba(52, 58, 77, 0.1);
+  --pill-border: rgba(52, 58, 77, 0.32);
+  color: #343a4d;
+  padding: 7px 14px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .hud {

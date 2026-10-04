@@ -13,6 +13,7 @@ import { WeatherService } from './data/weather';
 import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
 import { createHud } from './ui/hud';
+import { setupInstallHint } from './ui/install';
 import { createMap } from './ui/map';
 
 /**
@@ -157,9 +158,9 @@ async function main(): Promise<void> {
     hud.update(world, render);
     hud.setJourney(describeJourney(position));
     if (map.isOpen) map.update(route, position, allCards());
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute('content', '#' + render.sky.top.toString(16).padStart(6, '0'));
+    const skyCss = '#' + render.sky.top.toString(16).padStart(6, '0');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', skyCss);
+    rememberSky(skyCss);
   };
 
   hud.setPostcards(allCards().length, false);
@@ -193,6 +194,37 @@ async function main(): Promise<void> {
     }
   });
   window.addEventListener('online', () => void weather.refresh(location));
+
+  // The canvas fades in once the first frame is drawn.
+  requestAnimationFrame(() => root.classList.add('ready'));
+
+  setupInstallHint(root);
+  registerServiceWorker();
+}
+
+/** Keeps the last sky colour so the next launch paints it before anything loads. */
+let lastRemembered = '';
+function rememberSky(css: string): void {
+  if (css === lastRemembered) return;
+  lastRemembered = css;
+  try {
+    localStorage.setItem('wanderling.lastSky', css);
+  } catch {
+    // Not important.
+  }
+}
+
+/** Offline support: see public/sw.js. Skipped on dev servers and old browsers. */
+function registerServiceWorker(): void {
+  if (!('serviceWorker' in navigator) || import.meta.env.DEV) return;
+  const register = (): void => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch((err) => {
+      console.warn('[wanderling] service worker not registered', err);
+    });
+  };
+  // main() is async, so the page may well have finished loading already.
+  if (document.readyState === 'complete') register();
+  else window.addEventListener('load', register, { once: true });
 }
 
 function parseClock(value: string | null): number | null {

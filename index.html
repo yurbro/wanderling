@@ -19,9 +19,22 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <script>
+      // Paint the last known sky colour before anything loads, so launching
+      // from the home screen never flashes a dark screen first.
+      try {
+        var sky = localStorage.getItem('wanderling.lastSky');
+        if (sky && /^#[0-9a-f]{6}$/i.test(sky)) {
+          document.documentElement.style.background = sky;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', sky);
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>
+    <div class="grain" aria-hidden="true"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
