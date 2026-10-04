@@ -3,6 +3,8 @@ import { mix } from '../core/color';
 import { CELESTIAL } from '../core/palette';
 import type { RenderState } from '../core/types';
 import { KM_PER_HOUR } from '../core/journey';
+import { PROPS, WANDERER } from '../core/palette';
+import { SeaPainter } from './seaLayer';
 import { Wanderer } from './wanderer';
 import { WeatherPainter } from './weatherLayers';
 
@@ -69,11 +71,18 @@ export class SceneRenderer {
   private detailLayer = new Container();
   private details: Detail[] = [];
   private wanderer = new Wanderer();
+  /** The place marker: signpost, and in towns a lamp and a cottage. */
+  private marker = new Container();
   private signpost = new Graphics();
-  /** The signpost slides with the ground between state updates. */
+  private lamp = new Graphics();
+  private cottage = new Graphics();
+  /** Lamp glow and window light, untinted so they stay warm at night. */
+  private markerLights = new Graphics();
+  /** The marker slides with the ground between state updates. */
   private signpostX = 0;
   private signpostHome = 0;
   private signpostAhead = false;
+  private sea = new SeaPainter();
   private weather = new WeatherPainter();
   /** Hill wave phase offsets, in fractions of the screen width. */
   private scroll = { far: 0, mid: 0, near: 0 };
@@ -109,14 +118,18 @@ export class SceneRenderer {
       this.moonDisc,
       this.moonShadow,
       this.weather.clouds,
+      this.sea.gulls,
       this.hillFar,
       this.weather.fogFar,
       this.hillMid,
+      this.sea.waves,
+      this.sea.boats,
       this.weather.fogMid,
       this.hillNear,
       this.ground,
       this.detailLayer,
-      this.signpost,
+      this.marker,
+      this.markerLights,
       this.wanderer.glow,
       this.wanderer.view,
       this.weather.fogNear,
@@ -133,6 +146,7 @@ export class SceneRenderer {
     this.state = state;
     this.weather.setState(state);
     this.wanderer.setState(state);
+    this.sea.setState(state);
     this.tintDetails(state);
     this.redraw();
   }
@@ -158,7 +172,8 @@ export class SceneRenderer {
     this.makeStars();
     this.makeDetails();
     this.placeWanderer();
-    this.drawSignpost();
+    this.drawMarker();
+    this.sea.layout(this.w, this.h);
     this.weather.layout(this.app.renderer, this.w, this.h, this.h * HORIZON);
     this.redraw();
   }
@@ -193,6 +208,7 @@ export class SceneRenderer {
     const dt = Math.min(0.1, deltaMS / 1000);
     this.elapsed += dt;
     this.weather.frame(dt, this.elapsed);
+    this.sea.frame(dt, this.elapsed);
     this.walk(dt);
     const base = this.state.starAlpha;
     if (base <= 0.001) {
@@ -281,26 +297,24 @@ export class SceneRenderer {
   private walk(dt: number): void {
     const st = this.state;
     if (!st) return;
+    // No stopping to look at the sky while a place is coming into view.
+    this.wanderer.allowPause = !this.marker.visible && Math.abs(this.signpostX - this.signpostHome) > this.w * 2;
     this.wanderer.frame(dt);
     const pace = st.wanderer.pace;
-    if (pace <= 0) return;
+    if (pace <= 0 || this.wanderer.paused) return;
     // Ground speed in pixels per second; the hills lag behind by depth.
     const groundSpeed = GROUND_SPEED * pace;
     // The next place's signpost slides in with the ground. When it reaches
     // the wanderer's side we have arrived: hold everything there until the
     // journey engine confirms the rest on its next update.
-    if (this.signpost.visible || this.signpostAhead) {
+    if (this.marker.visible || this.signpostAhead) {
       let x = this.signpostX - groundSpeed * dt;
       if (this.signpostAhead && x <= this.signpostHome) {
         x = this.signpostHome;
-        this.signpostX = x;
-        this.signpost.x = x;
-        this.signpost.visible = true;
+        this.setMarkerX(x, true);
         return;
       }
-      this.signpostX = x;
-      this.signpost.x = x;
-      this.signpost.visible = x > -this.w * 0.5 && x < this.w * 1.5;
+      this.setMarkerX(x, x > -this.w * 0.6 && x < this.w * 1.6);
     }
     const perWidth = (groundSpeed / this.w) * dt;
     this.scroll.far += perWidth * 0.03;
@@ -375,20 +389,21 @@ export class SceneRenderer {
   private drawHills(): void {
     const st = this.state;
     if (!st) return;
-    const { relief, sea, seaColor } = st.land;
-    // At the coast the far layer lies down flat and turns to water.
-    this.drawHill(this.hillFar, this.hillSpecs.far, mix(st.hills.far, seaColor, sea), this.scroll.far, relief * (1 - sea));
-    this.drawHill(this.hillMid, this.hillSpecs.mid, st.hills.mid, this.scroll.mid, relief * (1 - 0.5 * sea));
-    this.drawHill(this.hillNear, this.hillSpecs.near, st.hills.near, this.scroll.near, relief);
+    const { relief, sea, seaColor, seaNear } = st.land;
+    // At the coast the far and mid layers lie down flat and turn to water,
+    // the mid one a little lower so the water has some width to it.
+    this.drawHill(this.hillFar, this.hillSpecs.far, mix(st.hills.far, seaColor, sea), this.scroll.far, relief * (1 - sea), 0);
+    this.drawHill(this.hillMid, this.hillSpecs.mid, mix(st.hills.mid, seaNear, sea), this.scroll.mid, relief * (1 - sea), sea * 0.022);
+    this.drawHill(this.hillNear, this.hillSpecs.near, st.hills.near, this.scroll.near, relief, 0);
   }
 
-  private drawHill(g: Graphics, spec: HillSpec, color: number, offset: number, relief: number): void {
+  private drawHill(g: Graphics, spec: HillSpec, color: number, offset: number, relief: number, sink: number): void {
     const { w, h } = this;
     g.clear();
     const step = 8;
     const pts: number[] = [0, h];
     // Flatter land sits a little lower, so the layers still stack cleanly.
-    const base = spec.base + (1 - Math.min(1, relief)) * 0.02;
+    const base = spec.base + (1 - Math.min(1, relief)) * 0.02 + sink;
     for (let x = 0; x <= w + step; x += step) {
       const u = x / w + offset;
       let y = h * base;
@@ -401,14 +416,40 @@ export class SceneRenderer {
     g.poly(pts).fill({ color });
   }
 
-  /** A wooden signpost with an arrow board, no words: it marks a place. */
-  private drawSignpost(): void {
-    const g = this.signpost;
-    g.clear();
+  /**
+   * The props that mark a place: a wooden signpost with arrow boards (no
+   * words), and in towns a lamp post by the path and a cottage beyond it.
+   */
+  private drawMarker(): void {
+    this.marker.removeChildren();
+    this.marker.addChild(this.cottage, this.lamp, this.signpost);
     const ground = this.h - this.h * HORIZON;
     const s = ground * 0.36; // same unit as the wanderer's height
     const ink = 0x4a4a52;
     const line = { color: ink, width: s * 0.012, join: 'round' as const };
+
+    // Lamp post, a little ahead of the signpost on the path's edge.
+    const l = this.lamp;
+    l.clear();
+    l.position.set(s * 0.42, 0);
+    l.roundRect(-s * 0.02, -s * 1.0, s * 0.04, s * 1.0, s * 0.01).fill({ color: ink });
+    l.rect(-s * 0.06, -s * 0.02, s * 0.12, s * 0.03).fill({ color: ink });
+    l.roundRect(-s * 0.07, -s * 1.1, s * 0.14, s * 0.11, s * 0.02).fill({ color: WANDERER.lanternGlass, alpha: 0.4 }).stroke(line);
+    l.moveTo(-s * 0.09, -s * 1.1).lineTo(0, -s * 1.17).lineTo(s * 0.09, -s * 1.1).closePath().fill({ color: ink });
+
+    // Cottage beyond the path, smaller for the distance.
+    const c = this.cottage;
+    c.clear();
+    c.position.set(-s * 0.55, -ground * 0.17);
+    c.scale.set(0.8);
+    c.rect(-s * 0.4, -s * 0.5, s * 0.8, s * 0.5).fill({ color: PROPS.wall }).stroke(line);
+    c.moveTo(-s * 0.47, -s * 0.5).lineTo(0, -s * 0.85).lineTo(s * 0.47, -s * 0.5).closePath().fill({ color: PROPS.roof }).stroke(line);
+    c.rect(s * 0.15, -s * 0.78, s * 0.08, s * 0.16).fill({ color: PROPS.wood }).stroke(line);
+    c.roundRect(-s * 0.3, -s * 0.3, s * 0.14, s * 0.3, s * 0.03).fill({ color: PROPS.wood }).stroke(line);
+    c.rect(s * 0.06, -s * 0.36, s * 0.16, s * 0.16).fill({ color: PROPS.window }).stroke(line);
+
+    const g = this.signpost;
+    g.clear();
     g.roundRect(-s * 0.03, -s * 0.78, s * 0.06, s * 0.8, s * 0.015).fill({ color: 0x8c7355 }).stroke(line);
     g.moveTo(-s * 0.2, -s * 0.72)
       .lineTo(s * 0.14, -s * 0.72)
@@ -429,11 +470,48 @@ export class SceneRenderer {
     this.placeSignpost();
   }
 
-  /** Sync the signpost from the journey engine's exact offset. */
+  /** Lamp glow and the cottage window, warm and untinted, by night. */
+  private drawMarkerLights(glow: number, cottage: boolean): void {
+    const g = this.markerLights;
+    g.clear();
+    if (glow <= 0.01 || !cottage) {
+      g.visible = false;
+      return;
+    }
+    g.visible = true;
+    const ground = this.h - this.h * HORIZON;
+    const s = ground * 0.36;
+    const lx = s * 0.42;
+    const ly = -s * 1.045;
+    for (const [r, a] of [
+      [0.55, 0.035],
+      [0.38, 0.05],
+      [0.22, 0.07],
+    ] as const) {
+      g.circle(lx, ly, r * s).fill({ color: WANDERER.glow, alpha: a * glow });
+    }
+    g.roundRect(lx - s * 0.055, ly - s * 0.045, s * 0.11, s * 0.09, s * 0.015).fill({ color: WANDERER.glow, alpha: 0.85 * glow });
+    // The window: the cottage is at (-0.55 s, -0.17 ground) and scaled 0.8.
+    const wx = -s * 0.55 + s * 0.06 * 0.8;
+    const wy = -ground * 0.17 - s * 0.36 * 0.8;
+    g.rect(wx, wy, s * 0.16 * 0.8, s * 0.16 * 0.8).fill({ color: WANDERER.glow, alpha: 0.9 * glow });
+    g.circle(wx + s * 0.064, wy + s * 0.064, s * 0.3).fill({ color: WANDERER.glow, alpha: 0.05 * glow });
+  }
+
+  private setMarkerX(x: number, visible: boolean): void {
+    this.signpostX = x;
+    this.marker.x = x;
+    this.markerLights.x = x;
+    this.marker.visible = visible;
+    this.markerLights.visible = visible && this.markerLights.alpha > 0;
+  }
+
+  /** Sync the place marker from the journey engine's exact offset. */
   private placeSignpost(): void {
     const st = this.state;
-    if (!st || st.signpostKm === null) {
-      this.signpost.visible = false;
+    if (!st || st.marker === null) {
+      this.marker.visible = false;
+      this.markerLights.visible = false;
       this.signpostAhead = false;
       return;
     }
@@ -443,11 +521,16 @@ export class SceneRenderer {
     const feetY = skyH + ground * 0.42 + ground * 0.1 * 0.6;
     // Just ahead of the wanderer when at the place.
     this.signpostHome = w * 0.42 + ground * 0.36 * 0.55;
-    this.signpostAhead = st.signpostKm > 0;
-    this.signpostX = this.signpostHome + st.signpostKm * PX_PER_KM;
-    this.signpost.visible = this.signpostX > -w * 0.5 && this.signpostX < w * 1.5;
-    this.signpost.position.set(this.signpostX, feetY + ground * 0.015);
-    this.signpost.tint = st.wanderer.tint;
+    this.signpostAhead = st.marker.offsetKm > 0;
+    const x = this.signpostHome + st.marker.offsetKm * PX_PER_KM;
+    this.marker.y = feetY + ground * 0.015;
+    this.markerLights.y = this.marker.y;
+    this.marker.tint = st.wanderer.tint;
+    this.lamp.visible = st.marker.cottage;
+    this.cottage.visible = st.marker.cottage;
+    this.drawMarkerLights(st.wanderer.lantern ? st.wanderer.lanternGlow : 0, st.marker.cottage);
+    this.markerLights.alpha = this.markerLights.visible ? 1 : 0;
+    this.setMarkerX(x, x > -w * 0.6 && x < w * 1.6);
   }
 }
 

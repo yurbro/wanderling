@@ -12,10 +12,14 @@ import type { Arrival, JourneyState, Place, Position, Route, Terrain } from './t
  * often something new happens.
  */
 
-/** Walking pace: a brisk walker who never stops, day or night. */
-export const KM_PER_HOUR = 4;
+/**
+ * Walking pace: a brisk walker who never stops, day or night. Faster than
+ * real legs so that something new happens every few hours; the one knob
+ * for the rhythm of the whole journey (Yu asked for quicker, session 7).
+ */
+export const KM_PER_HOUR = 6;
 /** How long the wanderer lingers at each place before walking on. */
-export const REST_MS = 6 * 60 * 60_000;
+export const REST_MS = 3 * 60 * 60_000;
 
 const HOUR_MS = 3_600_000;
 

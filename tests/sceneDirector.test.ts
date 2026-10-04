@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hexToRgb } from '../src/core/color';
 import { skyAt } from '../src/core/palette';
 import { direct } from '../src/core/sceneDirector';
-import { advance, locate, startJourney } from '../src/core/journey';
+import { KM_PER_HOUR, advance, locate, startJourney } from '../src/core/journey';
 import { demoWeather } from '../src/core/weather';
 import { buildWorldState } from '../src/core/world';
 
@@ -220,7 +220,7 @@ describe('direct follows the journey', () => {
     expect(rs.land.relief).toBe(1);
     expect(rs.land.sea).toBe(0);
     expect(rs.wanderer.pace).toBe(1);
-    expect(rs.signpostKm).toBeNull();
+    expect(rs.marker).toBeNull();
   });
 
   it('flattens the land on a plain and puts the signpost behind just after leaving', () => {
@@ -228,7 +228,8 @@ describe('direct follows the journey', () => {
     const rs = direct(buildWorldState(noon, LONDON, null, locate(route, s, t0 + 0.25 * 3_600_000)));
     expect(rs.land.relief).toBeLessThan(0.7);
     expect(rs.wanderer.pace).toBe(1);
-    expect(rs.signpostKm).toBeCloseTo(-1, 6);
+    expect(rs.marker?.offsetKm).toBeCloseTo(-0.25 * KM_PER_HOUR, 6);
+    expect(rs.marker?.cottage).toBe(true);
   });
 
   it('stands still while resting, with the sea in view at the coast', () => {
@@ -237,7 +238,17 @@ describe('direct follows the journey', () => {
     expect(pos.resting).toBe(true);
     const rs = direct(buildWorldState(noon, LONDON, null, pos));
     expect(rs.wanderer.pace).toBe(0);
-    expect(rs.signpostKm).toBe(0);
+    expect(rs.marker?.offsetKm).toBe(0);
+    expect(rs.marker?.cottage).toBe(true);
     expect(rs.land.sea).toBe(1);
+    expect(rs.land.seaNear).not.toBe(rs.land.seaColor);
+  });
+
+  it('marks the next place ahead, without a cottage on a hill', () => {
+    const hilly = { ...route, places: [route.places[0], { id: 'h', name: 'H', terrain: 'hills' as const }, route.places[2]] };
+    const s = advance(hilly, startJourney(hilly, t0), t0 + (6 / KM_PER_HOUR) * 3_600_000).state;
+    const rs = direct(buildWorldState(noon, LONDON, null, locate(hilly, s, t0 + (6 / KM_PER_HOUR) * 3_600_000)));
+    expect(rs.marker?.offsetKm).toBeCloseTo(2, 6);
+    expect(rs.marker?.cottage).toBe(false);
   });
 });
