@@ -37,7 +37,9 @@ Live preview: https://yurbro.github.io/wanderling/
   a cached forecast. `core/journey.ts` walks a route by the clock: fixed pace, a rest
   at every place, arrivals replayed correctly after any absence. This part has unit
   tests.
-- `src/scene/` draws the `RenderState` with PixiJS: sky gradient, stars, sun, moon,
+- `src/scene/` eases from one `RenderState` to the next over two seconds
+  (`core/blend.ts`, colours mixed, intensities slid, names and modes switched at
+  once) and draws the result with PixiJS: sky gradient, stars, sun, moon,
   clouds, three layers of hills with fog between them (scrolling at three speeds),
   ground and path with grass and stones sliding past, the wanderer, rain or snow.
 - `src/data/` talks to the outside world: browser location, the free
