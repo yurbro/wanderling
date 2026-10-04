@@ -2,6 +2,7 @@ import { Application, Container, FillGradient, Graphics } from 'pixi.js';
 import { mix } from '../core/color';
 import { CELESTIAL } from '../core/palette';
 import type { RenderState } from '../core/types';
+import { blendRenderState, easeInOut } from '../core/blend';
 import { KM_PER_HOUR } from '../core/journey';
 import { PROPS, WANDERER } from '../core/palette';
 import { SeaPainter } from './seaLayer';
@@ -11,6 +12,8 @@ import { WeatherPainter } from './weatherLayers';
 
 /** Fraction of the screen height where the sky meets the land. */
 const HORIZON = 0.62;
+/** A new sky or weather eases in over this many seconds instead of jumping. */
+const BLEND_SECONDS = 2;
 /** How fast the ground slides past while the wanderer walks, in px/s. */
 const GROUND_SPEED = 36;
 /** The same walk measured in journey km, so signposts line up with the ground. */
@@ -89,6 +92,10 @@ export class SceneRenderer {
   /** Hill wave phase offsets, in fractions of the screen width. */
   private scroll = { far: 0, mid: 0, near: 0 };
   private state: RenderState | null = null;
+  /** Easing: where the picture started from and where it is heading. */
+  private blendFrom: RenderState | null = null;
+  private blendTo: RenderState | null = null;
+  private blendT = 1;
   private w = 1;
   private h = 1;
   private elapsed = 0;
@@ -146,7 +153,20 @@ export class SceneRenderer {
     this.app.ticker.add((ticker) => this.frame(ticker.deltaMS));
   }
 
+  /** Ease towards a new state over a couple of seconds; the first one shows at once. */
   setState(state: RenderState): void {
+    if (!this.state || this.app.ticker.started === false) {
+      this.apply(state, true);
+      return;
+    }
+    this.blendFrom = this.state;
+    this.blendTo = state;
+    this.blendT = 0;
+    // The place marker follows the journey engine exactly, not the easing.
+    this.placeSignpost(state);
+  }
+
+  private apply(state: RenderState, syncMarker = false): void {
     this.state = state;
     this.weather.setState(state);
     this.wanderer.setState(state);
@@ -154,7 +174,7 @@ export class SceneRenderer {
     this.transport.setState(state);
     this.showLand(state.travel.mode !== 'fly');
     this.tintDetails(state);
-    this.redraw();
+    this.redraw(syncMarker);
   }
 
   pause(): void {
@@ -214,6 +234,15 @@ export class SceneRenderer {
     // Clamp the step so a tab that was asleep does not fling particles around.
     const dt = Math.min(0.1, deltaMS / 1000);
     this.elapsed += dt;
+    if (this.blendTo && this.blendFrom) {
+      this.blendT = Math.min(1, this.blendT + dt / BLEND_SECONDS);
+      const next = blendRenderState(this.blendFrom, this.blendTo, easeInOut(this.blendT));
+      if (this.blendT >= 1) {
+        this.blendFrom = null;
+        this.blendTo = null;
+      }
+      this.apply(next, false);
+    }
     this.weather.frame(dt, this.elapsed);
     this.sea.frame(dt, this.elapsed);
     this.walk(dt);
@@ -229,7 +258,7 @@ export class SceneRenderer {
     }
   }
 
-  private redraw(): void {
+  private redraw(syncMarker = true): void {
     const st = this.state;
     if (!st) return;
     const { w, h } = this;
@@ -284,7 +313,7 @@ export class SceneRenderer {
     }
 
     this.drawHills();
-    this.placeSignpost();
+    if (syncMarker) this.placeSignpost();
 
     // Ground and a lighter path band.
     this.ground.clear();
@@ -554,8 +583,8 @@ export class SceneRenderer {
   }
 
   /** Sync the place marker from the journey engine's exact offset. */
-  private placeSignpost(): void {
-    const st = this.state;
+  private placeSignpost(state: RenderState | null = this.state): void {
+    const st = state;
     if (!st || st.marker === null) {
       this.marker.visible = false;
       this.markerLights.visible = false;
