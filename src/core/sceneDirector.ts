@@ -1,6 +1,7 @@
 import { clamp01, hexToRgb, mix, smoothstep } from './color';
 import { CELESTIAL, LAND, WEATHER_TONES, skyAt } from './palette';
 import type { CelestialPlacement, DayPhase, RenderState, WorldState } from './types';
+import { TERRAIN, landAt } from './journey';
 import { weatherIntensities } from './weather';
 
 /**
@@ -90,14 +91,31 @@ export function direct(ws: WorldState): RenderState {
   // The traveler: umbrella when it rains, lantern once the sun is well down,
   // a scarf when it is cold, and the same night tint as the land.
   const temperature = ws.weather?.temperature;
+  const journey = ws.journey;
   const wanderer = {
     umbrella: fx.rain > 0.05,
     lantern: alt < -4,
     lanternGlow: 1 - smoothstep(-10, -2, alt),
     scarf: (temperature !== undefined && temperature < 10) || fx.snow > 0,
-    pace: 1,
+    // Standing still while resting at a place or once the route is walked.
+    pace: journey && (journey.resting || journey.finished) ? 0 : 1,
     tint: mix(mix('#FFFFFF', tint, night * 0.55), WEATHER_TONES.landGreyDay, gloom * 0.12),
   };
+
+  // The land: shaped by the terrain of the current leg, flat sea at the coast.
+  const profile = journey ? landAt(journey.route, journey) : TERRAIN.hills;
+  const landLayers = {
+    relief: profile.relief,
+    sea: profile.sea,
+    seaColor: mix(mix(LAND.seaNight, LAND.seaDay, dayLight), horizon, 0.3),
+  };
+
+  // The nearest place's signpost: behind us just after leaving, ahead when close.
+  let signpostKm: number | null = null;
+  if (journey) {
+    if (journey.resting || journey.finished) signpostKm = 0;
+    else signpostKm = journey.kmIntoLeg <= journey.kmToNext ? -journey.kmIntoLeg : journey.kmToNext;
+  }
 
   return {
     phase: phaseOf(alt, ws.sun.azimuth),
@@ -122,6 +140,8 @@ export function direct(ws: WorldState): RenderState {
       dropColor,
     },
     wanderer,
+    land: landLayers,
+    signpostKm,
     darkInk: luminance(sky.top) > 0.55,
   };
 }

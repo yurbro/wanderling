@@ -71,6 +71,79 @@ export interface WeatherState {
   source: WeatherSource;
 }
 
+/* ------------------------------------------------------------------------ */
+/* The journey: a route of places joined by legs, walked in journey km.      */
+/* ------------------------------------------------------------------------ */
+
+/** What the land looks like around a place or along a leg. */
+export type Terrain = 'city' | 'plain' | 'hills' | 'mountain' | 'forest' | 'coast' | 'lake' | 'desert';
+
+export interface Place {
+  id: string;
+  name: string;
+  /** Country, county or region, for the HUD. */
+  region?: string;
+  terrain: Terrain;
+  /** Coarse coordinates, for a future map; never used for the sky. */
+  lat?: number;
+  lon?: number;
+  /** One short line the wanderer might say on arriving. */
+  note?: string;
+}
+
+export interface Leg {
+  /** Real-world distance in kilometres. */
+  km: number;
+  terrain: Terrain;
+}
+
+export interface Route {
+  id: string;
+  name: string;
+  /** Ordered places; legs[i] joins places[i] to places[i + 1]. */
+  places: Place[];
+  legs: Leg[];
+}
+
+export interface Arrival {
+  placeId: string;
+  /** Milliseconds since the epoch. */
+  at: number;
+}
+
+/** Everything that needs saving to continue a journey later. */
+export interface JourneyState {
+  routeId: string;
+  startedAt: number;
+  /** Journey kilometres walked so far, as of updatedAt. */
+  km: number;
+  updatedAt: number;
+  /** Set while the wanderer rests at a place; walking resumes afterwards. */
+  restingUntil: number | null;
+  arrivals: Arrival[];
+  /** Kilometres added by real-world activity (steps, focus time), for later. */
+  bonusKm: number;
+}
+
+/** Where the wanderer is on the route right now, derived from JourneyState. */
+export interface Position {
+  route: Route;
+  /** The last place reached. */
+  from: Place;
+  /** The place being walked towards, null once the route is done. */
+  to: Place | null;
+  legIndex: number;
+  kmIntoLeg: number;
+  kmToNext: number;
+  /** 0 at `from`, 1 at `to`. */
+  fraction: number;
+  resting: boolean;
+  finished: boolean;
+  /** Journey km from the start. */
+  km: number;
+  totalKm: number;
+}
+
 export interface WorldState {
   now: Date;
   location: GeoPoint;
@@ -78,6 +151,8 @@ export interface WorldState {
   moon: MoonState;
   /** Null when nothing is known: the sky is then drawn clear. */
   weather: WeatherState | null;
+  /** Null before a journey exists; the scene then shows generic hills. */
+  journey: Position | null;
 }
 
 /** Colors are 0xRRGGBB numbers so they can go straight into PixiJS. */
@@ -131,6 +206,15 @@ export interface WandererState {
   tint: number;
 }
 
+/** How the land is shaped where the wanderer is. */
+export interface LandLayers {
+  /** Multiplier on hill height: flat plains below 1, mountains above. */
+  relief: number;
+  /** 0..1 how much of the far layer is water instead of hills. */
+  sea: number;
+  seaColor: number;
+}
+
 export interface RenderState {
   phase: DayPhase;
   sky: SkyPalette;
@@ -145,6 +229,12 @@ export interface RenderState {
   path: number;
   weather: WeatherLayers;
   wanderer: WandererState;
+  land: LandLayers;
+  /**
+   * Offset of the nearest place's signpost from the wanderer, in journey km
+   * (negative is behind), or null when no place is near.
+   */
+  signpostKm: number | null;
   /** True when the HUD text should be dark ink instead of pale paper. */
   darkInk: boolean;
 }

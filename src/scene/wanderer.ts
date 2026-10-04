@@ -116,7 +116,8 @@ export class Wanderer {
     this.backLeg.rotation = -s * swing;
     // The body rises a touch at each stride.
     this.body.y = -Math.abs(s) * 0.02 * U * moving;
-    this.head.rotation = Math.sin(this.phase * 2) * 0.02;
+    // Walking: a small nod with each stride. Standing: a slow look around.
+    this.head.rotation = moving ? Math.sin(this.phase * 2) * 0.02 : Math.sin(this.time * 0.8) * 0.05;
 
     // Arms: the umbrella takes the front hand, the lantern whichever is free.
     let frontRot = -s * swing * 0.8;

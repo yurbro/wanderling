@@ -56,6 +56,8 @@ export const LAND = {
   ground: '#A4A684',
   path: '#D9CFAE',
   nightTint: '#262D4C',
+  seaDay: '#7C9DB0',
+  seaNight: '#2A3550',
 };
 
 export const CELESTIAL = {

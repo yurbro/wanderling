@@ -12,7 +12,9 @@ export interface HudOptions {
 export interface Hud {
   update(ws: WorldState, rs: RenderState): void;
   setLocating(flag: boolean): void;
-  setNote(text: string): void;
+  /** A short message near the bottom; it fades out after a while. */
+  setNote(text: string, lingerMs?: number): void;
+  setJourney(text: string): void;
   hideLocate(): void;
 }
 
@@ -42,6 +44,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     </div>
     <div class="hud-bottom">
       <div class="note" id="hud-note"></div>
+      <div class="journey" id="hud-journey"></div>
       <button class="pill" id="hud-locate" type="button">Use my location</button>
       ${
         opts.demo
@@ -66,6 +69,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const place = el.querySelector<HTMLDivElement>('#hud-place')!;
   const weather = el.querySelector<HTMLDivElement>('#hud-weather')!;
   const note = el.querySelector<HTMLDivElement>('#hud-note')!;
+  const journey = el.querySelector<HTMLDivElement>('#hud-journey')!;
+  let noteTimer: number | null = null;
   const locate = el.querySelector<HTMLButtonElement>('#hud-locate')!;
   const scrub = el.querySelector<HTMLInputElement>('#hud-scrub');
   const scrubLabel = el.querySelector<HTMLSpanElement>('#hud-scrub-label');
@@ -120,8 +125,20 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     setLocating(flag) {
       locate.disabled = flag;
     },
-    setNote(text) {
+    setNote(text, lingerMs) {
       note.textContent = text;
+      note.classList.toggle('visible', text !== '');
+      if (noteTimer !== null) window.clearTimeout(noteTimer);
+      noteTimer = null;
+      if (text && lingerMs) {
+        noteTimer = window.setTimeout(() => {
+          note.classList.remove('visible');
+          noteTimer = null;
+        }, lingerMs);
+      }
+    },
+    setJourney(text) {
+      journey.textContent = text;
     },
     hideLocate() {
       locate.hidden = true;

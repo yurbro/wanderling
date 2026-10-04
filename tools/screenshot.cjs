@@ -8,6 +8,7 @@
 //   EXTRA=&lat=..&lon=..  appended to every URL
 //   CHROMIUM_PATH=/path   use a preinstalled Chromium instead of playwright's own
 //   TZ_ID=Europe/London   browser time zone
+//   WAIT_MS=900           how long to let the scene run before each shot
 const path = require('node:path');
 const fs = require('node:fs');
 const { chromium } = require('playwright');
@@ -46,7 +47,7 @@ fs.mkdirSync(outDir, { recursive: true });
     const url = `${base}?t=${encodeURIComponent(t)}${wq}${process.env.EXTRA || ''}`;
     await page.goto(url, { waitUntil: 'networkidle' });
     await page.waitForSelector('canvas.scene');
-    await page.waitForTimeout(900);
+    await page.waitForTimeout(Number(process.env.WAIT_MS || 900));
     const file = path.join(outDir, `scene-${t.replace(':', '')}${w ? '-' + w : ''}.png`);
     await page.screenshot({ path: file });
     console.log('saved', file);

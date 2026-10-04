@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hexToRgb } from '../src/core/color';
 import { skyAt } from '../src/core/palette';
 import { direct } from '../src/core/sceneDirector';
+import { advance, locate, startJourney } from '../src/core/journey';
 import { demoWeather } from '../src/core/weather';
 import { buildWorldState } from '../src/core/world';
 
@@ -194,5 +195,49 @@ describe('direct decides what the wanderer carries', () => {
     const day = hexToRgb(direct(buildWorldState(noon, LONDON, null)).wanderer.tint);
     expect(night.r + night.g + night.b).toBeLessThan(day.r + day.g + day.b);
     expect(day.r + day.g + day.b).toBeGreaterThan(740);
+  });
+});
+
+describe('direct follows the journey', () => {
+  const noon = new Date(Date.UTC(2026, 5, 21, 12, 0, 0));
+  const route = {
+    id: 'r',
+    name: 'r',
+    places: [
+      { id: 'a', name: 'A', terrain: 'city' as const },
+      { id: 'b', name: 'B', terrain: 'coast' as const },
+      { id: 'c', name: 'C', terrain: 'hills' as const },
+    ],
+    legs: [
+      { km: 8, terrain: 'plain' as const },
+      { km: 10, terrain: 'hills' as const },
+    ],
+  };
+  const t0 = noon.getTime();
+
+  it('shows generic hills and keeps walking without a journey', () => {
+    const rs = direct(buildWorldState(noon, LONDON, null, null));
+    expect(rs.land.relief).toBe(1);
+    expect(rs.land.sea).toBe(0);
+    expect(rs.wanderer.pace).toBe(1);
+    expect(rs.signpostKm).toBeNull();
+  });
+
+  it('flattens the land on a plain and puts the signpost behind just after leaving', () => {
+    const s = advance(route, startJourney(route, t0), t0 + 0.25 * 3_600_000).state;
+    const rs = direct(buildWorldState(noon, LONDON, null, locate(route, s, t0 + 0.25 * 3_600_000)));
+    expect(rs.land.relief).toBeLessThan(0.7);
+    expect(rs.wanderer.pace).toBe(1);
+    expect(rs.signpostKm).toBeCloseTo(-1, 6);
+  });
+
+  it('stands still while resting, with the sea in view at the coast', () => {
+    const s = advance(route, startJourney(route, t0), t0 + 3 * 3_600_000).state;
+    const pos = locate(route, s, t0 + 3 * 3_600_000);
+    expect(pos.resting).toBe(true);
+    const rs = direct(buildWorldState(noon, LONDON, null, pos));
+    expect(rs.wanderer.pace).toBe(0);
+    expect(rs.signpostKm).toBe(0);
+    expect(rs.land.sea).toBe(1);
   });
 });

@@ -11,23 +11,28 @@ real sun altitude at your location, the moon shows its real phase, the stars com
 out when it is dark where you are, and the weather (clouds, rain, snow, fog) follows
 the real forecast for your place. A small paper-doll wanderer walks along the path,
 opens an umbrella when it rains, carries a lantern after dark and wraps up in a scarf
-when it is cold. Routes and real places come next.
+when it is cold. They are walking a real route (London to the sea), at a steady 4 km/h
+day and night, resting six hours at each place; the land flattens on the plains and the
+sea appears at the coast. Postcards and a map come next.
 
 Live preview: https://yurbro.github.io/wanderling/
 
 ## How it works
 
 - `src/core/` is pure logic with no browser code. `WorldState` (time, place, sun,
-  moon, weather) goes into `sceneDirector.direct()` and a `RenderState` (colours,
-  positions, layer intensities) comes out. `core/weather.ts` folds WMO weather codes
-  into a few scene conditions and picks the right hour out of a cached forecast.
-  This part has unit tests.
+  moon, weather, journey position) goes into `sceneDirector.direct()` and a
+  `RenderState` (colours, positions, layer intensities) comes out. `core/weather.ts`
+  folds WMO weather codes into a few scene conditions and picks the right hour out of
+  a cached forecast. `core/journey.ts` walks a route by the clock: fixed pace, a rest
+  at every place, arrivals replayed correctly after any absence. This part has unit
+  tests.
 - `src/scene/` draws the `RenderState` with PixiJS: sky gradient, stars, sun, moon,
   clouds, three layers of hills with fog between them (scrolling at three speeds),
   ground and path with grass and stones sliding past, the wanderer, rain or snow.
-- `src/data/` talks to the outside world: browser location and the free
-  [Open-Meteo](https://open-meteo.com/) forecast, cached in `localStorage` for 45
-  minutes and reused as an hourly forecast when the network is gone.
+- `src/data/` talks to the outside world: browser location, the free
+  [Open-Meteo](https://open-meteo.com/) forecast (cached in `localStorage` for 45
+  minutes and reused as an hourly forecast when the network is gone), the route
+  data and the saved journey.
 - `src/ui/` is a thin DOM overlay for the clock, place name and buttons.
 
 Useful URL parameters for demos and screenshots:
@@ -39,6 +44,8 @@ Useful URL parameters for demos and screenshots:
 | `?lat=35.68&lon=139.69&name=Tokyo` | draws the sky for another place |
 | `?weather=rain` | forces a weather look: `clear`, `partly-cloudy`, `overcast`, `fog`, `drizzle`, `rain`, `heavy-rain`, `thunderstorm`, `snow`, `heavy-snow`, or a WMO code such as `63` |
 | `?temp=-3&wind=30` | tweaks the forced weather (Celsius, km/h) |
+| `?km=120` | peeks at the journey at a kilometre mark (not saved) |
+| `?journey=reset` | starts the journey again from the first place |
 
 ## Development
 
