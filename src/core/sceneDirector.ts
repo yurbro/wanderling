@@ -1,8 +1,8 @@
 import { clamp01, hexToRgb, mix, smoothstep } from './color';
 import { CELESTIAL, LAND, WEATHER_TONES, skyAt } from './palette';
-import type { CelestialPlacement, DayPhase, PlaceMarker, RenderState, Terrain, WorldState } from './types';
+import type { CelestialPlacement, DayPhase, LegMode, PlaceMarker, RenderState, Terrain, WorldState } from './types';
 import { TERRAIN, landAt } from './journey';
-import { weatherIntensities } from './weather';
+import { NO_WEATHER, weatherIntensities } from './weather';
 
 /**
  * The SceneDirector is a pure function: WorldState in, RenderState out.
@@ -19,7 +19,11 @@ export function direct(ws: WorldState): RenderState {
   const dayLight = 0.22 + 0.78 * smoothstep(-8, 8, alt);
   const night = 1 - dayLight;
 
-  const fx = weatherIntensities(ws.weather);
+  // Aboard a plane the wanderer is above the weather: the sky is clear up there.
+  const travelMode: LegMode =
+    ws.journey && !ws.journey.resting && !ws.journey.finished ? ws.journey.mode : 'walk';
+  const measured = weatherIntensities(ws.weather);
+  const fx = travelMode === 'fly' ? { ...NO_WEATHER, wind: measured.wind } : measured;
   // How grey the day feels. Clouds do most of it, rain and fog add a little.
   const gloom = clamp01(fx.cloud * 0.9 + fx.rain * 0.25 + fx.snow * 0.1 + fx.fog * 0.3);
 
@@ -93,7 +97,8 @@ export function direct(ws: WorldState): RenderState {
   const temperature = ws.weather?.temperature;
   const journey = ws.journey;
   const wanderer = {
-    umbrella: fx.rain > 0.05,
+    // No umbrella indoors: the train and plane windows keep the rain off.
+    umbrella: fx.rain > 0.05 && travelMode === 'walk',
     lantern: alt < -4,
     lanternGlow: 1 - smoothstep(-10, -2, alt),
     scarf: (temperature !== undefined && temperature < 10) || fx.snow > 0,
@@ -144,6 +149,7 @@ export function direct(ws: WorldState): RenderState {
     },
     wanderer,
     land: landLayers,
+    travel: { mode: travelMode },
     marker,
     darkInk: luminance(sky.top) > 0.55,
   };

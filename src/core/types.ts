@@ -289,6 +289,8 @@ export interface RenderState {
   weather: WeatherLayers;
   wanderer: WandererState;
   land: LandLayers;
+  /** How the wanderer is moving right now: on foot, aboard a train, or in a plane. */
+  travel: { mode: LegMode };
   /** Null when no journey is under way. */
   marker: PlaceMarker | null;
   /** True when the HUD text should be dark ink instead of pale paper. */

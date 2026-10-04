@@ -5,6 +5,7 @@ import type { RenderState } from '../core/types';
 import { KM_PER_HOUR } from '../core/journey';
 import { PROPS, WANDERER } from '../core/palette';
 import { SeaPainter } from './seaLayer';
+import { TransportPainter } from './transport';
 import { Wanderer } from './wanderer';
 import { WeatherPainter } from './weatherLayers';
 
@@ -83,6 +84,7 @@ export class SceneRenderer {
   private signpostHome = 0;
   private signpostAhead = false;
   private sea = new SeaPainter();
+  private transport = new TransportPainter();
   private weather = new WeatherPainter();
   /** Hill wave phase offsets, in fractions of the screen width. */
   private scroll = { far: 0, mid: 0, near: 0 };
@@ -130,10 +132,12 @@ export class SceneRenderer {
       this.detailLayer,
       this.marker,
       this.markerLights,
+      this.transport.behind,
       this.wanderer.glow,
       this.wanderer.view,
       this.weather.fogNear,
       this.weather.precip,
+      this.transport.front,
       this.weather.flash,
     );
 
@@ -147,6 +151,8 @@ export class SceneRenderer {
     this.weather.setState(state);
     this.wanderer.setState(state);
     this.sea.setState(state);
+    this.transport.setState(state);
+    this.showLand(state.travel.mode !== 'fly');
     this.tintDetails(state);
     this.redraw();
   }
@@ -174,6 +180,7 @@ export class SceneRenderer {
     this.placeWanderer();
     this.drawMarker();
     this.sea.layout(this.w, this.h);
+    this.transport.layout(this.app.renderer, this.w, this.h, this.figure());
     this.weather.layout(this.app.renderer, this.w, this.h, this.h * HORIZON);
     this.redraw();
   }
@@ -301,10 +308,15 @@ export class SceneRenderer {
     // No stopping to look at the sky while a place is coming into view.
     this.wanderer.allowPause = !this.marker.visible && Math.abs(this.signpostX - this.signpostHome) > this.w * 2;
     this.wanderer.frame(dt);
+    // Aboard a vehicle the wanderer sits and sways with it.
+    const f = this.figure();
+    this.wanderer.view.y = f.feetY + this.transport.sway;
     const pace = st.wanderer.pace;
-    if (pace <= 0 || this.wanderer.paused) return;
-    // Ground speed in pixels per second; the hills lag behind by depth.
-    const groundSpeed = GROUND_SPEED * pace;
+    const riding = st.travel.mode === 'ride';
+    const scrollPace = riding ? 5 : pace;
+    const groundSpeed = GROUND_SPEED * scrollPace;
+    this.transport.frame(dt, this.elapsed, groundSpeed);
+    if (scrollPace <= 0 || this.wanderer.paused) return;
     // The next place's signpost slides in with the ground. When it reaches
     // the wanderer's side we have arrived: hold everything there until the
     // journey engine confirms the rest on its next update.
@@ -325,13 +337,41 @@ export class SceneRenderer {
     this.moveDetails(dt, groundSpeed);
   }
 
-  private placeWanderer(): void {
+  /** Where the wanderer stands and how tall they are, shared with the vehicles. */
+  private figure(): { x: number; feetY: number; height: number } {
     const { w, h } = this;
     const skyH = h * HORIZON;
     const ground = h - skyH;
     const pathY = skyH + ground * 0.42;
     const pathH = ground * 0.1;
-    this.wanderer.layout(w * 0.42, pathY + pathH * 0.6, ground * 0.36);
+    return { x: w * 0.42, feetY: pathY + pathH * 0.6, height: ground * 0.36 };
+  }
+
+  private placeWanderer(): void {
+    const f = this.figure();
+    this.wanderer.layout(f.x, f.feetY, f.height);
+  }
+
+  /** In the air there is no land to draw: hills, ground, sea, fog and markers all go. */
+  private showLand(show: boolean): void {
+    for (const layer of [
+      this.hillFar,
+      this.hillMid,
+      this.hillNear,
+      this.ground,
+      this.detailLayer,
+      this.marker,
+      this.markerLights,
+      this.sea.waves,
+      this.sea.boats,
+      this.sea.gulls,
+      this.weather.fogFar,
+      this.weather.fogMid,
+      this.weather.fogNear,
+    ]) {
+      layer.visible = show;
+    }
+    if (!show) this.markerLights.visible = false;
   }
 
   private makeDetails(): void {

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { hexToRgb } from '../src/core/color';
 import { skyAt } from '../src/core/palette';
 import { direct } from '../src/core/sceneDirector';
+import { routeFromHome } from '../src/core/geo';
 import { KM_PER_HOUR, advance, locate, startJourney } from '../src/core/journey';
+import { TO_THE_SEA } from '../src/data/routes';
 import { demoWeather } from '../src/core/weather';
 import { buildWorldState } from '../src/core/world';
 
@@ -250,5 +252,43 @@ describe('direct follows the journey', () => {
     const rs = direct(buildWorldState(noon, LONDON, null, locate(hilly, s, t0 + (6 / KM_PER_HOUR) * 3_600_000)));
     expect(rs.marker?.offsetKm).toBeCloseTo(2, 6);
     expect(rs.marker?.cottage).toBe(false);
+  });
+});
+
+describe('direct aboard trains and planes', () => {
+  const noon = new Date(Date.UTC(2026, 5, 21, 12, 0, 0));
+  const t0 = noon.getTime();
+
+  it('clears the weather above the clouds and stands the wanderer still in a plane', () => {
+    const flown = routeFromHome(TO_THE_SEA, { name: 'Tokyo', lat: 35.68, lon: 139.69 });
+    const pos = locate(flown, advance(flown, startJourney(flown, t0), t0 + 3_600_000).state, t0 + 3_600_000);
+    expect(pos.mode).toBe('fly');
+    const rs = direct(buildWorldState(noon, LONDON, demoWeather('heavy-rain', noon), pos));
+    expect(rs.travel.mode).toBe('fly');
+    expect(rs.weather.rain).toBe(0);
+    expect(rs.weather.cloud).toBe(0);
+    expect(rs.weather.fog).toBe(0);
+    expect(rs.wanderer.pace).toBe(0);
+    expect(rs.marker).toBeNull();
+    // The sky itself is the clear one.
+    expect(rs.sky).toEqual(direct(buildWorldState(noon, LONDON, null, null)).sky);
+  });
+
+  it('keeps the weather on a train and marks the travel as a ride', () => {
+    const train = routeFromHome(TO_THE_SEA, { name: 'Berlin', lat: 52.52, lon: 13.4 });
+    const pos = locate(train, advance(train, startJourney(train, t0), t0 + 3_600_000).state, t0 + 3_600_000);
+    expect(pos.mode).toBe('ride');
+    const rs = direct(buildWorldState(noon, LONDON, demoWeather('rain', noon), pos));
+    expect(rs.travel.mode).toBe('ride');
+    expect(rs.weather.rain).toBeGreaterThan(0);
+    expect(rs.wanderer.pace).toBe(0);
+  });
+
+  it('is on foot while resting, even on a flight segment', () => {
+    const flown = routeFromHome(TO_THE_SEA, { name: 'Tokyo', lat: 35.68, lon: 139.69 });
+    const landed = t0 + (flown.legs[0].km / 700 + 0.5) * 3_600_000;
+    const pos = locate(flown, advance(flown, startJourney(flown, t0), landed).state, landed);
+    expect(pos.resting).toBe(true);
+    expect(direct(buildWorldState(noon, LONDON, null, pos)).travel.mode).toBe('walk');
   });
 });
