@@ -8,6 +8,7 @@ export interface HudOptions {
   /** Demo only: null means "back to the real weather". */
   onWeather?: (condition: WeatherCondition | null) => void;
   onAlbum?: () => void;
+  onMap?: () => void;
 }
 
 export interface Hud {
@@ -52,6 +53,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       <div class="journey" id="hud-journey"></div>
       <div class="hud-buttons">
         <button class="pill" id="hud-album" type="button">Postcards</button>
+        <button class="pill" id="hud-map" type="button">Map</button>
         <button class="pill" id="hud-locate" type="button">Use my location</button>
       </div>
       ${
@@ -81,6 +83,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let noteTimer: number | null = null;
   const locate = el.querySelector<HTMLButtonElement>('#hud-locate')!;
   const album = el.querySelector<HTMLButtonElement>('#hud-album')!;
+  const map = el.querySelector<HTMLButtonElement>('#hud-map')!;
   const scrub = el.querySelector<HTMLInputElement>('#hud-scrub');
   const scrubLabel = el.querySelector<HTMLSpanElement>('#hud-scrub-label');
   const weatherSelect = el.querySelector<HTMLSelectElement>('#hud-weather-select');
@@ -108,6 +111,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     album.classList.remove('has-new');
     opts.onAlbum?.();
   });
+  map.addEventListener('click', () => opts.onMap?.());
 
   if (weatherSelect && opts.onWeather) {
     weatherSelect.addEventListener('change', () => {
