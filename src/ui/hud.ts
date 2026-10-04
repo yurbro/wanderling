@@ -7,6 +7,7 @@ export interface HudOptions {
   onScrub?: (minutesOfDay: number) => void;
   /** Demo only: null means "back to the real weather". */
   onWeather?: (condition: WeatherCondition | null) => void;
+  onAlbum?: () => void;
 }
 
 export interface Hud {
@@ -15,7 +16,11 @@ export interface Hud {
   /** A short message near the bottom; it fades out after a while. */
   setNote(text: string, lingerMs?: number): void;
   setJourney(text: string): void;
+  /** Postcard count on the album button; `fresh` pulses it until opened. */
+  setPostcards(count: number, fresh: boolean): void;
   hideLocate(): void;
+  /** The temperature unit the HUD picked from the browser language. */
+  readonly unit: 'C' | 'F';
 }
 
 const PRETTY: Record<WeatherCondition, string> = {
@@ -45,7 +50,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     <div class="hud-bottom">
       <div class="note" id="hud-note"></div>
       <div class="journey" id="hud-journey"></div>
-      <button class="pill" id="hud-locate" type="button">Use my location</button>
+      <div class="hud-buttons">
+        <button class="pill" id="hud-album" type="button">Postcards</button>
+        <button class="pill" id="hud-locate" type="button">Use my location</button>
+      </div>
       ${
         opts.demo
           ? `<label class="demo">
@@ -72,6 +80,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const journey = el.querySelector<HTMLDivElement>('#hud-journey')!;
   let noteTimer: number | null = null;
   const locate = el.querySelector<HTMLButtonElement>('#hud-locate')!;
+  const album = el.querySelector<HTMLButtonElement>('#hud-album')!;
   const scrub = el.querySelector<HTMLInputElement>('#hud-scrub');
   const scrubLabel = el.querySelector<HTMLSpanElement>('#hud-scrub-label');
   const weatherSelect = el.querySelector<HTMLSelectElement>('#hud-weather-select');
@@ -94,6 +103,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       opts.onScrub!(m);
     });
   }
+
+  album.addEventListener('click', () => {
+    album.classList.remove('has-new');
+    opts.onAlbum?.();
+  });
 
   if (weatherSelect && opts.onWeather) {
     weatherSelect.addEventListener('change', () => {
@@ -140,6 +154,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     setJourney(text) {
       journey.textContent = text;
     },
+    setPostcards(count, fresh) {
+      album.textContent = count > 0 ? `Postcards · ${count}` : 'Postcards';
+      album.classList.toggle('has-new', fresh);
+    },
+    unit,
     hideLocate() {
       locate.hidden = true;
     },

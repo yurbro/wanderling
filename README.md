@@ -15,7 +15,8 @@ when it is cold. They are walking a real route (London to the sea), at a steady 
 day and night, resting three hours at each place; the land flattens on the plains and at
 the coast the sea appears, with boats and gulls. Towns have a cottage and a lamp that
 light up after dark. Now and then the wanderer stops to look at the sky, or glances at
-you. Postcards and a map come next.
+you. Every place reached sends a postcard, painted with the sky and weather of that
+moment, into an album you can open from the main screen. A map comes next.
 
 Live preview: https://yurbro.github.io/wanderling/
 
@@ -35,7 +36,8 @@ Live preview: https://yurbro.github.io/wanderling/
   [Open-Meteo](https://open-meteo.com/) forecast (cached in `localStorage` for 45
   minutes and reused as an hourly forecast when the network is gone), the route
   data and the saved journey.
-- `src/ui/` is a thin DOM overlay for the clock, place name and buttons.
+- `src/ui/` is a thin DOM overlay for the clock, place name and buttons, plus the
+  postcard album (`ui/album.ts`).
 
 Useful URL parameters for demos and screenshots:
 
@@ -47,7 +49,8 @@ Useful URL parameters for demos and screenshots:
 | `?weather=rain` | forces a weather look: `clear`, `partly-cloudy`, `overcast`, `fog`, `drizzle`, `rain`, `heavy-rain`, `thunderstorm`, `snow`, `heavy-snow`, or a WMO code such as `63` |
 | `?temp=-3&wind=30` | tweaks the forced weather (Celsius, km/h) |
 | `?km=120` | peeks at the journey at a kilometre mark (not saved) |
-| `?journey=reset` | starts the journey again from the first place |
+| `?journey=reset` | starts the journey again from the first place (and empties the album) |
+| `?postcards=demo` | adds three sample postcards to the album (not saved) |
 
 ## Development
 
