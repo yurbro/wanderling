@@ -9,7 +9,9 @@ sky above you. No streaks, no tasks, nothing to lose.
 **Status:** phase 0 prototype. Right now it draws your sky: the colours follow the
 real sun altitude at your location, the moon shows its real phase, the stars come
 out when it is dark where you are, and the weather (clouds, rain, snow, fog) follows
-the real forecast for your place. The wanderer comes next.
+the real forecast for your place. A small paper-doll wanderer walks along the path,
+opens an umbrella when it rains, carries a lantern after dark and wraps up in a scarf
+when it is cold. Routes and real places come next.
 
 Live preview: https://yurbro.github.io/wanderling/
 
@@ -21,7 +23,8 @@ Live preview: https://yurbro.github.io/wanderling/
   into a few scene conditions and picks the right hour out of a cached forecast.
   This part has unit tests.
 - `src/scene/` draws the `RenderState` with PixiJS: sky gradient, stars, sun, moon,
-  clouds, three layers of hills with fog between them, ground and path, rain or snow.
+  clouds, three layers of hills with fog between them (scrolling at three speeds),
+  ground and path with grass and stones sliding past, the wanderer, rain or snow.
 - `src/data/` talks to the outside world: browser location and the free
   [Open-Meteo](https://open-meteo.com/) forecast, cached in `localStorage` for 45
   minutes and reused as an hourly forecast when the network is gone.

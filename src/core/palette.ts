@@ -88,3 +88,24 @@ export const WEATHER_TONES = {
   wetGround: '#6F7466',
   paper: '#F4EFE4',
 };
+
+/**
+ * The traveler's wardrobe. One saturated focal color (the brick-red backpack),
+ * everything else muted, outlines in warm dark grey rather than black.
+ */
+export const WANDERER = {
+  ink: '#4A4A52',
+  skin: '#EFD9C4',
+  coat: '#6F7A8E',
+  coatShade: '#5E6879',
+  trousers: '#4F5566',
+  boots: '#3E3E46',
+  hat: '#A48A6A',
+  hatBand: '#7C6650',
+  backpack: '#B86B5A',
+  backpackFlap: '#9E5A4B',
+  scarf: '#4D5B8A',
+  umbrella: '#4D5B8A',
+  lanternGlass: '#F8EBC0',
+  glow: '#F8EBC0',
+};

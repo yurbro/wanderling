@@ -2,6 +2,7 @@ import { Application, Container, FillGradient, Graphics } from 'pixi.js';
 import { mix } from '../core/color';
 import { CELESTIAL } from '../core/palette';
 import type { RenderState } from '../core/types';
+import { Wanderer } from './wanderer';
 import { WeatherPainter } from './weatherLayers';
 
 /** Fraction of the screen height where the sky meets the land. */
@@ -13,6 +14,16 @@ interface Star {
   r: number;
   phase: number;
   speed: number;
+  g: Graphics;
+}
+
+/** A tuft of grass, a stone or a small flower that scrolls past on the ground. */
+interface Detail {
+  kind: 'tuft' | 'stone' | 'flower';
+  x: number;
+  y: number;
+  /** 0 = at the horizon, 1 = at the bottom edge. Closer things move faster. */
+  depth: number;
   g: Graphics;
 }
 
@@ -31,7 +42,11 @@ interface HillSpec {
  * code works on a phone in portrait and in a desktop browser.
  *
  * Layer order, back to front: sky, stars, sun, moon, clouds, far hills, fog,
- * mid hills, fog, near hills, ground + path, fog, rain or snow, lightning.
+ * mid hills, fog, near hills, ground + path, ground details, the wanderer,
+ * fog, rain or snow, lightning.
+ *
+ * The wanderer walks on the spot; the world slides past instead. Hills shift
+ * their wave phase at three speeds and the ground details scroll with depth.
  */
 export class SceneRenderer {
   private app = new Application();
@@ -46,7 +61,12 @@ export class SceneRenderer {
   private hillMid = new Graphics();
   private hillNear = new Graphics();
   private ground = new Graphics();
+  private detailLayer = new Container();
+  private details: Detail[] = [];
+  private wanderer = new Wanderer();
   private weather = new WeatherPainter();
+  /** Hill wave phase offsets, in fractions of the screen width. */
+  private scroll = { far: 0, mid: 0, near: 0 };
   private state: RenderState | null = null;
   private w = 1;
   private h = 1;
@@ -85,6 +105,9 @@ export class SceneRenderer {
       this.weather.fogMid,
       this.hillNear,
       this.ground,
+      this.detailLayer,
+      this.wanderer.glow,
+      this.wanderer.view,
       this.weather.fogNear,
       this.weather.precip,
       this.weather.flash,
@@ -98,6 +121,8 @@ export class SceneRenderer {
   setState(state: RenderState): void {
     this.state = state;
     this.weather.setState(state);
+    this.wanderer.setState(state);
+    this.tintDetails(state);
     this.redraw();
   }
 
@@ -120,6 +145,8 @@ export class SceneRenderer {
     this.w = Math.max(1, this.app.screen.width);
     this.h = Math.max(1, this.app.screen.height);
     this.makeStars();
+    this.makeDetails();
+    this.placeWanderer();
     this.weather.layout(this.app.renderer, this.w, this.h, this.h * HORIZON);
     this.redraw();
   }
@@ -154,6 +181,7 @@ export class SceneRenderer {
     const dt = Math.min(0.1, deltaMS / 1000);
     this.elapsed += dt;
     this.weather.frame(dt, this.elapsed);
+    this.walk(dt);
     const base = this.state.starAlpha;
     if (base <= 0.001) {
       if (this.starLayer.visible) this.starLayer.visible = false;
@@ -220,10 +248,7 @@ export class SceneRenderer {
       }
     }
 
-    // Hills.
-    this.drawHill(this.hillFar, this.hillSpecs.far, st.hills.far);
-    this.drawHill(this.hillMid, this.hillSpecs.mid, st.hills.mid);
-    this.drawHill(this.hillNear, this.hillSpecs.near, st.hills.near);
+    this.drawHills();
 
     // Ground and a lighter path band.
     this.ground.clear();
@@ -239,13 +264,99 @@ export class SceneRenderer {
       .fill({ color: st.path });
   }
 
-  private drawHill(g: Graphics, spec: HillSpec, color: number): void {
+  /** Advance the walk: the wanderer strides, the world slides past. */
+  private walk(dt: number): void {
+    const st = this.state;
+    if (!st) return;
+    this.wanderer.frame(dt);
+    const pace = st.wanderer.pace;
+    if (pace <= 0) return;
+    // Ground speed in pixels per second; the hills lag behind by depth.
+    const groundSpeed = 36 * pace;
+    const perWidth = (groundSpeed / this.w) * dt;
+    this.scroll.far += perWidth * 0.03;
+    this.scroll.mid += perWidth * 0.08;
+    this.scroll.near += perWidth * 0.18;
+    this.drawHills();
+    this.moveDetails(dt, groundSpeed);
+  }
+
+  private placeWanderer(): void {
+    const { w, h } = this;
+    const skyH = h * HORIZON;
+    const ground = h - skyH;
+    const pathY = skyH + ground * 0.42;
+    const pathH = ground * 0.1;
+    this.wanderer.layout(w * 0.42, pathY + pathH * 0.6, ground * 0.36);
+  }
+
+  private makeDetails(): void {
+    this.detailLayer.removeChildren();
+    this.details = [];
+    const rng = seeded(23);
+    const count = Math.round(14 + this.w / 40);
+    for (let i = 0; i < count; i++) {
+      const r = rng();
+      const kind: Detail['kind'] = r < 0.6 ? 'tuft' : r < 0.85 ? 'stone' : 'flower';
+      const g = new Graphics();
+      drawDetail(g, kind, rng);
+      const d: Detail = { kind, x: rng() * (this.w + 60) - 30, y: 0, depth: 0, g };
+      this.dropDetail(d, rng());
+      this.detailLayer.addChild(g);
+      this.details.push(d);
+    }
+    if (this.state) this.tintDetails(this.state);
+  }
+
+  /** Pick a row for a detail on either side of the path and scale it by depth. */
+  private dropDetail(d: Detail, r: number): void {
+    const { h } = this;
+    const skyH = h * HORIZON;
+    const ground = h - skyH;
+    const pathTop = skyH + ground * 0.42 - ground * 0.05;
+    const pathBottom = skyH + ground * 0.42 + ground * 0.135;
+    // About a third of the details sit beyond the path, the rest in front.
+    d.y = r < 0.35 ? skyH + ground * 0.08 + (r / 0.35) * (pathTop - skyH - ground * 0.08) : pathBottom + ((r - 0.35) / 0.65) * (h - 12 - pathBottom);
+    d.depth = (d.y - skyH) / ground;
+    d.g.scale.set(0.7 + d.depth * 0.9);
+    d.g.position.set(d.x, d.y);
+  }
+
+  private moveDetails(dt: number, groundSpeed: number): void {
+    for (const d of this.details) {
+      d.x -= groundSpeed * dt * (0.5 + d.depth * 0.8);
+      if (d.x < -40) {
+        d.x = this.w + 20 + Math.random() * 60;
+        this.dropDetail(d, Math.random());
+      }
+      d.g.x = d.x;
+    }
+  }
+
+  private tintDetails(st: RenderState): void {
+    const tuft = mix(st.ground, st.hills.near, 0.55);
+    const stone = mix(st.ground, st.path, 0.7);
+    const flower = mix(st.path, 0xf4efe4, 0.5);
+    for (const d of this.details) {
+      d.g.tint = d.kind === 'tuft' ? tuft : d.kind === 'stone' ? stone : flower;
+    }
+  }
+
+  private drawHills(): void {
+    const st = this.state;
+    if (!st) return;
+    this.drawHill(this.hillFar, this.hillSpecs.far, st.hills.far, this.scroll.far);
+    this.drawHill(this.hillMid, this.hillSpecs.mid, st.hills.mid, this.scroll.mid);
+    this.drawHill(this.hillNear, this.hillSpecs.near, st.hills.near, this.scroll.near);
+  }
+
+  private drawHill(g: Graphics, spec: HillSpec, color: number, offset: number): void {
     const { w, h } = this;
     g.clear();
-    const step = 6;
+    const step = 8;
     const pts: number[] = [0, h];
     for (let x = 0; x <= w + step; x += step) {
-      const u = x / w;
+      const u = x / w + offset;
       let y = h * spec.base;
       for (let i = 0; i < spec.amps.length; i++) {
         y += h * spec.amps[i] * Math.sin(u * spec.freqs[i] * Math.PI + spec.phases[i]);
@@ -254,6 +365,27 @@ export class SceneRenderer {
     }
     pts.push(w + step, h);
     g.poly(pts).fill({ color });
+  }
+}
+
+/** Draws one ground detail in white, about ten pixels tall; it is tinted later. */
+function drawDetail(g: Graphics, kind: Detail['kind'], rng: () => number): void {
+  const white = 0xffffff;
+  if (kind === 'tuft') {
+    const blades = 3 + Math.floor(rng() * 2);
+    for (let i = 0; i < blades; i++) {
+      const t = (i / (blades - 1) - 0.5) * 2;
+      const tipX = t * 4 + (rng() - 0.5);
+      const tipY = -6 - rng() * 4 + Math.abs(t) * 2;
+      // Each blade bends outwards a little, like grass rather than a fork.
+      g.moveTo(0, 0).quadraticCurveTo(t * 0.8, tipY * 0.7, tipX, tipY);
+    }
+    g.stroke({ color: white, width: 1.4, cap: 'round' });
+  } else if (kind === 'stone') {
+    g.ellipse(0, -2, 3.5 + rng() * 1.5, 2.2).fill({ color: white });
+  } else {
+    g.moveTo(0, 0).quadraticCurveTo(1.2, -3, 0.6, -5).stroke({ color: white, width: 1 });
+    g.circle(0.8, -6.2, 2.4).fill({ color: white });
   }
 }
 
