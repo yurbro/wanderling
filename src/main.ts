@@ -248,6 +248,7 @@ async function main(): Promise<void> {
   hud.setPostcards(allCards().length, false);
   freshCards = false;
   tick();
+  if (departure) hud.setNote(departure, 15_000);
   if (postcards.length > 1 || sampleCards.length > 0) hud.setPostcards(allCards().length, freshCards);
   // A read-only peek for debugging and screenshots: window.__wanderling.render
   Object.defineProperty(window, '__wanderling', {
