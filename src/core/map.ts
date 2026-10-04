@@ -5,14 +5,16 @@ import type { Position, Route, Terrain } from './types';
  * paper and work out which stretch has been walked. The UI only draws.
  */
 
+export type LabelSide = 'right' | 'left' | 'above' | 'below';
+
 export interface MapPoint {
   id: string;
   name: string;
   terrain: Terrain;
   x: number;
   y: number;
-  /** Which side of the dot the name goes, to keep labels on the page. */
-  labelSide: 'left' | 'right';
+  /** Where the name goes relative to the dot, chosen so names do not collide. */
+  labelSide: LabelSide;
 }
 
 export interface MapLayout {
@@ -60,7 +62,86 @@ export function layoutRoute(route: Route, width = 320, height = 440, padding = 4
     const y = offY + (raw[i].y - minY) * scale;
     return { id: p.id, name: p.name, terrain: p.terrain, x, y, labelSide: x < width / 2 ? 'right' : 'left' };
   });
+  placeLabels(points, width, height);
   return { width, height, points };
+}
+
+/* ---------------------------------------------------------------- labels */
+
+export const LABEL_FONT = 12.5;
+const CHAR_W = 0.54 * LABEL_FONT;
+/** Glyphs with ascenders and descenders span about the font size. */
+const LABEL_H = LABEL_FONT;
+const DOT_R = 6;
+
+export interface Box {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/** The rectangle a name occupies for a given side of its dot. */
+export function labelBox(p: { x: number; y: number; name: string }, side: LabelSide): Box {
+  const w = p.name.length * CHAR_W;
+  switch (side) {
+    case 'right':
+      return { x1: p.x + 9, y1: p.y - LABEL_H / 2, x2: p.x + 9 + w, y2: p.y + LABEL_H / 2 };
+    case 'left':
+      return { x1: p.x - 9 - w, y1: p.y - LABEL_H / 2, x2: p.x - 9, y2: p.y + LABEL_H / 2 };
+    case 'above':
+      return { x1: p.x - w / 2, y1: p.y - 9 - LABEL_H, x2: p.x + w / 2, y2: p.y - 9 };
+    default:
+      return { x1: p.x - w / 2, y1: p.y + 9, x2: p.x + w / 2, y2: p.y + 9 + LABEL_H };
+  }
+}
+
+function overlapArea(a: Box, b: Box): number {
+  const w = Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1);
+  const h = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+function outsideArea(box: Box, sheet: Box): number {
+  const w = box.x2 - box.x1;
+  const h = box.y2 - box.y1;
+  const dx = Math.max(0, sheet.x1 - box.x1) + Math.max(0, box.x2 - sheet.x2);
+  const dy = Math.max(0, sheet.y1 - box.y1) + Math.max(0, box.y2 - sheet.y2);
+  return dx * h + dy * w;
+}
+
+/**
+ * Pick a side for every name so that names keep off each other, off other
+ * dots and on the sheet. Greedy, north to south: each name takes the
+ * candidate with the least overlap, preferring the side away from the
+ * nearer edge, then the opposite side, then above, then below.
+ */
+export function placeLabels(points: MapPoint[], width: number, height: number): void {
+  const order = [...points].sort((a, b) => a.y - b.y);
+  const placed: Box[] = [];
+  const dots: Box[] = points.map((p) => ({ x1: p.x - DOT_R, y1: p.y - DOT_R, x2: p.x + DOT_R, y2: p.y + DOT_R }));
+  const sheet: Box = { x1: 4, y1: 40, x2: width - 4, y2: height - 6 };
+  for (const p of order) {
+    const preferred: LabelSide = p.x < width / 2 ? 'right' : 'left';
+    const candidates: LabelSide[] = [preferred, preferred === 'right' ? 'left' : 'right', 'above', 'below'];
+    let chosen: LabelSide = preferred;
+    let best = Infinity;
+    for (const side of candidates) {
+      const box = labelBox(p, side);
+      let penalty = outsideArea(box, sheet) * 2;
+      for (const b of placed) penalty += overlapArea(box, b);
+      dots.forEach((d, i) => {
+        if (points[i] !== p) penalty += overlapArea(box, d);
+      });
+      if (penalty < best) {
+        best = penalty;
+        chosen = side;
+      }
+      if (penalty === 0) break;
+    }
+    p.labelSide = chosen;
+    placed.push(labelBox(p, chosen));
+  }
 }
 
 export interface MapProgress {

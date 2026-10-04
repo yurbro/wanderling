@@ -11,7 +11,9 @@ real sun altitude at your location, the moon shows its real phase, the stars com
 out when it is dark where you are, and the weather (clouds, rain, snow, fog) follows
 the real forecast for your place. A small paper-doll wanderer walks along the path,
 opens an umbrella when it rains, carries a lantern after dark and wraps up in a scarf
-when it is cold. They are walking a real route (London to the sea), at a steady 6 km/h
+when it is cold. They set out from your own city (named by a reverse geocode of the
+coarse coordinates, or picked by hand) and walk the nearest of three real routes
+(London to the sea, Tokyo to the hot springs, Paris down the Seine), at a steady 6 km/h
 day and night, resting three hours at each place; the land flattens on the plains and at
 the coast the sea appears, with boats and gulls. Towns have a cottage and a lamp that
 light up after dark. Now and then the wanderer stops to look at the sky, or glances at
@@ -37,8 +39,10 @@ Live preview: https://yurbro.github.io/wanderling/
   ground and path with grass and stones sliding past, the wanderer, rain or snow.
 - `src/data/` talks to the outside world: browser location, the free
   [Open-Meteo](https://open-meteo.com/) forecast (cached in `localStorage` for 45
-  minutes and reused as an hourly forecast when the network is gone), the route
-  data and the saved journey.
+  minutes and reused as an hourly forecast when the network is gone), two keyless
+  geocoders (BigDataCloud for coordinates to a city name, Open-Meteo for a typed city
+  name to coordinates; only two-decimal coordinates are ever sent), the route data
+  and the saved journey.
 - `src/ui/` is a thin DOM overlay for the clock, place name and buttons, plus the
   postcard album (`ui/album.ts`) and the footprint map (`ui/map.ts`, plain SVG laid
   out by `core/map.ts`).

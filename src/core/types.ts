@@ -13,6 +13,16 @@ export interface GeoPoint {
   lon: number;
   /** Human readable label, e.g. "London". Optional until we reverse-geocode. */
   name?: string;
+  /** Country or region, e.g. "United Kingdom". */
+  region?: string;
+}
+
+/** Where a journey set out from: the person's own city at the time. */
+export interface Home {
+  name: string;
+  region?: string;
+  lat: number;
+  lon: number;
 }
 
 /** Angles in degrees. Azimuth is compass style: 0 = north, 90 = east, 180 = south. */
@@ -123,6 +133,8 @@ export interface JourneyState {
   arrivals: Arrival[];
   /** Kilometres added by real-world activity (steps, focus time), for later. */
   bonusKm: number;
+  /** The city this journey started from, when it was known; the route is rebuilt from it. */
+  home?: Home | null;
 }
 
 /** Where the wanderer is on the route right now, derived from JourneyState. */

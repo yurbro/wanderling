@@ -1,4 +1,4 @@
-import { describeProgress, layoutRoute, mapProgress, wobble, type MapLayout, type XY } from '../core/map';
+import { LABEL_FONT, describeProgress, layoutRoute, mapProgress, wobble, type LabelSide, type MapLayout, type XY } from '../core/map';
 import type { Position, Postcard, Route } from '../core/types';
 
 export interface FootprintMap {
@@ -107,10 +107,10 @@ function renderSvg(route: Route, layout: MapLayout, p: ReturnType<typeof mapProg
       const dot = lit
         ? `<circle cx="${q.x}" cy="${q.y}" r="5" fill="${BRICK}" stroke="${INK}" stroke-width="1.2"/>`
         : `<circle cx="${q.x}" cy="${q.y}" r="4.5" fill="${PAPER}" stroke="${INK}" stroke-width="1.2" opacity="0.8"/>`;
-      const stamp = lit && stamped.has(q.id) ? `<text x="${q.x + (q.labelSide === 'right' ? -11 : 11)}" y="${q.y + 4}" font-size="9" fill="${BRICK}" text-anchor="middle" opacity="0.9">✦</text>` : '';
-      const tx = q.labelSide === 'right' ? q.x + 10 : q.x - 10;
-      const anchor = q.labelSide === 'right' ? 'start' : 'end';
-      const label = `<text x="${tx}" y="${q.y + 4}" font-size="12.5" fill="${INK}" text-anchor="${anchor}" opacity="${lit ? 1 : 0.55}">${escape(q.name)}</text>`;
+      const stampX = q.labelSide === 'right' ? q.x - 11 : q.labelSide === 'left' ? q.x + 11 : q.x + 11;
+      const stamp = lit && stamped.has(q.id) ? `<text x="${stampX}" y="${q.y + 4}" font-size="9" fill="${BRICK}" text-anchor="middle" opacity="0.9">✦</text>` : '';
+      const { tx, ty, anchor } = labelPos(q.x, q.y, q.labelSide);
+      const label = `<text x="${tx}" y="${ty}" font-size="${LABEL_FONT}" fill="${INK}" text-anchor="${anchor}" opacity="${lit ? 1 : 0.55}">${escape(q.name)}</text>`;
       return dot + stamp + label;
     })
     .join('');
@@ -125,6 +125,19 @@ function renderSvg(route: Route, layout: MapLayout, p: ReturnType<typeof mapProg
     <rect x="7" y="7" width="${W - 14}" height="${H - 14}" rx="3" fill="none" stroke="${INK}" stroke-width="0.6" opacity="0.35"/>
     ${title}${compass}${seaMarks}${ahead}${walked}${places}${walker}
   </svg>`;
+}
+
+function labelPos(x: number, y: number, side: LabelSide): { tx: number; ty: number; anchor: string } {
+  switch (side) {
+    case 'right':
+      return { tx: x + 10, ty: y + 4, anchor: 'start' };
+    case 'left':
+      return { tx: x - 10, ty: y + 4, anchor: 'end' };
+    case 'above':
+      return { tx: x, ty: y - 11, anchor: 'middle' };
+    default:
+      return { tx: x, ty: y + 20, anchor: 'middle' };
+  }
 }
 
 function escape(s: string): string {

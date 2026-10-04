@@ -23,10 +23,18 @@ const defaultStorage = (): StorageLike | null => {
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+function isHome(v: unknown): boolean {
+  if (v === undefined || v === null) return true;
+  if (!v || typeof v !== 'object') return false;
+  const h = v as Record<string, unknown>;
+  return typeof h.name === 'string' && num(h.lat) && num(h.lon);
+}
+
 export function isJourneyState(v: unknown): v is JourneyState {
   if (!v || typeof v !== 'object') return false;
   const j = v as Record<string, unknown>;
   return (
+    isHome(j.home) &&
     typeof j.routeId === 'string' &&
     num(j.startedAt) &&
     num(j.km) &&
