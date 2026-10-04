@@ -144,6 +144,33 @@ export interface Position {
   totalKm: number;
 }
 
+/**
+ * A postcard the wanderer sends on reaching a place. Everything needed to
+ * draw it is captured at creation, so the album never has to recompute the
+ * sky of a moment long gone.
+ */
+export interface Postcard {
+  /** `${routeId}:${placeId}:${at}`, unique per journey. */
+  id: string;
+  routeId: string;
+  placeId: string;
+  placeName: string;
+  region?: string;
+  terrain: Terrain;
+  /** Arrival time, milliseconds since the epoch. */
+  at: number;
+  /** The wanderer's line. */
+  note: string;
+  /** Weather at the moment of arrival, when known. */
+  weather: { condition: WeatherCondition; code: number; temperature: number } | null;
+  /** Scene colors at arrival, 0xRRGGBB, for the card's little landscape. */
+  colors: { skyTop: number; skyHorizon: number; hillFar: number; hillNear: number; ground: number; sea: number };
+  /** True when the sky was pale enough for dark ink. */
+  darkInk: boolean;
+  /** 0..1, how much of the horizon was water. */
+  seaAmount: number;
+}
+
 export interface WorldState {
   now: Date;
   location: GeoPoint;

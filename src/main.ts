@@ -2,13 +2,16 @@ import './style.css';
 import { direct } from './core/sceneDirector';
 import type { GeoPoint, RenderState, WeatherCondition, WeatherState, WorldState } from './core/types';
 import { advance, describeJourney, locate, startJourney } from './core/journey';
+import { demoPostcards, makePostcard, missingArrivals } from './core/postcards';
 import { CONDITIONS, conditionFromCode, demoWeather } from './core/weather';
 import { buildWorldState } from './core/world';
 import { loadJourney, saveJourney } from './data/journeyStore';
+import { clearPostcards, loadPostcards, savePostcards } from './data/postcardStore';
 import { DEFAULT_LOCATION, loadLocation, requestLocation, saveLocation } from './data/location';
 import { TO_THE_SEA, routeById } from './data/routes';
 import { WeatherService } from './data/weather';
 import { SceneRenderer } from './scene/renderer';
+import { createAlbum } from './ui/album';
 import { createHud } from './ui/hud';
 
 /**
@@ -20,6 +23,7 @@ import { createHud } from './ui/hud';
  *   ?temp=-3&wind=30   tweak the forced weather (Celsius, km/h)
  *   ?km=120            jump the journey to a kilometre mark (not saved)
  *   ?journey=reset     start the journey again from the first place
+ *   ?postcards=demo    add three sample postcards to the album (not saved)
  */
 async function main(): Promise<void> {
   const root = document.getElementById('app')!;
@@ -67,7 +71,12 @@ async function main(): Promise<void> {
       forcedWeather = c;
       tick();
     },
+    onAlbum: () => {
+      album.setCards(allCards());
+      album.open();
+    },
   });
+  const album = createAlbum(root, hud.unit);
 
   if (loadLocation()) hud.hideLocate();
 
@@ -84,7 +93,9 @@ async function main(): Promise<void> {
   const weather = new WeatherService(() => tick());
 
   // The journey: continue the saved one, or set out from the first place.
-  const saved = params.get('journey') === 'reset' ? null : loadJourney();
+  const resetJourney = params.get('journey') === 'reset';
+  if (resetJourney) clearPostcards();
+  const saved = resetJourney ? null : loadJourney();
   const route = (saved && routeById(saved.routeId)) || TO_THE_SEA;
   let journey = saved && saved.routeId === route.id ? saved : startJourney(route, Date.now());
   const kmJump = Number(params.get('km'));
@@ -96,6 +107,25 @@ async function main(): Promise<void> {
   const first = advance(route, journey, Date.now());
   journey = first.state;
   if (!demoJourney) saveJourney(journey);
+
+  // Postcards: one per arrival. Any arrival without a card gets one on the
+  // next tick, so a week away still fills the album, in order.
+  let postcards = loadPostcards();
+  const sampleCards = params.get('postcards') === 'demo' ? demoPostcards(route, location, Date.now()) : [];
+  const allCards = () => [...sampleCards, ...postcards];
+  let freshCards = false;
+  const syncPostcards = (): void => {
+    const missing = missingArrivals(route, journey, postcards);
+    if (missing.length === 0) return;
+    for (const arrival of missing) {
+      const card = makePostcard(route, arrival, location, forcedWeather ? null : weather.current(new Date(arrival.at)));
+      if (card) postcards = [...postcards, card];
+    }
+    if (!demoJourney) savePostcards(postcards);
+    freshCards = true;
+    hud.setPostcards(allCards().length, true);
+    if (album.isOpen) album.setCards(allCards());
+  };
 
   const weatherFor = (t: Date): WeatherState | null =>
     forcedWeather ? demoWeather(forcedWeather, t, forcedTweaks) : weather.current(t);
@@ -113,6 +143,7 @@ async function main(): Promise<void> {
       const place = step.arrived[step.arrived.length - 1];
       hud.setNote(place.note ?? `Arrived in ${place.name}.`, 20_000);
     }
+    syncPostcards();
     const position = locate(route, journey, wall);
     world = buildWorldState(t, location, weatherFor(t), position);
     render = direct(world);
@@ -124,10 +155,13 @@ async function main(): Promise<void> {
       ?.setAttribute('content', '#' + render.sky.top.toString(16).padStart(6, '0'));
   };
 
+  hud.setPostcards(allCards().length, false);
+  freshCards = false;
   tick();
+  if (postcards.length > 1 || sampleCards.length > 0) hud.setPostcards(allCards().length, freshCards);
   // A read-only peek for debugging and screenshots: window.__wanderling.render
   Object.defineProperty(window, '__wanderling', {
-    value: { get world() { return world; }, get render() { return render; }, get journey() { return journey; }, renderer },
+    value: { get world() { return world; }, get render() { return render; }, get journey() { return journey; }, get postcards() { return allCards(); }, renderer, album },
     configurable: true,
   });
   if (first.arrived.length > 0) {
