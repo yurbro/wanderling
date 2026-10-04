@@ -101,10 +101,15 @@ export interface Place {
   note?: string;
 }
 
+/** How a leg is covered: on foot, or by train or plane between routes. */
+export type LegMode = 'walk' | 'ride' | 'fly';
+
 export interface Leg {
   /** Real-world distance in kilometres. */
   km: number;
   terrain: Terrain;
+  /** Defaults to 'walk'. */
+  mode?: LegMode;
 }
 
 export interface Route {
@@ -135,6 +140,10 @@ export interface JourneyState {
   bonusKm: number;
   /** The city this journey started from, when it was known; the route is rebuilt from it. */
   home?: Home | null;
+  /** Where this segment set off from when it is not home: the previous route's last place. */
+  from?: Home | null;
+  /** Route ids finished since leaving home; the chain avoids repeating them. */
+  walked?: string[];
 }
 
 /** Where the wanderer is on the route right now, derived from JourneyState. */
@@ -151,6 +160,8 @@ export interface Position {
   fraction: number;
   resting: boolean;
   finished: boolean;
+  /** How the current leg is covered ('walk' once finished). */
+  mode: LegMode;
   /** Journey km from the start. */
   km: number;
   totalKm: number;

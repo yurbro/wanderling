@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KM_PER_HOUR, advance, locate, startJourney } from '../src/core/journey';
+import { routeFromHome } from '../src/core/geo';
 import { describeProgress, labelBox, layoutRoute, mapProgress, wobble } from '../src/core/map';
 import { ROUTES, TO_THE_SEA } from '../src/data/routes';
 import type { Route } from '../src/core/types';
@@ -139,5 +140,32 @@ describe('wobble', () => {
     expect(w.length).toBeGreaterThan(path.length);
     // Never strays more than the amplitude from the straight line.
     for (const p of w.slice(1, 11)) expect(Math.abs(p.y)).toBeLessThanOrEqual(2 + 1e-9);
+  });
+});
+
+describe('a segment reached by plane', () => {
+  const flown = routeFromHome(TO_THE_SEA, { name: 'Tokyo', lat: 35.68, lon: 139.69 });
+
+  it('leaves the far-away start off the sheet', () => {
+    const layout = layoutRoute(flown);
+    expect(layout.skip).toBe(1);
+    expect(layout.points[0].id).toBe('london');
+    expect(layout.points).toHaveLength(TO_THE_SEA.places.length);
+  });
+
+  it('shows the wanderer at the first place while still in the air, then on the route', () => {
+    const layout = layoutRoute(flown);
+    const s = startJourney(flown, T0);
+    const inAir = locate(flown, advance(flown, s, T0 + 1 * H).state, T0 + 1 * H);
+    expect(inAir.mode).toBe('fly');
+    const p = mapProgress(layout, inAir);
+    expect(p.reached).toEqual([]);
+    expect(p.current).toEqual({ x: layout.points[0].x, y: layout.points[0].y });
+    expect(p.walked).toHaveLength(1);
+    const landedAt = T0 + (flown.legs[0].km / 700 + 4) * H;
+    const onRoute = locate(flown, advance(flown, s, landedAt).state, landedAt);
+    const q = mapProgress(layout, onRoute);
+    expect(q.reached).toEqual(['london']);
+    expect(q.walked.length).toBeGreaterThanOrEqual(2);
   });
 });

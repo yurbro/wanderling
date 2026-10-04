@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HOME_LEG_MAX_KM, haversineKm, homeFrom, nearestRoute, parseCitySearch, parseReverseGeocode, routeFromHome } from '../src/core/geo';
+import { WALK_MAX_KM, haversineKm, homeFrom, nearestRoute, parseCitySearch, parseReverseGeocode, routeFromHome, transferMode } from '../src/core/geo';
 import { startJourney } from '../src/core/journey';
 import { isJourneyState } from '../src/data/journeyStore';
 import { ROUTES, TO_THE_SEA } from '../src/data/routes';
@@ -47,13 +47,22 @@ describe('routeFromHome', () => {
     expect(r.legs).toHaveLength(TO_THE_SEA.legs.length + 1);
     expect(r.legs[0].km).toBeGreaterThan(70);
     expect(r.legs[0].km).toBeLessThan(90);
+    expect(r.legs[0].mode).toBe('walk');
   });
 
-  it('leaves the route alone when home is on it or too far away', () => {
+  it('leaves the route alone when home is on it, and flies in when it is far', () => {
     expect(routeFromHome(TO_THE_SEA, null)).toBe(TO_THE_SEA);
     expect(routeFromHome(TO_THE_SEA, { name: 'London', lat: 51.51, lon: -0.13 })).toBe(TO_THE_SEA);
-    expect(routeFromHome(TO_THE_SEA, { name: 'Tokyo', lat: 35.68, lon: 139.69 })).toBe(TO_THE_SEA);
-    expect(HOME_LEG_MAX_KM).toBeGreaterThan(300);
+    const far = routeFromHome(TO_THE_SEA, { name: 'Tokyo', lat: 35.68, lon: 139.69 });
+    expect(far.places[0].name).toBe('Tokyo');
+    expect(far.legs[0].mode).toBe('fly');
+    expect(far.legs[0].km).toBeGreaterThan(9000);
+    const train = routeFromHome(TO_THE_SEA, { name: 'Berlin', lat: 52.52, lon: 13.4 });
+    expect(train.legs[0].mode).toBe('ride');
+    expect(WALK_MAX_KM).toBeGreaterThan(300);
+    expect(transferMode(100)).toBe('walk');
+    expect(transferMode(1000)).toBe('ride');
+    expect(transferMode(5000)).toBe('fly');
   });
 
   it('round-trips through the journey store with home attached', () => {

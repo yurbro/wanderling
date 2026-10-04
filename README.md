@@ -14,8 +14,10 @@ opens an umbrella when it rains, carries a lantern after dark and wraps up in a 
 when it is cold. They set out from your own city (named by a reverse geocode of the
 coarse coordinates, or picked by hand) and walk the nearest of three real routes
 (London to the sea, Tokyo to the hot springs, Paris down the Seine), at a steady 6 km/h
-day and night, resting three hours at each place; the land flattens on the plains and at
-the coast the sea appears, with boats and gulls. Towns have a cottage and a lamp that
+day and night, resting three hours at each place. When a route is done they carry on to
+the nearest route not yet walked, on foot, by train or by plane depending on the
+distance, and once every route is walked they head home and start again. The land
+flattens on the plains and at the coast the sea appears, with boats and gulls. Towns have a cottage and a lamp that
 light up after dark. Now and then the wanderer stops to look at the sky, or glances at
 you. Every place reached sends a postcard, painted with the sky and weather of that
 moment, into an album you can open from the main screen, and a footprint map shows the
@@ -58,6 +60,7 @@ Useful URL parameters for demos and screenshots:
 | `?temp=-3&wind=30` | tweaks the forced weather (Celsius, km/h) |
 | `?km=120` | peeks at the journey at a kilometre mark (not saved) |
 | `?journey=reset` | starts the journey again from the first place (and empties the album) |
+| `?journey=next` | jumps to the next segment of the chain (not saved) |
 | `?postcards=demo` | adds three sample postcards to the album (not saved) |
 
 ## Development
