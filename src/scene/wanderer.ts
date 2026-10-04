@@ -13,7 +13,12 @@ import type { RenderState, WandererState } from '../core/types';
  * a lantern once it is dark (its glow and flame live in a separate, untinted
  * layer behind the figure, showing through the translucent glass), and a
  * scarf in the cold.
+ *
+ * Now and then the wanderer stops to look at the sky (the renderer holds the
+ * world still while `paused`), or glances out at whoever is watching.
  */
+
+type Gesture = 'none' | 'gaze' | 'glance';
 
 const U = 100;
 const ARM_LEN = 0.27;
@@ -37,6 +42,7 @@ export class Wanderer {
   private torso = new Graphics();
   private backpack = new Graphics();
   private head = new Graphics();
+  private headFront = new Graphics();
   private scarf = new Graphics();
   private scarfTail = new Graphics();
   private umbrella = new Graphics();
@@ -48,6 +54,13 @@ export class Wanderer {
   private time = 0;
   private feet = { x: 0, y: 0 };
   private scale = 1;
+  private gesture: Gesture = 'none';
+  private gestureLeft = 0;
+  private nextGesture = 18;
+  private tilt = 0;
+  private lastDt = 0.033;
+  /** The renderer clears this while a signpost is near, so pauses never fight an arrival. */
+  allowPause = true;
 
   constructor() {
     this.drawParts();
@@ -60,6 +73,7 @@ export class Wanderer {
       this.frontLeg,
       this.scarf,
       this.head,
+      this.headFront,
       this.frontArm,
       this.lantern,
       this.umbrella,
@@ -69,7 +83,13 @@ export class Wanderer {
     this.lantern.visible = false;
     this.scarf.visible = false;
     this.scarfTail.visible = false;
+    this.headFront.visible = false;
     this.glow.visible = false;
+  }
+
+  /** True while the wanderer has stopped to look at the sky. */
+  get paused(): boolean {
+    return this.gesture === 'gaze';
   }
 
   /** Place the feet at (x, groundY) and scale the figure to `height` pixels. */
@@ -98,9 +118,39 @@ export class Wanderer {
   frame(dt: number): void {
     if (!this.state) return;
     this.time += dt;
+    this.lastDt = dt;
+    this.gestures(dt);
     // A leisurely 1.5 steps a second.
-    this.phase += dt * Math.PI * 2 * 1.5 * this.state.pace;
+    const pace = this.paused ? 0 : this.state.pace;
+    this.phase += dt * Math.PI * 2 * 1.5 * pace;
     this.pose();
+  }
+
+  /** Every so often while walking: a few seconds looking up, or a glance at the viewer. */
+  private gestures(dt: number): void {
+    const st = this.state!;
+    if (this.gesture !== 'none') {
+      this.gestureLeft -= dt;
+      if (this.gestureLeft <= 0) {
+        this.gesture = 'none';
+        this.headFront.visible = false;
+        this.head.visible = true;
+        this.nextGesture = 35 + Math.random() * 50;
+      }
+      return;
+    }
+    if (st.pace <= 0) return;
+    this.nextGesture -= dt;
+    if (this.nextGesture > 0) return;
+    if (Math.random() < 0.55 && this.allowPause) {
+      this.gesture = 'gaze';
+      this.gestureLeft = 3 + Math.random() * 2;
+    } else {
+      this.gesture = 'glance';
+      this.gestureLeft = 1.4 + Math.random() * 0.6;
+      this.head.visible = false;
+      this.headFront.visible = true;
+    }
   }
 
   /* ------------------------------------------------------------- posing */
@@ -109,7 +159,7 @@ export class Wanderer {
     const st = this.state;
     if (!st) return;
     const s = Math.sin(this.phase);
-    const moving = st.pace > 0 ? 1 : 0;
+    const moving = st.pace > 0 && !this.paused ? 1 : 0;
     const swing = 0.55 * moving;
 
     this.frontLeg.rotation = s * swing;
@@ -117,7 +167,13 @@ export class Wanderer {
     // The body rises a touch at each stride.
     this.body.y = -Math.abs(s) * 0.02 * U * moving;
     // Walking: a small nod with each stride. Standing: a slow look around.
-    this.head.rotation = moving ? Math.sin(this.phase * 2) * 0.02 : Math.sin(this.time * 0.8) * 0.05;
+    // Gazing: the head eases back to look up at the sky.
+    const target = this.gesture === 'gaze' ? -0.42 : 0;
+    this.tilt += (target - this.tilt) * Math.min(1, this.lastDt * 5);
+    const idle = moving ? Math.sin(this.phase * 2) * 0.02 : Math.sin(this.time * 0.8) * 0.05;
+    this.head.rotation = this.tilt + idle * (this.gesture === 'gaze' ? 0.3 : 1);
+    this.headFront.position.set(this.head.x, this.head.y);
+    this.headFront.rotation = idle;
 
     // Arms: the umbrella takes the front hand, the lantern whichever is free.
     let frontRot = -s * swing * 0.8;
@@ -198,6 +254,16 @@ export class Wanderer {
     head.ellipse(0, -0.085 * U, 0.22 * U, 0.038 * U).fill({ color: WANDERER.hat }).stroke(line);
     head.roundRect(-0.11 * U, -0.19 * U, 0.22 * U, 0.12 * U, 0.05 * U).fill({ color: WANDERER.hat }).stroke(line);
     head.rect(-0.11 * U, -0.115 * U, 0.22 * U, 0.025 * U).fill({ color: WANDERER.hatBand });
+
+    // The same head turned to face the viewer: two eyes, the brim seen flat.
+    const hf = this.headFront;
+    hf.position.set(0.02 * U, -0.84 * U);
+    hf.circle(0, 0, 0.13 * U).fill({ color: WANDERER.skin }).stroke(line);
+    hf.circle(-0.045 * U, -0.005 * U, 0.014 * U).fill({ color: ink });
+    hf.circle(0.045 * U, -0.005 * U, 0.014 * U).fill({ color: ink });
+    hf.ellipse(0, -0.085 * U, 0.25 * U, 0.045 * U).fill({ color: WANDERER.hat }).stroke(line);
+    hf.roundRect(-0.12 * U, -0.19 * U, 0.24 * U, 0.12 * U, 0.05 * U).fill({ color: WANDERER.hat }).stroke(line);
+    hf.rect(-0.12 * U, -0.115 * U, 0.24 * U, 0.025 * U).fill({ color: WANDERER.hatBand });
 
     // Scarf: a band at the neck and a tail that streams behind.
     this.scarf.roundRect(-0.15 * U, -0.75 * U, 0.3 * U, 0.065 * U, 0.03 * U).fill({ color: WANDERER.scarf }).stroke(line);

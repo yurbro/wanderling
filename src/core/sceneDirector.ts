@@ -1,6 +1,6 @@
 import { clamp01, hexToRgb, mix, smoothstep } from './color';
 import { CELESTIAL, LAND, WEATHER_TONES, skyAt } from './palette';
-import type { CelestialPlacement, DayPhase, RenderState, WorldState } from './types';
+import type { CelestialPlacement, DayPhase, PlaceMarker, RenderState, Terrain, WorldState } from './types';
 import { TERRAIN, landAt } from './journey';
 import { weatherIntensities } from './weather';
 
@@ -108,13 +108,16 @@ export function direct(ws: WorldState): RenderState {
     relief: profile.relief,
     sea: profile.sea,
     seaColor: mix(mix(LAND.seaNight, LAND.seaDay, dayLight), horizon, 0.3),
+    seaNear: mix(mix(LAND.seaNearNight, LAND.seaNearDay, dayLight), horizon, 0.12),
   };
 
-  // The nearest place's signpost: behind us just after leaving, ahead when close.
-  let signpostKm: number | null = null;
+  // The nearest place's marker: behind us just after leaving, ahead when close.
+  let marker: PlaceMarker | null = null;
   if (journey) {
-    if (journey.resting || journey.finished) signpostKm = 0;
-    else signpostKm = journey.kmIntoLeg <= journey.kmToNext ? -journey.kmIntoLeg : journey.kmToNext;
+    const behind = journey.resting || journey.finished || journey.kmIntoLeg <= journey.kmToNext;
+    const place = behind || !journey.to ? journey.from : journey.to;
+    const offsetKm = journey.resting || journey.finished ? 0 : behind ? -journey.kmIntoLeg : journey.kmToNext;
+    marker = { offsetKm, cottage: TOWNS.has(place.terrain) };
   }
 
   return {
@@ -141,10 +144,13 @@ export function direct(ws: WorldState): RenderState {
     },
     wanderer,
     land: landLayers,
-    signpostKm,
+    marker,
     darkInk: luminance(sky.top) > 0.55,
   };
 }
+
+/** Terrains where a place is a town: it gets a lamp and a cottage. */
+const TOWNS = new Set<Terrain>(['city', 'plain', 'coast', 'lake']);
 
 /** Perceived brightness 0..1 of a color. */
 export function luminance(color: number): number {

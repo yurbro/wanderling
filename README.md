@@ -11,9 +11,11 @@ real sun altitude at your location, the moon shows its real phase, the stars com
 out when it is dark where you are, and the weather (clouds, rain, snow, fog) follows
 the real forecast for your place. A small paper-doll wanderer walks along the path,
 opens an umbrella when it rains, carries a lantern after dark and wraps up in a scarf
-when it is cold. They are walking a real route (London to the sea), at a steady 4 km/h
-day and night, resting six hours at each place; the land flattens on the plains and the
-sea appears at the coast. Postcards and a map come next.
+when it is cold. They are walking a real route (London to the sea), at a steady 6 km/h
+day and night, resting three hours at each place; the land flattens on the plains and at
+the coast the sea appears, with boats and gulls. Towns have a cottage and a lamp that
+light up after dark. Now and then the wanderer stops to look at the sky, or glances at
+you. Postcards and a map come next.
 
 Live preview: https://yurbro.github.io/wanderling/
 

@@ -58,8 +58,8 @@ describe('advance', () => {
     expect(state.km).toBeCloseTo(KM_PER_HOUR, 6);
     expect(arrived).toEqual([]);
     const pos = locate(ROUTE, state, T0 + 1 * H);
-    expect(pos.kmIntoLeg).toBeCloseTo(4, 6);
-    expect(pos.fraction).toBeCloseTo(0.5, 6);
+    expect(pos.kmIntoLeg).toBeCloseTo(KM_PER_HOUR, 6);
+    expect(pos.fraction).toBeCloseTo(KM_PER_HOUR / 8, 6);
   });
 
   it('arrives at the exact moment and then rests', () => {
@@ -79,11 +79,12 @@ describe('advance', () => {
   it('sets off again after the rest and reaches the end', () => {
     const s = startJourney(ROUTE, T0);
     const restH = REST_MS / H;
-    // Leg 1: 2 h, rest, leg 2: 3 h.
-    const arriveC = T0 + (2 + restH + 3) * H;
+    const leg1 = 8 / KM_PER_HOUR;
+    const leg2 = 12 / KM_PER_HOUR;
+    const arriveC = T0 + (leg1 + restH + leg2) * H;
     const early = advance(ROUTE, s, arriveC - 0.5 * H);
     expect(early.arrived.map((p) => p.id)).toEqual(['b']);
-    expect(locate(ROUTE, early.state, arriveC - 0.5 * H).kmToNext).toBeCloseTo(2, 6);
+    expect(locate(ROUTE, early.state, arriveC - 0.5 * H).kmToNext).toBeCloseTo(0.5 * KM_PER_HOUR, 6);
     const done = advance(ROUTE, early.state, arriveC + 1 * H);
     expect(done.arrived.map((p) => p.id)).toEqual(['c']);
     expect(done.state.arrivals[2].at).toBe(arriveC);
@@ -102,8 +103,8 @@ describe('advance', () => {
     const { state, arrived } = advance(ROUTE, s, T0 + 100 * H);
     expect(arrived.map((p) => p.id)).toEqual(['b', 'c']);
     const [a, b, c] = state.arrivals;
-    expect(b.at - a.at).toBe(2 * H);
-    expect(c.at - b.at).toBe(REST_MS + 3 * H);
+    expect(b.at - a.at).toBeCloseTo((8 / KM_PER_HOUR) * H, 3);
+    expect(c.at - b.at).toBeCloseTo(REST_MS + (12 / KM_PER_HOUR) * H, 3);
   });
 
   it('never walks backwards when the clock does', () => {
@@ -116,9 +117,11 @@ describe('advance', () => {
 
   it('describes the walk', () => {
     const s = startJourney(ROUTE, T0);
-    const pos = locate(ROUTE, advance(ROUTE, s, T0 + 0.5 * H).state, T0 + 0.5 * H);
-    expect(describeJourney(pos)).toBe('Walking to Bravo · 6 km to go');
-    const near = locate(ROUTE, advance(ROUTE, s, T0 + 1.9 * H).state, T0 + 1.9 * H);
+    const halfHour = T0 + 0.5 * H;
+    const pos = locate(ROUTE, advance(ROUTE, s, halfHour).state, halfHour);
+    expect(describeJourney(pos)).toBe(`Walking to Bravo · ${Math.round(8 - 0.5 * KM_PER_HOUR)} km to go`);
+    const justBefore = T0 + ((8 - 0.5) / KM_PER_HOUR) * H;
+    const near = locate(ROUTE, advance(ROUTE, s, justBefore).state, justBefore);
     expect(describeJourney(near)).toBe('Walking to Bravo · almost there');
   });
 });
@@ -128,7 +131,7 @@ describe('addBonusKm', () => {
     const s = startJourney(ROUTE, T0);
     const { state, arrived } = addBonusKm(ROUTE, s, 10, T0 + 0.25 * H);
     expect(arrived.map((p) => p.id)).toEqual(['b']);
-    expect(state.km).toBeCloseTo(11, 6);
+    expect(state.km).toBeCloseTo(10 + 0.25 * KM_PER_HOUR, 6);
     expect(state.bonusKm).toBe(10);
   });
 });
@@ -136,12 +139,14 @@ describe('addBonusKm', () => {
 describe('landAt', () => {
   it('uses the leg terrain in the middle and blends near the ends', () => {
     const s = startJourney(ROUTE, T0);
-    const mid = locate(ROUTE, advance(ROUTE, s, T0 + 1 * H).state, T0 + 1 * H);
+    const midTime = T0 + (4 / KM_PER_HOUR) * H;
+    const mid = locate(ROUTE, advance(ROUTE, s, midTime).state, midTime);
     expect(landAt(ROUTE, mid)).toEqual({ relief: 0.4, sea: 0 });
     // Leg 2 is hills (relief 1) leading to a coast (sea 1): near the end the sea shows.
     const restH = REST_MS / H;
-    const nearEnd = advance(ROUTE, s, T0 + (2 + restH + 2.9) * H).state;
-    const pos = locate(ROUTE, nearEnd, T0 + (2 + restH + 2.9) * H);
+    const nearEndTime = T0 + (8 / KM_PER_HOUR + restH + 11.6 / KM_PER_HOUR) * H;
+    const nearEnd = advance(ROUTE, s, nearEndTime).state;
+    const pos = locate(ROUTE, nearEnd, nearEndTime);
     expect(pos.to?.id).toBe('c');
     expect(pos.fraction).toBeGreaterThan(0.95);
     const land = landAt(ROUTE, pos);

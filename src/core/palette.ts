@@ -58,6 +58,8 @@ export const LAND = {
   nightTint: '#262D4C',
   seaDay: '#7C9DB0',
   seaNight: '#2A3550',
+  seaNearDay: '#6B8DA2',
+  seaNearNight: '#242E48',
 };
 
 export const CELESTIAL = {
@@ -110,4 +112,17 @@ export const WANDERER = {
   umbrella: '#4D5B8A',
   lanternGlass: '#F8EBC0',
   glow: '#F8EBC0',
+};
+
+/** Props that stand at a place, and the boats on the sea. */
+export const PROPS = {
+  wood: '#8C7355',
+  board: '#D9CFAE',
+  wall: '#E8DEC3',
+  roof: '#9E7A6A',
+  window: '#4A4A52',
+  hull: '#5B5F6E',
+  hullDark: '#4A4A52',
+  sail: '#F4EFE4',
+  funnel: '#B86B5A',
 };

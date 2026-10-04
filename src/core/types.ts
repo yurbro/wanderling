@@ -213,6 +213,15 @@ export interface LandLayers {
   /** 0..1 how much of the far layer is water instead of hills. */
   sea: number;
   seaColor: number;
+  /** The nearer water, a shade deeper. */
+  seaNear: number;
+}
+
+/** The nearest place's marker: a signpost, and in towns a lamp and a cottage. */
+export interface PlaceMarker {
+  /** Offset from the wanderer in journey km, negative is behind. */
+  offsetKm: number;
+  cottage: boolean;
 }
 
 export interface RenderState {
@@ -230,11 +239,8 @@ export interface RenderState {
   weather: WeatherLayers;
   wanderer: WandererState;
   land: LandLayers;
-  /**
-   * Offset of the nearest place's signpost from the wanderer, in journey km
-   * (negative is behind), or null when no place is near.
-   */
-  signpostKm: number | null;
+  /** Null when no journey is under way. */
+  marker: PlaceMarker | null;
   /** True when the HUD text should be dark ink instead of pale paper. */
   darkInk: boolean;
 }
