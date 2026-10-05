@@ -1,7 +1,7 @@
-import { hexToCss } from '../core/color';
 import { getLang, t } from '../core/i18n';
 import { describeArrival, stampGlyph } from '../core/postcards';
 import type { Postcard } from '../core/types';
+import { renderPostcardScene } from './postcardScene';
 
 export interface Album {
   open(): void;
@@ -73,24 +73,11 @@ export function createAlbum(root: HTMLElement, unit: 'C' | 'F'): Album {
 }
 
 function renderCard(card: Postcard, unit: 'C' | 'F', dateFmt: Intl.DateTimeFormat): HTMLElement {
-  const c = card.colors;
-  const sea = card.seaAmount;
-  const far = sea > 0.5 ? c.sea : c.hillFar;
   const article = document.createElement('article');
   article.className = 'card' + (card.darkInk ? ' card-dark-ink' : '');
-  // Layered bands: sky, far hills (or sea), near hills, ground.
-  const scene = [
-    `${hexToCss(c.skyTop)} 0%`,
-    `${hexToCss(c.skyHorizon)} 58%`,
-    `${hexToCss(far)} 58%`,
-    `${hexToCss(far)} ${sea > 0.5 ? 74 : 70}%`,
-    `${hexToCss(c.hillNear)} ${sea > 0.5 ? 74 : 70}%`,
-    `${hexToCss(c.hillNear)} 80%`,
-    `${hexToCss(c.ground)} 80%`,
-    `${hexToCss(c.ground)} 100%`,
-  ].join(', ');
   article.innerHTML = `
-    <div class="card-scene" style="background: linear-gradient(to bottom, ${scene})">
+    <div class="card-scene">
+      <div class="card-picture">${renderPostcardScene(card)}</div>
       <div class="card-stamp">${stampGlyph(card)}</div>
       <div class="card-place">${escapeHtml(card.placeName)}</div>
       ${card.region ? `<div class="card-region">${escapeHtml(card.region)}</div>` : ''}

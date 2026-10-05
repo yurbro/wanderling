@@ -56,6 +56,11 @@ export function makePostcard(
     },
     darkInk: rs.darkInk,
     seaAmount,
+    sky: {
+      sunX: rs.sun.x, sunY: rs.sun.y, sunUp: rs.sun.visible && rs.sun.alpha > 0.3,
+      moonX: rs.moon.x, moonY: rs.moon.y, moonUp: rs.moon.visible && rs.moon.alpha > 0.3, moonFraction: rs.moon.fraction,
+      starAlpha: rs.starAlpha, cloud: rs.weather.cloud,
+    },
   };
 }
 

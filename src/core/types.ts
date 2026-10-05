@@ -195,6 +195,8 @@ export interface Postcard {
   darkInk: boolean;
   /** 0..1, how much of the horizon was water. */
   seaAmount: number;
+  /** Where the sun and moon stood and how dark it was, for the card's picture (newer cards only). */
+  sky?: { sunX: number; sunY: number; sunUp: boolean; moonX: number; moonY: number; moonUp: boolean; moonFraction: number; starAlpha: number; cloud: number };
 }
 
 export interface WorldState {
