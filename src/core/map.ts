@@ -1,3 +1,4 @@
+import { formatKm, placeName, t } from './i18n';
 import type { Position, Route, Terrain } from './types';
 
 /**
@@ -64,7 +65,7 @@ export function layoutRoute(route: Route, width = 320, height = 440, padding = 4
   const points: MapPoint[] = places.map((p, i) => {
     const x = offX + (raw[i].x - minX) * scale;
     const y = offY + (raw[i].y - minY) * scale;
-    return { id: p.id, name: p.name, terrain: p.terrain, x, y, labelSide: x < width / 2 ? 'right' : 'left' };
+    return { id: p.id, name: placeName(p), terrain: p.terrain, x, y, labelSide: x < width / 2 ? 'right' : 'left' };
   });
   placeLabels(points, width, height);
   return { width, height, points, skip };
@@ -237,7 +238,7 @@ export function wobble(path: XY[], amplitude = 1.6, step = 14): XY[] {
 
 /** "3 of 8 places · 58 km of 144" */
 export function describeProgress(p: MapProgress): string {
-  const places = `${p.reached.length} of ${p.placeCount} places`;
+  const places = t('placesOf', { n: p.reached.length, total: p.placeCount });
   if (p.totalKm <= 0) return places;
-  return `${places} · ${Math.round(p.walkedKm)} km of ${Math.round(p.totalKm)}`;
+  return `${places} · ${t('kmOf', { km: formatKm(p.walkedKm), total: formatKm(p.totalKm) })}`;
 }

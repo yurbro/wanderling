@@ -1,3 +1,4 @@
+import { t } from '../core/i18n';
 import { installHint } from '../core/install';
 
 /**
@@ -58,10 +59,10 @@ function show(root: HTMLElement, kind: 'ios' | 'prompt', getPrompt: () => Before
   el.className = 'install';
   el.innerHTML =
     kind === 'ios'
-      ? `<div class="install-text"><b>Keep the sky with you.</b> Tap Share, then <b>Add to Home Screen</b>. Wanderling then opens like an app, even without a signal.</div>
-         <button class="pill install-close" type="button">Got it</button>`
-      : `<div class="install-text"><b>Keep the sky with you.</b> Add Wanderling to your home screen; it opens like an app, even without a signal.</div>
-         <button class="pill install-go" type="button">Add</button>`;
+      ? `<div class="install-text"><b>${t('keepSky')}</b> ${t('iosHint')}</div>
+         <button class="pill install-close" type="button">${t('gotIt')}</button>`
+      : `<div class="install-text"><b>${t('keepSky')}</b> ${t('promptHint')}</div>
+         <button class="pill install-go" type="button">${t('add')}</button>`;
   root.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
 

@@ -1,4 +1,5 @@
 import { clamp01 } from './color';
+import { getLang } from './i18n';
 import type { WeatherCondition, WeatherState } from './types';
 
 /**
@@ -76,9 +77,18 @@ export function conditionFromCode(code: number, cloudCover = 0): WeatherConditio
   return codeInfo(code, cloudCover).condition;
 }
 
-/** Short English label for the HUD, e.g. "Light rain". */
+const LABEL_ZH: Record<string, string> = {
+  Clear: '晴', 'Mostly clear': '大致晴朗', 'Partly cloudy': '多云', Overcast: '阴', Fog: '雾', 'Freezing fog': '冻雾',
+  'Light drizzle': '小毛毛雨', Drizzle: '毛毛雨', 'Dense drizzle': '密集毛毛雨', 'Freezing drizzle': '冻毛毛雨',
+  'Light rain': '小雨', Rain: '雨', 'Heavy rain': '大雨', 'Freezing rain': '冻雨', 'Heavy freezing rain': '大冻雨',
+  'Light snow': '小雪', Snow: '雪', 'Heavy snow': '大雪', 'Snow grains': '米雪', Showers: '阵雨', 'Violent showers': '强阵雨',
+  'Snow showers': '阵雪', 'Heavy snow showers': '强阵雪', Thunderstorm: '雷雨', 'Thunderstorm with hail': '雷雨伴冰雹',
+};
+
+/** Short label for the HUD, e.g. "Light rain". */
 export function describeWeather(ws: WeatherState): string {
-  return codeInfo(ws.code, ws.cloudCover).label;
+  const label = codeInfo(ws.code, ws.cloudCover).label;
+  return getLang() === 'zh' ? (LABEL_ZH[label] ?? label) : label;
 }
 
 export function formatTemperature(celsius: number, unit: 'C' | 'F'): string {

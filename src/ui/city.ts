@@ -1,4 +1,5 @@
 import type { CityResult } from '../core/geo';
+import { t } from '../core/i18n';
 
 export interface CityChooser {
   open(): void;
@@ -21,15 +22,15 @@ export function createCityChooser(
   el.innerHTML = `
     <div class="album-inner">
       <div class="album-head">
-        <div class="album-title">Where are you?</div>
-        <button class="pill city-close" type="button">Close</button>
+        <div class="album-title">${t('whereAreYou')}</div>
+        <button class="pill city-close" type="button">${t('close')}</button>
       </div>
       <form class="city-form" id="city-form">
-        <input class="city-input" id="city-input" type="search" placeholder="Type a city" autocomplete="off" autocapitalize="words" />
-        <button class="pill" type="submit">Search</button>
+        <input class="city-input" id="city-input" type="search" placeholder="${t('typeCity')}" autocomplete="off" autocapitalize="words" />
+        <button class="pill" type="submit">${t('search')}</button>
       </form>
       <ul class="city-results" id="city-results"></ul>
-      <p class="city-note" id="city-note">The sky, the weather and the start of the journey follow the city you pick. Only the city is used, never a street.</p>
+      <p class="city-note" id="city-note">${t('cityNote')}</p>
     </div>
   `;
   root.appendChild(el);
@@ -61,12 +62,12 @@ export function createCityChooser(
     const q = input.value.trim();
     if (q.length < 2) return;
     const my = ++seq;
-    note.textContent = 'Looking…';
+    note.textContent = t('looking');
     results.replaceChildren();
     const found = await search(q);
     if (my !== seq) return;
     if (found.length === 0) {
-      note.textContent = 'No such place found. Try the nearest big city.';
+      note.textContent = t('noPlace');
       return;
     }
     note.textContent = '';

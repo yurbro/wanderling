@@ -1,4 +1,5 @@
 import type { RenderState, WeatherCondition, WeatherState, WorldState } from '../core/types';
+import { getLang, t } from '../core/i18n';
 import { CONDITIONS, describeWeather, formatTemperature } from '../core/weather';
 
 export interface HudOptions {
@@ -11,6 +12,7 @@ export interface HudOptions {
   onMap?: () => void;
   /** Tapping the place name: choose a city by hand. */
   onPlace?: () => void;
+  onLanguage?: () => void;
 }
 
 export interface Hud {
@@ -26,17 +28,17 @@ export interface Hud {
   readonly unit: 'C' | 'F';
 }
 
-const PRETTY: Record<WeatherCondition, string> = {
-  clear: 'Clear',
-  'partly-cloudy': 'Partly cloudy',
-  overcast: 'Overcast',
-  fog: 'Fog',
-  drizzle: 'Drizzle',
-  rain: 'Rain',
-  'heavy-rain': 'Heavy rain',
-  thunderstorm: 'Thunderstorm',
-  snow: 'Snow',
-  'heavy-snow': 'Heavy snow',
+const PRETTY: Record<WeatherCondition, { en: string; zh: string }> = {
+  clear: { en: 'Clear', zh: '晴' },
+  'partly-cloudy': { en: 'Partly cloudy', zh: '多云' },
+  overcast: { en: 'Overcast', zh: '阴' },
+  fog: { en: 'Fog', zh: '雾' },
+  drizzle: { en: 'Drizzle', zh: '毛毛雨' },
+  rain: { en: 'Rain', zh: '雨' },
+  'heavy-rain': { en: 'Heavy rain', zh: '大雨' },
+  thunderstorm: { en: 'Thunderstorm', zh: '雷雨' },
+  snow: { en: 'Snow', zh: '雪' },
+  'heavy-snow': { en: 'Heavy snow', zh: '大雪' },
 };
 
 /** Thin DOM overlay: wordmark, clock, place, weather line, and a single soft button. */
@@ -54,9 +56,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       <div class="note" id="hud-note"></div>
       <div class="journey" id="hud-journey"></div>
       <div class="hud-buttons">
-        <button class="pill" id="hud-album" type="button">Postcards</button>
-        <button class="pill" id="hud-map" type="button">Map</button>
-        <button class="pill" id="hud-locate" type="button">Use my location</button>
+        <button class="pill" id="hud-album" type="button">${t('postcards')}</button>
+        <button class="pill" id="hud-map" type="button">${t('map')}</button>
+        <button class="pill" id="hud-locate" type="button">${t('useLocation')}</button>
+        <button class="pill pill-small" id="hud-lang" type="button">${t('language')}</button>
       </div>
       ${
         opts.demo
@@ -65,10 +68,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
                <span id="hud-scrub-label">12:00</span>
              </label>
              <label class="demo demo-weather">
-               <span>Weather</span>
+               <span>${t('weather')}</span>
                <select id="hud-weather-select">
-                 <option value="">real</option>
-                 ${CONDITIONS.map((c) => `<option value="${c}">${PRETTY[c]}</option>`).join('')}
+                 <option value="">${t('real')}</option>
+                 ${CONDITIONS.map((c) => `<option value="${c}">${PRETTY[c][getLang()]}</option>`).join('')}
                </select>
              </label>`
           : ''
@@ -86,18 +89,20 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const locate = el.querySelector<HTMLButtonElement>('#hud-locate')!;
   const album = el.querySelector<HTMLButtonElement>('#hud-album')!;
   const map = el.querySelector<HTMLButtonElement>('#hud-map')!;
+  const langBtn = el.querySelector<HTMLButtonElement>('#hud-lang')!;
+  langBtn.addEventListener('click', () => opts.onLanguage?.());
   const scrub = el.querySelector<HTMLInputElement>('#hud-scrub');
   const scrubLabel = el.querySelector<HTMLSpanElement>('#hud-scrub-label');
   const weatherSelect = el.querySelector<HTMLSelectElement>('#hud-weather-select');
 
   locate.addEventListener('click', async () => {
     locate.disabled = true;
-    locate.textContent = 'Finding your sky…';
+    locate.textContent = t('finding');
     try {
       await opts.onLocate();
     } finally {
       locate.disabled = false;
-      locate.textContent = 'Use my location';
+      locate.textContent = t('useLocation');
     }
   });
 
@@ -130,7 +135,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   return {
     update(ws, rs) {
       clock.textContent = timeFmt.format(ws.now);
-      place.textContent = ws.location.name ?? 'Your sky';
+      place.textContent = !ws.location.name || ws.location.name === 'Your sky' ? t('yourSky') : ws.location.name;
       weather.hidden = !ws.weather;
       if (ws.weather) weather.textContent = weatherLine(ws.weather, unit);
       el.classList.toggle('dark-ink', rs.darkInk);
@@ -162,7 +167,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       journey.textContent = text;
     },
     setPostcards(count, fresh) {
-      album.textContent = count > 0 ? `Postcards · ${count}` : 'Postcards';
+      album.textContent = count > 0 ? `${t('postcards')} · ${count}` : t('postcards');
       album.classList.toggle('has-new', fresh);
     },
     unit,
@@ -174,7 +179,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
 function weatherLine(w: WeatherState, unit: 'C' | 'F'): string {
   const parts = [formatTemperature(w.temperature, unit), describeWeather(w)];
-  if (w.source === 'forecast') parts.push('(forecast)');
+  if (w.source === 'forecast') parts.push(t('forecast'));
   return parts.join(' · ');
 }
 

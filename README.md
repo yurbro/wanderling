@@ -65,6 +65,7 @@ Useful URL parameters for demos and screenshots:
 | `?km=120` | peeks at the journey at a kilometre mark (not saved) |
 | `?journey=reset` | starts the journey again from the first place (and empties the album) |
 | `?journey=next` | jumps to the next segment of the chain (not saved) |
+| `?lang=zh` | Chinese interface for this visit (the bottom button switches and remembers) |
 | `?postcards=demo` | adds three sample postcards to the album (not saved) |
 
 ## Development
