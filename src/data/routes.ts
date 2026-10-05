@@ -71,7 +71,89 @@ export const DOWN_THE_SEINE: Route = {
   ],
 };
 
-export const ROUTES: Route[] = [TO_THE_SEA, TO_THE_HOT_SPRINGS, DOWN_THE_SEINE];
+/** North along the Hudson from New York into the Catskills. */
+export const UP_THE_HUDSON: Route = {
+  id: 'hudson-v1',
+  name: 'Up the Hudson',
+  places: [
+    { id: 'new-york', name: 'New York', region: 'United States', terrain: 'city', lat: 40.71, lon: -74.01, note: 'Out through the steam and the sirens. The river points north.' },
+    { id: 'tarrytown', name: 'Tarrytown', region: 'New York', terrain: 'forest', lat: 41.08, lon: -73.86, note: 'Headless horsemen on the signs. I kept my hat on.' },
+    { id: 'cold-spring', name: 'Cold Spring', region: 'New York', terrain: 'hills', lat: 41.42, lon: -73.95, note: 'The river squeezed between mountains. A freight train went by for ten minutes.' },
+    { id: 'hyde-park', name: 'Hyde Park', region: 'New York', terrain: 'plain', lat: 41.79, lon: -73.93, note: 'Apple stands by the road. I had two.' },
+    { id: 'rhinebeck', name: 'Rhinebeck', region: 'New York', terrain: 'plain', lat: 41.93, lon: -73.91, note: 'A town with a bandstand. Someone was practising the trumpet.' },
+    { id: 'woodstock', name: 'Woodstock', region: 'Catskills', terrain: 'mountain', lat: 42.04, lon: -74.12, note: 'Up into the Catskills. Mist in the trees, a dog on every porch.' },
+  ],
+  legs: [
+    { km: 42, terrain: 'city' },
+    { km: 40, terrain: 'forest' },
+    { km: 45, terrain: 'hills' },
+    { km: 18, terrain: 'plain' },
+    { km: 30, terrain: 'forest' },
+  ],
+};
+
+/** Down the coast from San Francisco to Big Sur. */
+export const PACIFIC_COAST: Route = {
+  id: 'pacific-coast-v1',
+  name: 'Down the Pacific Coast',
+  places: [
+    { id: 'san-francisco', name: 'San Francisco', region: 'California', terrain: 'city', lat: 37.77, lon: -122.42, note: 'Fog on the bridge, sun on the hills. Both at once.' },
+    { id: 'half-moon-bay', name: 'Half Moon Bay', region: 'California', terrain: 'coast', lat: 37.46, lon: -122.43, note: 'Pumpkin fields running down to the surf.' },
+    { id: 'santa-cruz', name: 'Santa Cruz', region: 'California', terrain: 'coast', lat: 36.97, lon: -122.03, note: 'A wooden roller coaster rattling over the beach.' },
+    { id: 'monterey', name: 'Monterey', region: 'California', terrain: 'coast', lat: 36.6, lon: -121.89, note: 'Sea otters floating on their backs, cracking shells.' },
+    { id: 'big-sur', name: 'Big Sur', region: 'California', terrain: 'mountain', lat: 36.27, lon: -121.81, note: 'Cliffs falling straight into the ocean. I walked slowly on purpose.' },
+  ],
+  legs: [
+    { km: 45, terrain: 'coast' },
+    { km: 75, terrain: 'coast' },
+    { km: 70, terrain: 'coast' },
+    { km: 45, terrain: 'mountain' },
+  ],
+};
+
+/** Out of Melbourne along the Great Ocean Road. */
+export const GREAT_OCEAN: Route = {
+  id: 'great-ocean-v1',
+  name: 'The Great Ocean Road',
+  places: [
+    { id: 'melbourne', name: 'Melbourne', region: 'Australia', terrain: 'city', lat: -37.81, lon: 144.96, note: 'Trams and laneways. Coffee for the road.' },
+    { id: 'geelong', name: 'Geelong', region: 'Victoria', terrain: 'plain', lat: -38.15, lon: 144.36, note: 'A long flat walk. Sheep, then more sheep.' },
+    { id: 'torquay', name: 'Torquay', region: 'Victoria', terrain: 'coast', lat: -38.33, lon: 144.32, note: 'Surfboards on every car. The ocean, loud.' },
+    { id: 'lorne', name: 'Lorne', region: 'Victoria', terrain: 'coast', lat: -38.54, lon: 143.98, note: 'Cockatoos screaming in the gums above the beach.' },
+    { id: 'apollo-bay', name: 'Apollo Bay', region: 'Victoria', terrain: 'forest', lat: -38.76, lon: 143.67, note: 'Tree ferns and a koala asleep in a fork.' },
+    { id: 'twelve-apostles', name: 'Twelve Apostles', region: 'Victoria', terrain: 'coast', lat: -38.66, lon: 143.1, note: 'Stone towers standing in the surf. Journey done.' },
+  ],
+  legs: [
+    { km: 75, terrain: 'plain' },
+    { km: 25, terrain: 'coast' },
+    { km: 45, terrain: 'coast' },
+    { km: 45, terrain: 'forest' },
+    { km: 90, terrain: 'coast' },
+  ],
+};
+
+/** From Shanghai through the water towns to West Lake and the hills beyond. */
+export const JIANGNAN_WATERS: Route = {
+  id: 'jiangnan-v1',
+  name: 'Jiangnan Waters',
+  places: [
+    { id: 'shanghai', name: 'Shanghai', region: 'China', terrain: 'city', lat: 31.23, lon: 121.47, note: 'Left the towers behind before the breakfast stalls opened.' },
+    { id: 'zhujiajiao', name: 'Zhujiajiao', region: 'Shanghai', terrain: 'lake', lat: 31.11, lon: 121.05, note: 'Stone bridges and a boatman singing to nobody.' },
+    { id: 'suzhou', name: 'Suzhou', region: 'Jiangsu', terrain: 'city', lat: 31.3, lon: 120.62, note: 'Gardens within gardens. I lost an hour in one.' },
+    { id: 'taihu', name: 'Lake Tai', region: 'Jiangsu', terrain: 'lake', lat: 31.2, lon: 120.3, note: 'A lake like a sea, fishing boats at the edge of sight.' },
+    { id: 'hangzhou', name: 'West Lake', region: 'Hangzhou', terrain: 'lake', lat: 30.25, lon: 120.14, note: 'Willows, a causeway, tea in a paper cup.' },
+    { id: 'moganshan', name: 'Moganshan', region: 'Zhejiang', terrain: 'mountain', lat: 30.6, lon: 119.86, note: 'Bamboo to the top of the hill. Quiet enough to hear it grow.' },
+  ],
+  legs: [
+    { km: 48, terrain: 'plain' },
+    { km: 55, terrain: 'lake' },
+    { km: 35, terrain: 'plain' },
+    { km: 130, terrain: 'lake' },
+    { km: 60, terrain: 'hills' },
+  ],
+};
+
+export const ROUTES: Route[] = [TO_THE_SEA, TO_THE_HOT_SPRINGS, DOWN_THE_SEINE, UP_THE_HUDSON, PACIFIC_COAST, GREAT_OCEAN, JIANGNAN_WATERS];
 
 export function routeById(id: string): Route | undefined {
   return ROUTES.find((r) => r.id === id);

@@ -12,8 +12,9 @@ out when it is dark where you are, and the weather (clouds, rain, snow, fog) fol
 the real forecast for your place. A small paper-doll wanderer walks along the path,
 opens an umbrella when it rains, carries a lantern after dark and wraps up in a scarf
 when it is cold. They set out from your own city (named by a reverse geocode of the
-coarse coordinates, or picked by hand) and walk the nearest of three real routes
-(London to the sea, Tokyo to the hot springs, Paris down the Seine), at a steady 6 km/h
+coarse coordinates, or picked by hand) and walk the nearest of seven real routes
+(London to the sea, Tokyo to the hot springs, Paris down the Seine, up the Hudson, down
+the Pacific coast, the Great Ocean Road, the Jiangnan waters), at a steady 6 km/h
 day and night, resting three hours at each place. When a route is done they carry on to
 the nearest route not yet walked, on foot, by train or by plane depending on the
 distance (seen from a carriage window with the land rushing past, or from a porthole
