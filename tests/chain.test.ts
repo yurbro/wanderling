@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HOME_RETURN_ID, buildSegmentRoute, departureNote, homewardRoute, nextSegment } from '../src/core/chain';
 import { FLY_KM_PER_HOUR, REST_MS, advance, describeJourney, locate, startJourney } from '../src/core/journey';
-import { THREE, TO_THE_SEA, DOWN_THE_SEINE, TO_THE_HOT_SPRINGS } from '../src/data/routes';
+import { TO_THE_SEA, DOWN_THE_SEINE, TO_THE_HOT_SPRINGS } from '../src/data/routes';
 import { routeFromHome } from '../src/core/geo';
 
 const H = 3_600_000;
