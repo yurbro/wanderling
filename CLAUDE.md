@@ -4,10 +4,19 @@ Wanderling 是一个「放置式旅途陪伴」PWA：一个小旅人替用户走
 
 ## 先读什么
 
-1. `docs/dev-log.md`：每次会话第一件读的、最后一件写的东西。末尾的「下次会话开场清单」就是本次要做的事。
-2. `docs/process-plan-v1.md`：分工、阶段、里程碑、决策记录（ADR）。
-3. `docs/style-guide-v0.md`：美术与色板，代码里的颜色必须与它一致。
-4. `docs/framework-v1.md`：产品与架构的整体构思。
+1. `docs/design/decisions.md`：设计的唯一依据。已定决策、待定决策、旅人设定、文风红线、信件规格。
+2. `docs/roadmap.md`：要做什么、按什么顺序做。一次会话一项。
+3. `docs/dev-log.md`：每次会话第一件读的、最后一件写的东西。末尾的「下次会话开场清单」就是本次要做的事。
+4. `docs/process-plan-v1.md`：分工、阶段、里程碑、决策记录（ADR）。
+5. `docs/style-guide-v0.md`：美术与色板，代码里的颜色必须与它一致。
+6. `docs/framework-v1.md`：产品与架构的整体构思。
+
+## 设计边界
+
+- 设计的唯一依据是 docs/design/decisions.md。做任何新功能前先读它；代码或旧文档和它冲突时，以它为准。
+- 要做什么、按什么顺序做，看 docs/roadmap.md。Yu 说「继续」就做下一项未完成的；标了「先等 Yu」的项要等对应决策定了才开工。
+- decisions.md 里的待定决策不要自行拍板。发现设计问题或有新想法，记进 dev-log 的停车场并注明「需要评审」，由 Yu 带回 Cowork 评审。
+- 所有新文案遵守 decisions.md 的文风与红线，并走 i18n.ts。
 
 ## 协作方式
 
