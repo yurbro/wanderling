@@ -99,6 +99,8 @@ export interface Place {
   lon?: number;
   /** One short line the wanderer might say on arriving. */
   note?: string;
+  /** Chinese name, region and line, when written. */
+  zh?: { name: string; region?: string; note?: string };
 }
 
 /** How a leg is covered: on foot, or by train or plane between routes. */
@@ -115,6 +117,7 @@ export interface Leg {
 export interface Route {
   id: string;
   name: string;
+  nameZh?: string;
   /** Ordered places; legs[i] joins places[i] to places[i + 1]. */
   places: Place[];
   legs: Leg[];

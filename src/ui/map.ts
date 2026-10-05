@@ -1,4 +1,5 @@
 import { LABEL_FONT, describeProgress, layoutRoute, mapProgress, wobble, type LabelSide, type MapLayout, type XY } from '../core/map';
+import { routeName, t } from '../core/i18n';
 import type { Position, Postcard, Route } from '../core/types';
 
 export interface FootprintMap {
@@ -26,8 +27,8 @@ export function createMap(root: HTMLElement): FootprintMap {
   el.innerHTML = `
     <div class="album-inner">
       <div class="album-head">
-        <div class="album-title">Map</div>
-        <button class="pill map-close" type="button">Close</button>
+        <div class="album-title">${t('map')}</div>
+        <button class="pill map-close" type="button">${t('close')}</button>
       </div>
       <div class="map-paper" id="map-paper"></div>
       <p class="map-progress" id="map-progress"></p>
@@ -117,7 +118,7 @@ function renderSvg(route: Route, layout: MapLayout, p: ReturnType<typeof mapProg
 
   const walker = `<circle cx="${p.current.x}" cy="${p.current.y}" r="9" fill="${GLOW}" opacity="0.7"/><circle cx="${p.current.x}" cy="${p.current.y}" r="3.6" fill="${INK}"/>`;
 
-  const title = `<text x="22" y="30" font-size="15" letter-spacing="2" fill="${INK}" opacity="0.85">${escape(route.name.toUpperCase())}</text>`;
+  const title = `<text x="22" y="30" font-size="15" letter-spacing="2" fill="${INK}" opacity="0.85">${escape(routeName(route).toUpperCase())}</text>`;
   const compass = `<g transform="translate(${W - 30} 34)"><line x1="0" y1="12" x2="0" y2="-10" stroke="${INK}" stroke-width="1.2"/><path d="M-4 -4 L0 -12 L4 -4" fill="none" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/><text x="0" y="26" font-size="10" fill="${INK}" text-anchor="middle" opacity="0.8">N</text></g>`;
 
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" font-family="'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif">

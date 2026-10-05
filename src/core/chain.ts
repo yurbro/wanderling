@@ -2,6 +2,7 @@ import { nearestRoute, transferMode, withTransfer } from './geo';
 import { startJourney } from './journey';
 import type { Home, JourneyState, LegMode, Place, Route } from './types';
 import { haversineKm } from './geo';
+import { t } from './i18n';
 
 /**
  * The chain: what happens when a route is finished. The wanderer sets off
@@ -23,10 +24,8 @@ function asHome(p: Place): Home | null {
 }
 
 function leavingNote(name: string): string {
-  return `Left ${name} with sand still in my boots.`;
+  return t('leftWithSand', { name });
 }
-
-const HOME_AGAIN = 'Home again. The kettle, the window, the same sky.';
 
 /** The short route that brings the wanderer home from where the last route ended. */
 export function homewardRoute(from: Home, home: Home): Route | null {
@@ -34,10 +33,10 @@ export function homewardRoute(from: Home, home: Home): Route | null {
   if (km < 3) return null;
   return {
     id: HOME_RETURN_ID,
-    name: 'Homeward',
+    name: t('homeward'),
     places: [
       { id: 'from', name: from.name, region: from.region, terrain: 'city', lat: from.lat, lon: from.lon, note: leavingNote(from.name) },
-      { id: 'home', name: home.name, region: home.region, terrain: 'city', lat: home.lat, lon: home.lon, note: HOME_AGAIN },
+      { id: 'home', name: home.name, region: home.region, terrain: 'city', lat: home.lat, lon: home.lon, note: t('homeAgain') },
     ],
     legs: [{ km: Math.round(km), terrain: 'plain', mode: transferMode(km) }],
   };
@@ -61,11 +60,11 @@ export function buildSegmentRoute(state: JourneyState, routes: Route[]): Route |
 export function departureNote(mode: LegMode, to: string): string {
   switch (mode) {
     case 'ride':
-      return `Off again, by train to ${to}.`;
+      return t('offByTrain', { name: to });
     case 'fly':
-      return `Off again, flying to ${to}.`;
+      return t('offFlying', { name: to });
     default:
-      return `Off again, on foot to ${to}.`;
+      return t('offOnFoot', { name: to });
   }
 }
 

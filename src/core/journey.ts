@@ -1,3 +1,4 @@
+import { formatKm, placeName, t } from './i18n';
 import type { Arrival, JourneyState, Leg, LegMode, Place, Position, Route, Terrain } from './types';
 
 /**
@@ -194,15 +195,15 @@ export function locate(route: Route, state: JourneyState, now: number): Position
   };
 }
 
-const VERB: Record<LegMode, string> = { walk: 'Walking to', ride: 'On the train to', fly: 'Flying to' };
+const VERB: Record<LegMode, 'walkingTo' | 'ridingTo' | 'flyingTo'> = { walk: 'walkingTo', ride: 'ridingTo', fly: 'flyingTo' };
 const NEAR_KM: Record<LegMode, number> = { walk: 1, ride: 10, fly: 50 };
 
-/** The HUD line, in English, e.g. "Walking to Brighton · 31 km to go". */
+/** The HUD line, e.g. "Walking to Brighton · 31 km to go". */
 export function describeJourney(pos: Position): string {
-  if (pos.finished) return `Journey's end: ${pos.from.name}`;
-  if (pos.resting) return `Resting in ${pos.from.name}`;
-  const left = pos.kmToNext < NEAR_KM[pos.mode] ? 'almost there' : `${Math.round(pos.kmToNext).toLocaleString('en-US')} km to go`;
-  return `${VERB[pos.mode]} ${pos.to!.name} · ${left}`;
+  if (pos.finished) return t('journeysEnd', { name: placeName(pos.from) });
+  if (pos.resting) return t('restingIn', { name: placeName(pos.from) });
+  const left = pos.kmToNext < NEAR_KM[pos.mode] ? t('almostThere') : t('kmToGo', { km: formatKm(pos.kmToNext) });
+  return `${t(VERB[pos.mode], { name: placeName(pos.to!) })} · ${left}`;
 }
 
 /** The last arrival, handy for "arrived while you were away" notes. */

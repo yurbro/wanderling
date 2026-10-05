@@ -1,3 +1,4 @@
+import { getLang, placeName, placeNote, placeRegion, t } from './i18n';
 import { direct } from './sceneDirector';
 import type { Arrival, GeoPoint, JourneyState, Place, Postcard, Route, WeatherCondition, WeatherState } from './types';
 import { buildWorldState } from './world';
@@ -37,11 +38,11 @@ export function makePostcard(
     id: postcardId(route.id, arrival),
     routeId: route.id,
     placeId: place.id,
-    placeName: place.name,
-    region: place.region,
+    placeName: placeName(place),
+    region: placeRegion(place),
     terrain: place.terrain,
     at: arrival.at,
-    note: place.note ?? `Arrived in ${place.name}.`,
+    note: placeNote(place),
     weather: weather
       ? { condition: weather.condition, code: weather.code, temperature: weather.temperature }
       : null,
@@ -58,20 +59,20 @@ export function makePostcard(
   };
 }
 
-const MOOD: Record<WeatherCondition, string> = {
-  clear: 'clear',
-  'partly-cloudy': 'soft',
-  overcast: 'grey',
-  fog: 'foggy',
-  drizzle: 'drizzly',
-  rain: 'rainy',
-  'heavy-rain': 'wet',
-  thunderstorm: 'stormy',
-  snow: 'snowy',
-  'heavy-snow': 'snowy',
+const MOOD: Record<WeatherCondition, { en: string; zh: string }> = {
+  clear: { en: 'clear', zh: '晴朗的' },
+  'partly-cloudy': { en: 'soft', zh: '多云的' },
+  overcast: { en: 'grey', zh: '阴沉的' },
+  fog: { en: 'foggy', zh: '有雾的' },
+  drizzle: { en: 'drizzly', zh: '飘着毛毛雨的' },
+  rain: { en: 'rainy', zh: '下着雨的' },
+  'heavy-rain': { en: 'wet', zh: '大雨的' },
+  thunderstorm: { en: 'stormy', zh: '雷雨的' },
+  snow: { en: 'snowy', zh: '下着雪的' },
+  'heavy-snow': { en: 'snowy', zh: '大雪的' },
 };
 
-export function timeOfDayWord(hour: number): string {
+export function timeOfDayWord(hour: number): 'morning' | 'afternoon' | 'evening' | 'night' {
   if (hour >= 5 && hour < 12) return 'morning';
   if (hour >= 12 && hour < 17) return 'afternoon';
   if (hour >= 17 && hour < 21) return 'evening';
@@ -80,10 +81,12 @@ export function timeOfDayWord(hour: number): string {
 
 /** "A rainy afternoon · 11°", or just "Afternoon" when the weather is unknown. */
 export function describeArrival(card: Postcard, unit: 'C' | 'F' = 'C'): string {
-  const tod = timeOfDayWord(new Date(card.at).getHours());
-  if (!card.weather) return tod.charAt(0).toUpperCase() + tod.slice(1);
-  const t = unit === 'F' ? card.weather.temperature * 1.8 + 32 : card.weather.temperature;
-  return `A ${MOOD[card.weather.condition]} ${tod} · ${Math.round(t)}°`;
+  const todKey = timeOfDayWord(new Date(card.at).getHours());
+  const tod = t(todKey);
+  if (!card.weather) return getLang() === 'zh' ? tod : tod.charAt(0).toUpperCase() + tod.slice(1);
+  const deg = unit === 'F' ? card.weather.temperature * 1.8 + 32 : card.weather.temperature;
+  const mood = MOOD[card.weather.condition][getLang()];
+  return getLang() === 'zh' ? `${mood}${tod} · ${Math.round(deg)}°` : `A ${mood} ${tod} · ${Math.round(deg)}°`;
 }
 
 /** The stamp in the corner: a tiny glyph for the weather. */

@@ -510,3 +510,9 @@ canvas.scene {
 .hud.dark-ink .place {
   text-decoration-color: rgba(52, 58, 77, 0.4);
 }
+
+.pill-small {
+  padding: 7px 14px;
+  font-size: 13px;
+  opacity: 0.85;
+}

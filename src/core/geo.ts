@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import type { GeoPoint, Home, LegMode, Place, Route } from './types';
 
 /**
@@ -43,7 +44,7 @@ export function transferMode(km: number): LegMode {
 }
 
 export function homeNote(name: string): string {
-  return `Left ${name} before the streets woke up.`;
+  return t('leftHome', { name });
 }
 
 /**
@@ -125,5 +126,5 @@ export function parseCitySearch(json: unknown): CityResult[] {
 /** A GeoPoint the app can use as home, or null when it is only the built-in default. */
 export function homeFrom(p: GeoPoint, isDefault: boolean): Home | null {
   if (isDefault) return null;
-  return { name: p.name && p.name !== 'Your sky' ? p.name : 'Home', region: p.region, lat: p.lat, lon: p.lon };
+  return { name: p.name && p.name !== 'Your sky' ? p.name : t('home'), region: p.region, lat: p.lat, lon: p.lon };
 }

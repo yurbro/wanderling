@@ -3,6 +3,7 @@ import { direct } from './core/sceneDirector';
 import type { GeoPoint, JourneyState, RenderState, Route, WeatherCondition, WeatherState, WorldState } from './core/types';
 import { buildSegmentRoute, departureNote, nextSegment } from './core/chain';
 import { homeFrom, nearestRoute, routeFromHome } from './core/geo';
+import { detectLang, placeName, placeNote, setLang, t } from './core/i18n';
 import { REST_MS, advance, describeJourney, lastArrival, locate, startJourney } from './core/journey';
 import { demoPostcards, makePostcard, missingArrivals } from './core/postcards';
 import { CONDITIONS, conditionFromCode, demoWeather } from './core/weather';
@@ -32,15 +33,28 @@ import { createMap } from './ui/map';
  *   ?journey=next      jump to the next segment of the chain right away (not saved)
  *   ?postcards=demo    add three sample postcards to the album (not saved)
  */
+const LANG_KEY = 'wanderling.lang';
+
 async function main(): Promise<void> {
   const root = document.getElementById('app')!;
   const params = new URLSearchParams(window.location.search);
+
+  // Language: ?lang=zh, else the saved choice, else the browser.
+  let savedLang: string | null = null;
+  try {
+    savedLang = localStorage.getItem(LANG_KEY);
+  } catch {
+    // Fine.
+  }
+  const lang = detectLang(params.get('lang') ?? savedLang, navigator.language ?? 'en');
+  setLang(lang);
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
 
   let location: GeoPoint = loadLocation() ?? DEFAULT_LOCATION;
   const qLat = Number(params.get('lat'));
   const qLon = Number(params.get('lon'));
   if (params.has('lat') && params.has('lon') && Number.isFinite(qLat) && Number.isFinite(qLon)) {
-    location = { lat: qLat, lon: qLon, name: params.get('name') ?? 'Somewhere' };
+    location = { lat: qLat, lon: qLon, name: params.get('name') ?? t('somewhere') };
   }
 
   let minutesOverride: number | null = parseClock(params.get('t'));
@@ -65,10 +79,20 @@ async function main(): Promise<void> {
         hud.hideLocate();
         await moveTo(found);
       } catch {
-        hud.setNote('No location this time. Tap the place name to pick a city instead.', 8000);
+        hud.setNote(t('noLocation'), 8000);
       }
     },
     onPlace: () => city.open(),
+    onLanguage: () => {
+      try {
+        localStorage.setItem(LANG_KEY, lang === 'zh' ? 'en' : 'zh');
+      } catch {
+        // Fine.
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.delete('lang');
+      window.location.href = url.toString();
+    },
     onScrub: (m) => {
       minutesOverride = m;
       tick();
@@ -135,7 +159,7 @@ async function main(): Promise<void> {
     // A demo peek at the chain: finish this segment and set off on the next.
     const done = advance(route, { ...journey, km: 1e9, restingUntil: null, updatedAt: Date.now() - 1 }, Date.now());
     ({ route, journey } = nextSegment(done.state, route, ROUTES, Date.now()));
-    departure = departureNote(route.legs[0]?.mode ?? 'walk', route.places[1]?.name ?? route.name);
+    departure = departureNote(route.legs[0]?.mode ?? 'walk', route.places[1] ? placeName(route.places[1]) : route.name);
   }
   if (demoJourney) {
     // A demo peek: walk to that kilometre and rest there for a moment.
@@ -219,7 +243,7 @@ async function main(): Promise<void> {
     if (step.arrived.length > 0) {
       if (!demoJourney) saveJourney(journey);
       const place = step.arrived[step.arrived.length - 1];
-      hud.setNote(place.note ?? `Arrived in ${place.name}.`, 20_000);
+      hud.setNote(placeNote(place), 20_000);
     }
     // A finished route, rest over: set off on the next segment of the chain.
     const posNow = locate(route, journey, wall);
@@ -230,7 +254,7 @@ async function main(): Promise<void> {
       journey = seg.journey;
       if (!demoJourney) saveJourney(journey);
       const firstLeg = route.legs[0];
-      hud.setNote(departureNote(firstLeg?.mode ?? 'walk', route.places[1]?.name ?? route.name), 15_000);
+      hud.setNote(departureNote(firstLeg?.mode ?? 'walk', route.places[1] ? placeName(route.places[1]) : route.name), 15_000);
     }
     syncPostcards();
     const position = locate(route, journey, wall);
@@ -258,7 +282,7 @@ async function main(): Promise<void> {
   if (first.arrived.length > 0) {
     // Arrived while the app was closed: say so, once, on opening.
     const place = first.arrived[first.arrived.length - 1];
-    hud.setNote(place.note ?? `Arrived in ${place.name}.`, 20_000);
+    hud.setNote(placeNote(place), 20_000);
   }
   void weather.refresh(location);
 
@@ -333,6 +357,6 @@ main().catch((err) => {
   console.error(err);
   const p = document.createElement('p');
   p.style.cssText = 'color:#f4efe4;font-family:serif;padding:24px';
-  p.textContent = 'The sky could not be drawn on this device. Please try a newer browser.';
+  p.textContent = t('cannotDraw');
   document.body.appendChild(p);
 });

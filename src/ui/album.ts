@@ -1,4 +1,5 @@
 import { hexToCss } from '../core/color';
+import { getLang, t } from '../core/i18n';
 import { describeArrival, stampGlyph } from '../core/postcards';
 import type { Postcard } from '../core/types';
 
@@ -21,11 +22,11 @@ export function createAlbum(root: HTMLElement, unit: 'C' | 'F'): Album {
   el.innerHTML = `
     <div class="album-inner">
       <div class="album-head">
-        <div class="album-title">Postcards</div>
-        <button class="pill album-close" type="button">Close</button>
+        <div class="album-title">${t('postcards')}</div>
+        <button class="pill album-close" type="button">${t('close')}</button>
       </div>
       <div class="album-list" id="album-list"></div>
-      <p class="album-empty" id="album-empty">No postcards yet. The first one arrives with the first place.</p>
+      <p class="album-empty" id="album-empty">${t('noPostcards')}</p>
     </div>
   `;
   root.appendChild(el);
@@ -33,7 +34,7 @@ export function createAlbum(root: HTMLElement, unit: 'C' | 'F'): Album {
   const list = el.querySelector<HTMLDivElement>('#album-list')!;
   const empty = el.querySelector<HTMLParagraphElement>('#album-empty')!;
   const closeBtn = el.querySelector<HTMLButtonElement>('.album-close')!;
-  const dateFmt = new Intl.DateTimeFormat(undefined, {
+  const dateFmt = new Intl.DateTimeFormat(getLang() === 'zh' ? 'zh-CN' : undefined, {
     day: 'numeric',
     month: 'short',
     hour: '2-digit',
