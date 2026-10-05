@@ -3,7 +3,7 @@ import type { Postcard } from '../core/types';
 
 /**
  * The little picture on a postcard: the sky of that moment, its sun or
- * moon and stars, hills or sea, weather, and a tiny traveller on the path.
+ * moon and stars, hills or sea, weather, and a tiny wanderling on the path.
  * Plain SVG from the colours the card stored. Shapes are seeded by the
  * card id so every card is a slightly different drawing.
  */
@@ -85,11 +85,17 @@ export function renderPostcardScene(card: Postcard): string {
   out.push(`<rect x="0" y="${skyH + H * 0.22}" width="${W}" height="${H}" fill="${hexToCss(c.ground)}"/>`);
   const py = skyH + H * 0.3;
   out.push(`<path d="M0 ${py + 10} Q${W / 2} ${py - 6} ${W} ${py + 4} L${W} ${py + 14} Q${W / 2} ${py + 6} 0 ${py + 20} Z" fill="${hexToCss(mix(c.ground, PAPER, 0.4))}" stroke="${hexToCss(mix(c.ground, INK, 0.35))}" stroke-width="0.6" opacity="0.95"/>`);
-  // A tiny traveller, seen from behind, on the path.
+  // A tiny wanderling, seen from behind, on the path: bean body, leaf, scarf, backpack.
   const tx = W * 0.6;
   const ty = py + 12;
-  const coat = card.darkInk ? '#6F7A8E' : '#4A5062';
-  out.push(`<g><rect x="${tx - 3}" y="${ty - 13}" width="6" height="9" rx="2" fill="${coat}"/><circle cx="${tx}" cy="${ty - 16}" r="3" fill="#EFD9C4"/><ellipse cx="${tx}" cy="${ty - 18}" rx="5" ry="1.4" fill="#A48A6A"/><rect x="${tx - 3.5}" y="${ty - 11}" width="2.5" height="6" fill="#B86B5A"/><rect x="${tx - 2}" y="${ty - 4}" width="1.6" height="4" fill="#4F5566"/><rect x="${tx + 0.6}" y="${ty - 4}" width="1.6" height="4" fill="#4F5566"/></g>`);
+  const body = card.darkInk ? '#F1E9D6' : '#D9D1BC';
+  out.push(
+    `<g><rect x="${tx - 1.6}" y="${ty - 3.5}" width="1.5" height="3.5" rx="0.6" fill="#4F5566"/><rect x="${tx + 0.3}" y="${ty - 3.5}" width="1.5" height="3.5" rx="0.6" fill="#4F5566"/>` +
+      `<path d="M${tx} ${ty - 14} C${tx + 4} ${ty - 14} ${tx + 5.2} ${ty - 9} ${tx + 5} ${ty - 6} C${tx + 4.8} ${ty - 3.2} ${tx - 4.8} ${ty - 3.2} ${tx - 5} ${ty - 6} C${tx - 5.2} ${ty - 9} ${tx - 4} ${ty - 14} ${tx} ${ty - 14}Z" fill="${body}" stroke="${INK}" stroke-width="0.5"/>` +
+      `<rect x="${tx - 3.4}" y="${ty - 11.5}" width="6.8" height="6.5" rx="1.6" fill="#A48A6A" stroke="${INK}" stroke-width="0.4"/>` +
+      `<path d="M${tx - 5} ${ty - 9.6} Q${tx} ${ty - 8.4} ${tx + 5} ${ty - 9.6} L${tx + 5} ${ty - 8.4} Q${tx} ${ty - 7.2} ${tx - 5} ${ty - 8.4}Z" fill="#B86B5A"/>` +
+      `<path d="M${tx + 0.3} ${ty - 14} q-0.3 -1 0.2 -1.6 q2 -2.2 1.6 -4.6 q-3 1.6 -2.6 4.6 q0.2 1 0.8 1.6Z" fill="#7E9A8C" stroke="${INK}" stroke-width="0.35"/></g>`,
+  );
 
   // Weather over everything.
   const cond = card.weather?.condition;

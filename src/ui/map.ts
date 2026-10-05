@@ -23,7 +23,7 @@ const GLOW = '#F8EBC0';
 
 /**
  * The footprint map: the route drawn on a sheet of paper, walked stretch in
- * brick red, places lit as they are reached, the wanderer as a small dot.
+ * brick red, places lit as they are reached, the wanderling as a tiny figure.
  * Plain SVG built from strings; nothing here is interactive beyond closing.
  */
 export function createMap(root: HTMLElement, handlers: MapHandlers = {}): FootprintMap {
@@ -134,7 +134,15 @@ function renderSvg(route: Route, layout: MapLayout, p: ReturnType<typeof mapProg
     })
     .join('');
 
-  const walker = `<circle cx="${p.current.x}" cy="${p.current.y}" r="9" fill="${GLOW}" opacity="0.7"/><circle cx="${p.current.x}" cy="${p.current.y}" r="3.6" fill="${INK}"/>`;
+  // The wanderling: a small cream bean with a leaf and a red scarf, in a soft glow.
+  const wx = p.current.x;
+  const wy = p.current.y;
+  const walker =
+    `<circle cx="${wx}" cy="${wy}" r="9" fill="${GLOW}" opacity="0.7"/>` +
+    `<path d="M${wx} ${wy - 5} C${wx + 3.2} ${wy - 5} ${wx + 4.2} ${wy - 1.5} ${wx + 4} ${wy + 1} C${wx + 3.8} ${wy + 3.4} ${wx - 3.8} ${wy + 3.4} ${wx - 4} ${wy + 1} C${wx - 4.2} ${wy - 1.5} ${wx - 3.2} ${wy - 5} ${wx} ${wy - 5}Z" fill="${PAPER}" stroke="${INK}" stroke-width="1"/>` +
+    `<path d="M${wx - 3.6} ${wy + 0.2} Q${wx} ${wy + 1.6} ${wx + 3.6} ${wy + 0.2}" fill="none" stroke="${BRICK}" stroke-width="1.6"/>` +
+    `<path d="M${wx + 0.2} ${wy - 5} q0 -1.2 0.6 -1.8 q1.8 -1.4 1.4 -3.4 q-2.4 1.2 -2.2 3.6 q0 1 0.2 1.6Z" fill="#7E9A8C" stroke="${INK}" stroke-width="0.5"/>` +
+    `<circle cx="${wx - 1.2}" cy="${wy - 1.6}" r="0.6" fill="${INK}"/><circle cx="${wx + 1.2}" cy="${wy - 1.6}" r="0.6" fill="${INK}"/>`;
 
   const title = `<text x="22" y="30" font-size="15" letter-spacing="2" fill="${INK}" opacity="0.85">${escape(routeName(route).toUpperCase())}</text>`;
   const compass = `<g transform="translate(${W - 30} 34)"><line x1="0" y1="12" x2="0" y2="-10" stroke="${INK}" stroke-width="1.2"/><path d="M-4 -4 L0 -12 L4 -4" fill="none" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/><text x="0" y="26" font-size="10" fill="${INK}" text-anchor="middle" opacity="0.8">N</text></g>`;

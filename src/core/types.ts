@@ -250,13 +250,21 @@ export interface WeatherLayers {
   dropColor: number;
 }
 
-/** What the little traveler carries and wears right now. */
+/**
+ * What the wanderling does and carries right now. The wanderling is a small
+ * bean-shaped creature with a leaf on its head and a brick-red scarf; see
+ * docs/design/decisions.md section 5.
+ */
 export interface WandererState {
+  /** Holding a big leaf up as an umbrella: it rains where the person is. */
   umbrella: boolean;
   lantern: boolean;
   /** 0..1 strength of the lantern's glow (grows as the night deepens). */
   lanternGlow: number;
-  scarf: boolean;
+  /** Below freezing or snowing: the scarf is wrapped tight and the breath shows. */
+  cold: boolean;
+  /** 0..1 how hard the wind blows: the body leans in, leaf and scarf stream sideways. */
+  windLean: number;
   /** Walking pace multiplier, 0 stands still. */
   pace: number;
   /** Multiplicative tint for the whole figure: white by day, bluish by night. */

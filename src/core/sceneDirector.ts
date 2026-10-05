@@ -92,16 +92,18 @@ export function direct(ws: WorldState): RenderState {
 
   const dropColor = mix(sky.mid, WEATHER_TONES.paper, 0.45);
 
-  // The traveler: umbrella when it rains, lantern once the sun is well down,
-  // a scarf when it is cold, and the same night tint as the land.
+  // The wanderling: a leaf held up when it rains, a lantern once the sun is
+  // well down, the scarf wrapped tight below freezing, a lean into a strong
+  // wind, and the same night tint as the land.
   const temperature = ws.weather?.temperature;
   const journey = ws.journey;
   const wanderer = {
-    // No umbrella indoors: the train and plane windows keep the rain off.
+    // No leaf umbrella indoors: the train and plane windows keep the rain off.
     umbrella: fx.rain > 0.05 && travelMode === 'walk',
     lantern: alt < -4,
     lanternGlow: 1 - smoothstep(-10, -2, alt),
-    scarf: (temperature !== undefined && temperature < 10) || fx.snow > 0,
+    cold: (temperature !== undefined && temperature < 0) || fx.snow > 0,
+    windLean: windLean(ws.weather?.windSpeed ?? 0),
     // Standing still while resting, once the route is walked, or aboard a train or plane.
     pace: journey && (journey.resting || journey.finished || journey.mode !== 'walk') ? 0 : 1,
     tint: mix(mix('#FFFFFF', tint, night * 0.55), WEATHER_TONES.landGreyDay, gloom * 0.12),
@@ -153,6 +155,15 @@ export function direct(ws: WorldState): RenderState {
     marker,
     darkInk: luminance(sky.top) > 0.55,
   };
+}
+
+/**
+ * How much the wanderling leans into the wind, 0..1. Nothing up to a breeze of
+ * 20 km/h, fully braced from about 40 km/h; the design calls a wind over
+ * roughly 30 km/h a headwind.
+ */
+export function windLean(speedKmh: number): number {
+  return smoothstep(20, 40, speedKmh);
 }
 
 /** Terrains where a place is a town: it gets a lamp and a cottage. */
