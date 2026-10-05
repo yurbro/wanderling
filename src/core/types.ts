@@ -147,6 +147,8 @@ export interface JourneyState {
   from?: Home | null;
   /** Route ids finished since leaving home; the chain avoids repeating them. */
   walked?: string[];
+  /** A route the person picked on the map for the next segment; null or unset means the chain decides. */
+  next?: string | null;
 }
 
 /** Where the wanderer is on the route right now, derived from JourneyState. */

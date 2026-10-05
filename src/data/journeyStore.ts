@@ -37,6 +37,7 @@ export function isJourneyState(v: unknown): v is JourneyState {
     isHome(j.home) &&
     isHome(j.from) &&
     (j.walked === undefined || (Array.isArray(j.walked) && j.walked.every((w) => typeof w === 'string'))) &&
+    (j.next === undefined || j.next === null || typeof j.next === 'string') &&
     typeof j.routeId === 'string' &&
     num(j.startedAt) &&
     num(j.km) &&

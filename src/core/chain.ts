@@ -68,9 +68,44 @@ export function departureNote(mode: LegMode, to: string): string {
   }
 }
 
+/** What the map offers as the next route: how far and how one would get there. */
+export interface RouteOption {
+  route: Route;
+  /** Walked since leaving home, or the one being walked now. */
+  walked: boolean;
+  current: boolean;
+  chosen: boolean;
+  km: number;
+  mode: LegMode;
+}
+
+/** The place the next segment would set off from: where the current route ends. */
+export function segmentEnd(route: Route): Home | null {
+  const last = route.places[route.places.length - 1];
+  return last ? asHome(last) : null;
+}
+
+/** Every route, for the picker on the map, measured from the end of the current one. */
+export function routeOptions(state: JourneyState, route: Route, routes: Route[]): RouteOption[] {
+  const end = segmentEnd(route);
+  const walked = state.walked ?? [];
+  return routes.map((r) => {
+    const first = r.places[0];
+    const km = end && first && typeof first.lat === 'number' && typeof first.lon === 'number' ? haversineKm(end, { lat: first.lat, lon: first.lon }) : 0;
+    return { route: r, walked: walked.includes(r.id), current: r.id === state.routeId, chosen: state.next === r.id, km: Math.round(km), mode: transferMode(km) };
+  });
+}
+
+/** Remember (or clear, with null) the route to set off for next. The current route cannot be picked. */
+export function chooseNext(state: JourneyState, routeId: string | null): JourneyState {
+  if (routeId === state.routeId) return { ...state, next: null };
+  return { ...state, next: routeId };
+}
+
 /**
  * The next segment once the current route is done and the rest is over.
- * Order of preference: the nearest route not yet walked in this chain;
+ * Order of preference: the route picked on the map, if any;
+ * then the nearest route not yet walked in this chain;
  * then home, if known and not already here; then the chain starts over.
  */
 export function nextSegment(state: JourneyState, route: Route, routes: Route[], now: number): Segment {
@@ -87,9 +122,16 @@ export function nextSegment(state: JourneyState, route: Route, routes: Route[], 
       home,
       from: startId === 'from' ? start : null,
       walked: walkedIds,
+      next: null,
     };
     return { route: next, journey };
   };
+
+  const picked = state.next ? routes.find((r) => r.id === state.next && r.id !== state.routeId) : undefined;
+  if (picked) {
+    const start = from ?? home;
+    return begin(picked, start, from ? 'from' : 'home', cameHome ? [] : walked);
+  }
 
   if (cameHome && home) {
     // Rested at home: the whole chain begins again from the front door.
@@ -104,7 +146,7 @@ export function nextSegment(state: JourneyState, route: Route, routes: Route[], 
   if (home && from) {
     const homeward = homewardRoute(from, home);
     if (homeward) {
-      const journey: JourneyState = { ...startJourney(homeward, now, { arrived: false }), home, from, walked };
+      const journey: JourneyState = { ...startJourney(homeward, now, { arrived: false }), home, from, walked, next: null };
       return { route: homeward, journey };
     }
   }

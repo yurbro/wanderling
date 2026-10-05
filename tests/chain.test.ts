@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HOME_RETURN_ID, buildSegmentRoute, departureNote, homewardRoute, nextSegment } from '../src/core/chain';
+import { HOME_RETURN_ID, buildSegmentRoute, chooseNext, departureNote, homewardRoute, nextSegment, routeOptions } from '../src/core/chain';
 import { FLY_KM_PER_HOUR, REST_MS, advance, describeJourney, locate, startJourney } from '../src/core/journey';
 import { TO_THE_SEA, DOWN_THE_SEINE, TO_THE_HOT_SPRINGS } from '../src/data/routes';
 import { routeFromHome } from '../src/core/geo';
@@ -108,5 +108,41 @@ describe('nextSegment', () => {
     const { state } = finish(route, { ...startJourney(route, T0), home: BRIGHTON });
     const last = state.arrivals[state.arrivals.length - 1];
     expect(state.restingUntil).toBe(last.at + REST_MS);
+  });
+});
+
+describe('choosing the next route on the map', () => {
+  it('sets off for the picked route instead of the nearest, then forgets the pick', () => {
+    const route = routeFromHome(TO_THE_SEA, BRIGHTON);
+    const journey = chooseNext({ ...startJourney(route, T0), home: BRIGHTON, walked: [] }, TO_THE_HOT_SPRINGS.id);
+    const { state, t } = finish(route, journey);
+    expect(state.next).toBe(TO_THE_HOT_SPRINGS.id);
+    const seg = nextSegment(state, route, THREE, t);
+    expect(seg.route.id).toBe(TO_THE_HOT_SPRINGS.id);
+    expect(seg.route.legs[0].mode).toBe('fly');
+    expect(seg.journey.next).toBeNull();
+    expect(seg.journey.walked).toEqual([TO_THE_SEA.id]);
+  });
+
+  it('lets a walked route be picked again, ignores unknown ids and the current route', () => {
+    const route = routeFromHome(TO_THE_SEA, BRIGHTON);
+    const base = { ...startJourney(route, T0), home: BRIGHTON, walked: [DOWN_THE_SEINE.id] };
+    expect(chooseNext(base, TO_THE_SEA.id).next).toBeNull();
+    const again = finish(route, chooseNext(base, DOWN_THE_SEINE.id));
+    expect(nextSegment(again.state, route, THREE, again.t).route.id).toBe(DOWN_THE_SEINE.id);
+    const bogus = finish(route, chooseNext(base, 'nowhere'));
+    expect(nextSegment(bogus.state, route, THREE, bogus.t).route.id).toBe(TO_THE_HOT_SPRINGS.id);
+  });
+
+  it('lists every route with how far and how to get there from the end of this one', () => {
+    const route = routeFromHome(TO_THE_SEA, BRIGHTON);
+    const journey = chooseNext({ ...startJourney(route, T0), home: BRIGHTON, walked: [DOWN_THE_SEINE.id] }, TO_THE_HOT_SPRINGS.id);
+    const opts = routeOptions(journey, route, THREE);
+    expect(opts.map((o) => [o.route.id, o.current, o.walked, o.chosen, o.mode])).toEqual([
+      [TO_THE_SEA.id, true, false, false, 'walk'],
+      [TO_THE_HOT_SPRINGS.id, false, false, true, 'fly'],
+      [DOWN_THE_SEINE.id, false, true, false, 'walk'],
+    ]);
+    expect(opts[1].km).toBeGreaterThan(9000);
   });
 });

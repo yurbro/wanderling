@@ -63,6 +63,14 @@ const DICT: Dict = {
   evening: { en: 'evening', zh: '傍晚' },
   night: { en: 'night', zh: '夜里' },
   // Map
+  nextRoute: { en: 'Where next?', zh: '下一条去哪' },
+  nextHint: { en: 'Tap a route. The wanderer sets off for it once this one is done. Untapped, the nearest one is next.', zh: '点一条路线，走完这条就去那里。不点的话，走完去最近的一条。' },
+  walkingNow: { en: 'walking now', zh: '正在走' },
+  walkedDone: { en: 'walked', zh: '走过了' },
+  byFoot: { en: 'on foot, {km} km', zh: '步行 {km} 公里' },
+  byTrain: { en: 'by train, {km} km', zh: '坐火车 {km} 公里' },
+  byPlane: { en: 'by plane, {km} km', zh: '坐飞机 {km} 公里' },
+  chosenNext: { en: 'next', zh: '下一条' },
   placesOf: { en: '{n} of {total} places', zh: '{total} 站里到了 {n} 站' },
   kmOf: { en: '{km} km of {total}', zh: '走了 {km} 公里，共 {total}' },
   // City chooser
