@@ -97,19 +97,22 @@ export const WEATHER_TONES = {
  * The traveler's wardrobe. One saturated focal color (the brick-red backpack),
  * everything else muted, outlines in warm dark grey rather than black.
  */
+/**
+ * The wanderling: cream paper body, a leaf in the mid-hill green, and the
+ * scarf in brick red, the one saturated focus of the picture (style guide
+ * section 3). The backpack and legs stay muted so the scarf wins.
+ */
 export const WANDERER = {
   ink: '#4A4A52',
-  skin: '#EFD9C4',
-  coat: '#6F7A8E',
-  coatShade: '#5E6879',
-  trousers: '#4F5566',
-  boots: '#3E3E46',
-  hat: '#A48A6A',
-  hatBand: '#7C6650',
-  backpack: '#B86B5A',
-  backpackFlap: '#9E5A4B',
-  scarf: '#4D5B8A',
-  umbrella: '#4D5B8A',
+  body: '#F1E9D6',
+  bodyShade: '#E2D7BF',
+  leaf: '#7E9A8C',
+  leafShade: '#587868',
+  legs: '#4F5566',
+  backpack: '#A48A6A',
+  backpackFlap: '#7C6650',
+  scarf: '#B86B5A',
+  breath: '#F4EFE4',
   lanternGlass: '#F8EBC0',
   glow: '#F8EBC0',
 };

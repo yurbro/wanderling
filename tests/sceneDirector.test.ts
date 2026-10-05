@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hexToRgb } from '../src/core/color';
 import { skyAt } from '../src/core/palette';
-import { direct } from '../src/core/sceneDirector';
+import { direct, windLean } from '../src/core/sceneDirector';
 import { routeFromHome } from '../src/core/geo';
 import { KM_PER_HOUR, advance, locate, startJourney } from '../src/core/journey';
 import { TO_THE_SEA } from '../src/data/routes';
@@ -185,11 +185,23 @@ describe('direct decides what the wanderer carries', () => {
     expect(day.lanternGlow).toBe(0);
   });
 
-  it('wears a scarf when it is cold or snowing', () => {
-    expect(direct(buildWorldState(noon, LONDON, demoWeather('clear', noon, { temperature: 4 }))).wanderer.scarf).toBe(true);
-    expect(direct(buildWorldState(noon, LONDON, demoWeather('snow', noon, { temperature: 1 }))).wanderer.scarf).toBe(true);
-    expect(direct(buildWorldState(noon, LONDON, demoWeather('clear', noon, { temperature: 22 }))).wanderer.scarf).toBe(false);
-    expect(direct(buildWorldState(noon, LONDON, null)).wanderer.scarf).toBe(false);
+  it('wraps the scarf tight below freezing or in snow', () => {
+    expect(direct(buildWorldState(noon, LONDON, demoWeather('clear', noon, { temperature: -3 }))).wanderer.cold).toBe(true);
+    expect(direct(buildWorldState(noon, LONDON, demoWeather('snow', noon, { temperature: 1 }))).wanderer.cold).toBe(true);
+    expect(direct(buildWorldState(noon, LONDON, demoWeather('clear', noon, { temperature: 4 }))).wanderer.cold).toBe(false);
+    expect(direct(buildWorldState(noon, LONDON, null)).wanderer.cold).toBe(false);
+  });
+
+  it('leans into a strong wind and not into a breeze', () => {
+    expect(windLean(0)).toBe(0);
+    expect(windLean(15)).toBe(0);
+    expect(windLean(30)).toBeCloseTo(0.5, 2);
+    expect(windLean(45)).toBe(1);
+    expect(direct(buildWorldState(noon, LONDON, demoWeather('clear', noon, { windSpeed: 50 }))).wanderer.windLean).toBe(1);
+    expect(direct(buildWorldState(noon, LONDON, null)).wanderer.windLean).toBe(0);
+    // Aboard a plane the wind still blows outside, but the lean is a walking posture.
+    const rs = direct(buildWorldState(noon, LONDON, demoWeather('thunderstorm', noon)));
+    expect(rs.wanderer.windLean).toBeGreaterThan(0.5);
   });
 
   it('tints the figure darker at night', () => {
