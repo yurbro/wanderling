@@ -104,3 +104,13 @@ describe('geocoding parsers', () => {
     expect(homeFrom({ lat: 50.82, lon: -0.14, name: 'Brighton', region: 'UK' }, false)).toEqual({ name: 'Brighton', region: 'UK', lat: 50.82, lon: -0.14 });
   });
 });
+
+describe('the wider world', () => {
+  it('sends people in each region to a route that starts nearby', () => {
+    expect(nearestRoute(ROUTES, { lat: 42.36, lon: -71.06 }).route.id).toBe('hudson-v1'); // Boston
+    expect(nearestRoute(ROUTES, { lat: 34.05, lon: -118.24 }).route.id).toBe('pacific-coast-v1'); // Los Angeles
+    expect(nearestRoute(ROUTES, { lat: -33.87, lon: 151.21 }).route.id).toBe('great-ocean-v1'); // Sydney
+    expect(nearestRoute(ROUTES, { lat: 39.9, lon: 116.4 }).route.id).toBe('jiangnan-v1'); // Beijing
+    expect(ROUTES.length).toBe(7);
+  });
+});
