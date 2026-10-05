@@ -1,6 +1,6 @@
 # Wanderling 风格指南 v0 与生图提示词
 
-日期：2026-10-04
+日期：2026-10-04，角色设计与文风更新于 2026-10-06（会话 19）
 用途：所有美术（明信片、地标、道具、角色参考）生成与验收的唯一依据。代码里的天空与大地色板与本文一致。
 
 ## 1. 一句话
@@ -58,9 +58,16 @@
 
 ### 角色设计（供代码绘制参考）
 
-- 正面与侧面各一张，站姿，中性表情，1:1。
-- 头身比约 1:2.5，圆润可爱但不是婴儿。
-- 部件分明：头、身体、两条腿、两只手臂、背包，便于拆成可动部件。
+旅人是一只「wanderling」小生物，不是人类背包客（设计决策 D1，详见 `docs/design/decisions.md` 第 5 节）。生图只用来定比例和配色，场景里会动的他仍由代码绘制。
+
+- 正面与侧面各一张，站姿，平静表情，1:1，纯白背景。
+- 身体：头身一体的圆润豆形，米白色，略带纸感。没有单独的头。
+- 头顶一片小叶子：跟真实风向、风速摆动。叶子竖起是好奇，耷拉是困。
+- 眼睛：两个墨点，可以睁、眨、弯成笑眼。没有嘴。
+- 围巾：砖红 #B86B5A，尾巴随风飘，是全画面唯一的饱和焦点物。
+- 背包：比半个身体还大，以后挂行囊里的那件东西。
+- 两条短腿，两只很小的手。画面里身高约为屏幕高度的 8%。
+- 拆成 8 个可动部件：身体、叶子、眼睛、围巾尾、背包、两腿、双手。
 
 ## 6. 提示词模板（英文）
 
@@ -85,7 +92,7 @@ A single {object} on a plain white background, front three-quarter view, flat li
 角色设计：
 
 ```
-Character design sheet of a small traveler with a backpack: front view and side view, standing, neutral expression, round proportions, simple shapes, clear separation of head, body, arms, legs and backpack, plain white background, {style suffix}
+Character design sheet of a tiny round creature called a wanderling: a soft bean-shaped body with no separate head, cream colored, two small dot eyes, no mouth, a single small leaf growing from the top of its head, a brick-red scarf, a large travel backpack bigger than half its body, two short legs and two tiny arms. Front view and side view, standing, calm expression, plain white background, {style suffix}
 ```
 
 负面提示（支持负面提示的工具使用）：
@@ -119,3 +126,23 @@ photorealistic, 3D render, glossy, neon, dramatic lighting, lens flare, text, wa
 ## 9. 交付方式
 
 把挑中的原图上传到对话里，命名 `postcard-{place-slug}.png`、`prop-{name}.png`、`character-{name}-front.png`；Claude 负责去背景、统一色板、叠纸纹、裁切并入库。
+
+## 10. 文风与文案红线
+
+旅人说的每一句话都算美术的一部分。规则与 `docs/design/decisions.md` 第 6 节一致，以那里为准。
+
+性格：好奇、慢吞吞、有点迷糊，很认真地对待小事。他不完全懂人类的东西。他会想你，但从不怪你。
+
+- 第一人称，短句，每句不超过 12 个英文词。只写看到的、碰到的，不写道理。
+- 把人类的东西说得稍微偏一点：雨伞是「会走的屋顶」，火车是「一座会跑的房子」。
+- 除了一句天气关心，从不提醒用户做事；从不提用户多久没来。
+- 禁用句式：「你错过了」「好久不见」「连续 X 天」，以及任何让人内疚的说法。
+- 不在日常文案里出现使用时长、打开次数；出发天数只在里程碑信里用。
+- 中文文案不用破折号「—」。
+- 所有文案走 `i18n.ts`，入库前按以上红线检查。
+
+样句：
+
+- Your sky was grey this morning. Mine too. I think the clouds are following me.
+- I found a bench that faces the sea. I sat for a very long time. Benches are good.
+- Rain tomorrow where you are. Bring your walking roof.
