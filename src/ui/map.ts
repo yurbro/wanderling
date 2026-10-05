@@ -1,12 +1,18 @@
+import { formatKm, routeName, t } from '../core/i18n';
+import type { RouteOption } from '../core/chain';
 import { LABEL_FONT, describeProgress, layoutRoute, mapProgress, wobble, type LabelSide, type MapLayout, type XY } from '../core/map';
-import { routeName, t } from '../core/i18n';
 import type { Position, Postcard, Route } from '../core/types';
 
 export interface FootprintMap {
   open(): void;
   close(): void;
-  update(route: Route, pos: Position | null, cards: Postcard[]): void;
+  update(route: Route, pos: Position | null, cards: Postcard[], options?: RouteOption[]): void;
   readonly isOpen: boolean;
+}
+
+export interface MapHandlers {
+  /** The person tapped a route for next; null when they tapped the chosen one again. */
+  onChoose?: (routeId: string | null) => void;
 }
 
 const INK = '#4A4A52';
@@ -20,7 +26,7 @@ const GLOW = '#F8EBC0';
  * brick red, places lit as they are reached, the wanderer as a small dot.
  * Plain SVG built from strings; nothing here is interactive beyond closing.
  */
-export function createMap(root: HTMLElement): FootprintMap {
+export function createMap(root: HTMLElement, handlers: MapHandlers = {}): FootprintMap {
   const el = document.createElement('div');
   el.className = 'album map-sheet';
   el.hidden = true;
@@ -32,11 +38,22 @@ export function createMap(root: HTMLElement): FootprintMap {
       </div>
       <div class="map-paper" id="map-paper"></div>
       <p class="map-progress" id="map-progress"></p>
+      <div class="map-next">
+        <div class="map-next-title">${t('nextRoute')}</div>
+        <p class="map-next-hint">${t('nextHint')}</p>
+        <div class="map-routes" id="map-routes"></div>
+      </div>
     </div>
   `;
   root.appendChild(el);
   const paper = el.querySelector<HTMLDivElement>('#map-paper')!;
   const progress = el.querySelector<HTMLParagraphElement>('#map-progress')!;
+  const routesEl = el.querySelector<HTMLDivElement>('#map-routes')!;
+  routesEl.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-route]');
+    if (!btn || btn.disabled) return;
+    handlers.onChoose?.(btn.classList.contains('chosen') ? null : btn.dataset.route!);
+  });
   const closeBtn = el.querySelector<HTMLButtonElement>('.map-close')!;
 
   let layout: MapLayout | null = null;
@@ -53,7 +70,8 @@ export function createMap(root: HTMLElement): FootprintMap {
         if (!el.classList.contains('open')) el.hidden = true;
       }, 350);
     },
-    update(route, pos, cards) {
+    update(route, pos, cards, options) {
+      if (options) routesEl.innerHTML = options.map(renderOption).join('');
       if (!layout || layoutFor !== route.id) {
         layout = layoutRoute(route);
         layoutFor = route.id;
@@ -126,6 +144,13 @@ function renderSvg(route: Route, layout: MapLayout, p: ReturnType<typeof mapProg
     <rect x="7" y="7" width="${W - 14}" height="${H - 14}" rx="3" fill="none" stroke="${INK}" stroke-width="0.6" opacity="0.35"/>
     ${title}${compass}${seaMarks}${ahead}${walked}${places}${walker}
   </svg>`;
+}
+
+function renderOption(o: RouteOption): string {
+  const how = o.current ? t('walkingNow') : t(o.mode === 'fly' ? 'byPlane' : o.mode === 'ride' ? 'byTrain' : 'byFoot', { km: formatKm(o.km) });
+  const tag = o.chosen ? `<span class="map-route-tag">${t('chosenNext')}</span>` : o.walked && !o.current ? `<span class="map-route-tag muted">✓ ${t('walkedDone')}</span>` : '';
+  const cls = ['map-route', o.current ? 'current' : '', o.chosen ? 'chosen' : '', o.walked ? 'walked' : ''].filter(Boolean).join(' ');
+  return `<button type="button" class="${cls}" data-route="${o.route.id}" ${o.current ? 'disabled' : ''}><span class="map-route-name">${escape(routeName(o.route))}</span><span class="map-route-how">${how}</span>${tag}</button>`;
 }
 
 function labelPos(x: number, y: number, side: LabelSide): { tx: number; ty: number; anchor: string } {

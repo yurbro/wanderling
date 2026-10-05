@@ -1,7 +1,7 @@
 import './style.css';
 import { direct } from './core/sceneDirector';
 import type { GeoPoint, JourneyState, RenderState, Route, WeatherCondition, WeatherState, WorldState } from './core/types';
-import { buildSegmentRoute, departureNote, nextSegment } from './core/chain';
+import { buildSegmentRoute, chooseNext, departureNote, nextSegment, routeOptions } from './core/chain';
 import { homeFrom, nearestRoute, routeFromHome } from './core/geo';
 import { detectLang, placeName, placeNote, setLang, t } from './core/i18n';
 import { REST_MS, advance, describeJourney, lastArrival, locate, startJourney } from './core/journey';
@@ -106,12 +106,18 @@ async function main(): Promise<void> {
       album.open();
     },
     onMap: () => {
-      map.update(route, locate(route, journey, Date.now()), allCards());
+      map.update(route, locate(route, journey, Date.now()), allCards(), routeOptions(journey, route, ROUTES));
       map.open();
     },
   });
   const album = createAlbum(root, hud.unit);
-  const map = createMap(root);
+  const map = createMap(root, {
+    onChoose: (id) => {
+      journey = chooseNext(journey, id);
+      if (!demoJourney) saveJourney(journey);
+      map.update(route, locate(route, journey, Date.now()), allCards(), routeOptions(journey, route, ROUTES));
+    },
+  });
   const city = createCityChooser(root, searchCity, (picked) => {
     hud.hideLocate();
     void moveTo({ lat: picked.lat, lon: picked.lon, name: picked.name, region: picked.region });
@@ -263,7 +269,7 @@ async function main(): Promise<void> {
     renderer.setState(render);
     hud.update(world, render);
     hud.setJourney(describeJourney(position));
-    if (map.isOpen) map.update(route, position, allCards());
+    if (map.isOpen) map.update(route, position, allCards(), routeOptions(journey, route, ROUTES));
     const skyCss = '#' + render.sky.top.toString(16).padStart(6, '0');
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', skyCss);
     rememberSky(skyCss);
