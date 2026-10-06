@@ -163,13 +163,28 @@ export class SceneRenderer {
       if (pressTimer !== null) window.clearTimeout(pressTimer);
       pressTimer = null;
     };
+    let pressed = false;
     this.wanderer.view.on('pointerdown', () => {
       cancel();
-      pressTimer = window.setTimeout(() => this.wanderer.wave(), 450);
+      pressed = false;
+      pressTimer = window.setTimeout(() => {
+        pressed = true;
+        this.wanderer.wave();
+      }, 450);
     });
-    this.wanderer.view.on('pointerup', cancel);
+    // Let go before the long press fires: that was a tap.
+    this.wanderer.view.on('pointerup', () => {
+      const wasPending = pressTimer !== null && !pressed;
+      cancel();
+      if (wasPending) this.wanderer.tapped();
+    });
     this.wanderer.view.on('pointerupoutside', cancel);
     this.wanderer.view.on('pointercancel', cancel);
+    // The leaf has its own answer and keeps the tap to itself.
+    this.wanderer.leaf.on('pointerdown', (e) => {
+      e.stopPropagation();
+      this.wanderer.leafTapped();
+    });
 
     this.app.renderer.on('resize', () => this.layout());
     this.layout();

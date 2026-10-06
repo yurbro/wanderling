@@ -1,6 +1,6 @@
 import { Assets, Container, Graphics, MeshRope, Point, Sprite, Texture } from 'pixi.js';
 import { WANDERER } from '../core/palette';
-import type { RenderState, WandererState } from '../core/types';
+import type { LeafState, RenderState, WandererState } from '../core/types';
 
 /**
  * The wanderling: a small egg-shaped creature with a leaf on its head, put
@@ -39,9 +39,11 @@ import type { RenderState, WandererState } from '../core/types';
  * at the viewer, a look left and right, a small hop, a shake of the rain off,
  * a stretch, a doze while sitting, and a wave when pressed.
  */
-type Gesture = 'none' | 'gaze' | 'glance' | 'lookaround' | 'hop' | 'shake' | 'stretch' | 'doze' | 'wave' | 'window' | 'peer' | 'kick';
+type Gesture =
+  | 'none' | 'gaze' | 'glance' | 'lookaround' | 'hop' | 'shake' | 'stretch' | 'doze' | 'wave' | 'window' | 'peer' | 'kick'
+  | 'tickle' | 'sulk' | 'candy' | 'boing';
 /** Eyes: one dot in profile, two dots or a smile facing the viewer, a squint, or closed. */
-type EyeMode = 'side' | 'front' | 'smile' | 'squint' | 'closed';
+type EyeMode = 'side' | 'front' | 'smile' | 'squint' | 'closed' | 'flat';
 /** How long each gesture runs, in seconds. */
 const GESTURE_SECONDS: Record<Exclude<Gesture, 'none'>, number> = {
   gaze: 4,
@@ -55,9 +57,15 @@ const GESTURE_SECONDS: Record<Exclude<Gesture, 'none'>, number> = {
   window: 3.2,
   peer: 2.2,
   kick: 1.2,
+  tickle: 0.9,
+  sulk: 2.2,
+  candy: 2.6,
+  boing: 0.9,
 };
 /** Gestures during which the walk stops. */
-const STOPPING: ReadonlySet<Gesture> = new Set<Gesture>(['gaze', 'lookaround', 'stretch', 'wave']);
+const STOPPING: ReadonlySet<Gesture> = new Set<Gesture>(['gaze', 'lookaround', 'stretch', 'wave', 'sulk', 'candy']);
+/** How many points the leaf's stalk bends through. */
+const LEAF_POINTS = 9;
 
 const U = 100;
 /** Body height in units; the boots take the rest below it. */
@@ -141,7 +149,16 @@ export class Wanderer {
   private frontLeg = new Sprite();
   private body = new Sprite();
   private backpack = new Sprite();
-  private leaf = new Sprite();
+  /** The leaf: a ribbon of points from the stalk's foot to the tip, so the stalk bends. Tap it. */
+  readonly leaf = new Container();
+  private leafRope: MeshRope | null = null;
+  private leafPoints: Point[] = [];
+  private leafTexture: Texture | null = null;
+  private leafEnv: LeafState = { droop: 0, toSun: 0, stiff: 0, tint: 0xffffff };
+  /** A sweet to offer after a sulk. */
+  private candy = new Graphics();
+  /** Recent taps, for telling one tap from a tickle from a pestering. */
+  private taps: number[] = [];
   private eyes = new Graphics();
   private scarf = new Sprite();
   /** The scarf tail is a ribbon of points so it can really ripple. */
@@ -215,6 +232,9 @@ export class Wanderer {
       this.leafUmbrella,
     );
     this.view.addChild(this.shadow, this.pebble, this.backLeg, this.frontLeg, this.trunk, this.breath);
+    this.trunk.addChild(this.candy);
+    this.candy.visible = false;
+    this.drawCandy();
     this.pebble.visible = false;
     this.firefly.visible = false;
     // Nothing shows until the pictures are in; the eyes wait with them.
@@ -242,6 +262,29 @@ export class Wanderer {
     this.begin('wave');
   }
 
+  /** A tap on the wanderling: one gets a smile or a hop, a few a tickle, five quick ones a sulk and then a sweet. */
+  tapped(): void {
+    if (this.asleep || this.gesture === 'sulk' || this.gesture === 'candy') return;
+    const now = this.time;
+    this.taps = this.taps.filter((t) => now - t < 1.6);
+    this.taps.push(now);
+    if (this.taps.length >= 5) {
+      this.taps = [];
+      this.begin('sulk');
+    } else if (this.taps.length >= 2) {
+      this.begin('tickle');
+    } else {
+      this.begin(Math.random() < 0.5 ? 'glance' : 'hop');
+    }
+  }
+
+  /** A tap on the leaf: it boings, and the wanderling looks up at it. */
+  leafTapped(): void {
+    if (this.asleep) return;
+    this.leafSpring.v += this.leafSpring.a > 0 ? -16 : 16;
+    if (this.gesture === 'none' || this.gesture === 'boing') this.begin('boing');
+  }
+
   /** The signpost has come into view ahead: peer at it (does not stop the walk). */
   noticeSignpost(): void {
     if (this.gesture === 'none' && this.state && this.state.pace > 0 && !this.asleep) this.begin('peer');
@@ -260,6 +303,7 @@ export class Wanderer {
     // A shake throws the leaf about; a hop flicks it.
     if (g === 'shake') this.leafSpring.v += 9;
     if (g === 'hop') this.leafSpring.v -= 3;
+    if (g === 'tickle') this.leafSpring.v += 7;
     this.chooseEyes();
   }
 
@@ -282,6 +326,9 @@ export class Wanderer {
     this.view.tint = w.tint;
     this.cold = w.cold;
     this.asleep = w.asleep;
+    this.leafEnv = w.leaf;
+    if (this.leafRope) this.leafRope.tint = w.leaf.tint;
+    this.leafUmbrella.tint = w.leaf.tint;
     this.mode = rs.travel.mode;
     // Asleep, the lantern is put down (out of sight) and the firefly comes.
     this.lantern.visible = w.lantern && !w.asleep;
@@ -315,11 +362,25 @@ export class Wanderer {
     this.body.position.set(0, ty(BODY_BOTTOM) + STROKE * 0.5);
     fit(this.body, BODY_H + 0.01);
 
-    // Leaf: the stalk's foot is at the bottom left of its picture; it grows from the top of the head.
-    this.leaf.texture = parts.leaf;
-    this.leaf.anchor.set(0.05, 0.98);
+    // Leaf: the picture is turned so the stalk's foot is at its left edge and
+    // the tip at its right; a rope of points runs the length of it, so the
+    // stalk bends instead of turning as one stiff piece.
+    const leafTex = parts.leaf;
+    this.leafTexture = leafTex;
+    this.leafPoints = Array.from({ length: LEAF_POINTS }, () => new Point(0, 0));
+    this.leafRope = new MeshRope({ texture: leafTex, points: this.leafPoints });
+    this.leafRope.tint = this.leafEnv.tint;
+    this.leaf.removeChildren();
+    this.leaf.addChild(this.leafRope);
     this.leaf.position.set(-0.01 * U, ty(BODY_TOP) + STROKE * 1.2);
-    fit(this.leaf, BODY_H * 0.64);
+    const leafScale = (BODY_H * 0.64 * U) / leafTex.width;
+    this.leaf.scale.set(leafScale);
+    // Tappable: a generous box around the leaf.
+    this.leaf.eventMode = 'static';
+    this.leaf.cursor = 'pointer';
+    // (The picture is padded so the stalk runs along the ribbon's centre line.)
+    this.leaf.hitArea = { contains: (x: number, y: number) => Math.abs(x) < leafTex.width * 0.8 && y < leafTex.width * 0.1 && y > -leafTex.width * 1.15 };
+    this.shapeLeaf(0, 0, 0);
 
     // Scarf band: centred on the body at 0.45 H, a touch wider than the body.
     this.scarf.texture = parts['scarf-band'];
@@ -398,9 +459,11 @@ export class Wanderer {
     if (this.gesture !== 'none') {
       this.gestureLeft -= dt;
       if (this.gestureLeft <= 0) {
+        const ended = this.gesture;
         this.gesture = 'none';
-        this.chooseEyes();
         this.nextGesture = 9 + Math.random() * 16;
+        if (ended === 'sulk') this.begin('candy');
+        else this.chooseEyes();
       }
       return;
     }
@@ -432,10 +495,16 @@ export class Wanderer {
     switch (this.gesture) {
       case 'glance':
       case 'wave':
+      case 'tickle':
+      case 'candy':
         this.setEyes('smile');
         return;
       case 'lookaround':
+      case 'boing':
         this.setEyes('front');
+        return;
+      case 'sulk':
+        this.setEyes('flat');
         return;
       case 'stretch':
       case 'doze':
@@ -534,7 +603,7 @@ export class Wanderer {
 
     // Sitting down when there is nowhere to walk: resting at a place, at the
     // end of a route, or aboard a train or plane. Eased, so it sits and rises.
-    const sitTarget = (st.pace <= 0 || this.asleep) && g !== 'wave' && g !== 'stretch' ? 1 : 0;
+    const sitTarget = ((st.pace <= 0 || this.asleep) && g !== 'wave' && g !== 'stretch') || g === 'sulk' || g === 'candy' ? 1 : 0;
     const asleep = this.asleep ? 1 : 0;
     this.sit += (sitTarget - this.sit) * slow;
     const sit = this.sit;
@@ -576,26 +645,36 @@ export class Wanderer {
     // Gazing: the whole body eases back to look up at the sky. Wind: it leans in.
     // Sitting: leans back on the pack. Waving: leans towards the viewer a touch.
     let tiltTarget = g === 'gaze' ? -0.3 : 0;
-    if (g === 'wave') tiltTarget = -0.08;
+    if (g === 'wave' || g === 'candy') tiltTarget = -0.08;
+    if (g === 'sulk') tiltTarget = -0.16;
+    if (g === 'boing') tiltTarget = -0.12;
     this.tilt += (tiltTarget - this.tilt) * ease;
     this.lean += (st.windLean * 0.28 + moving * 0.05 - this.lean) * ease;
     const rock = moving ? Math.sin(this.phase) * 0.03 : Math.sin(t * 0.8) * 0.03 * stand;
-    const shake = g === 'shake' ? Math.sin(k * Math.PI * 6) * 0.14 * (1 - k) : 0;
+    const shake = g === 'shake' ? Math.sin(k * Math.PI * 6) * 0.14 * (1 - k) : g === 'tickle' ? Math.sin(k * Math.PI * 5) * 0.09 * (1 - k) : 0;
     this.trunk.rotation = this.tilt + this.lean + rock + shake - 0.08 * sit - 0.1 * asleep * sit + (g === 'peer' ? 0.06 * Math.sin(Math.PI * k) : 0);
 
     // The leaf: a vane for the real wind, a flutter on top, and it perks up
     // (stands straighter, a little taller) when something is interesting,
     // droops when dozing. It has weight: it follows the body a beat late.
-    const perkTarget = g === 'gaze' || g === 'lookaround' || g === 'glance' || g === 'wave' || g === 'peer' || g === 'window' ? 1 : 0;
+    const perkTarget = g === 'gaze' || g === 'lookaround' || g === 'glance' || g === 'wave' || g === 'peer' || g === 'window' || g === 'boing' || g === 'candy' ? 1 : 0;
     this.perk += (perkTarget - this.perk) * ease;
     this.droop += ((g === 'doze' || this.asleep ? 1 : 0) - this.droop) * slow;
     const gust = Math.abs(this.wind);
     const flutter = Math.sin(t * (2.2 + gust * 7)) * (0.05 + gust * 0.14 + st.windLean * 0.1);
     // In a strong wind the leaf lies back whatever the compass says, as on the pose sheet.
     const vane = this.wind * (0.55 + st.windLean * 0.4) * (1 - this.perk * 0.6) - st.windLean * 0.7;
-    spring(this.leafSpring, vane + flutter * (1 - this.perk * 0.5) - this.perk * 0.08 + this.droop * 0.5, dt, 40, 5);
-    this.leaf.rotation = this.leafSpring.a - this.trunk.rotation * 1.6;
-    const leafScale = 1 + this.perk * 0.12 - this.droop * 0.06;
+    // The world's say: rain, heat and dark make it hang; cold makes it stiff; it leans to the sun.
+    const env = this.leafEnv;
+    const hang = Math.min(1, this.droop + env.droop + (g === 'sulk' ? 1 : 0));
+    const give = 1 - env.stiff * 0.7;
+    // At rest the leaf curls a little forward, as on the sheet; the world bends it from there.
+    spring(this.leafSpring, 0.18 + (vane + flutter * (1 - this.perk * 0.5)) * give - this.perk * 0.1 - hang * 0.9, dt, 40 + env.stiff * 60, 5 + env.stiff * 6);
+    // The stalk's foot turns with the head only partly, so the leaf keeps something of its own upright.
+    const baseAngle = -this.trunk.rotation * 0.6 + env.toSun * 0.14 * give;
+    // The stalk can only curl so far before it would look snapped.
+    this.shapeLeaf(baseAngle, Math.max(-1.05, Math.min(1.05, this.leafSpring.a)), flutter * 0.5 * give);
+    const leafScale = 1 + this.perk * 0.12 - hang * 0.05;
     this.leaf.scale.set(this.leafBase.x * leafScale, this.leafBase.y * leafScale);
 
     // The backpack sits loosely: it swings back a little when the body rocks.
@@ -616,6 +695,11 @@ export class Wanderer {
     if (st.lantern) {
       if (st.umbrella) backTarget = 0.6 + Math.sin(this.phase) * 0.04;
       else frontTarget = -0.55 + Math.sin(this.phase) * 0.05;
+    }
+    if (g === 'candy') {
+      // Holds the sweet out, up and forward, for whoever is watching.
+      const up = Math.min(1, k * 3) * Math.min(1, (1 - k) * 4);
+      frontTarget = -1.7 * up;
     }
     if (g === 'wave') {
       const up = Math.min(1, k * 4) * Math.min(1, (1 - k) * 4);
@@ -663,6 +747,18 @@ export class Wanderer {
     // Wrapped tight: the band is thicker.
     this.scarf.scale.set(this.scarfBase.x, this.scarfBase.y * (this.cold ? 1.45 : 1));
 
+    // The sweet appears in the front hand after a sulk, then is gone.
+    if (g === 'candy') {
+      const hand = handOf(frontRot);
+      this.candy.visible = true;
+      this.candy.position.set(hand.x * U, hand.y * U);
+      this.candy.rotation = frontRot * 0.3;
+      this.candy.alpha = Math.min(1, k * 4) * Math.min(1, (1 - k) * 5);
+      this.candy.scale.set(0.8 + 0.2 * Math.min(1, k * 3));
+    } else {
+      this.candy.visible = false;
+    }
+
     // The pebble: lies ahead of the front boot, flies off in a little arc when
     // kicked, bounces once and rolls out of sight.
     if (g === 'kick') {
@@ -687,6 +783,11 @@ export class Wanderer {
     // drift of attention while walking, down a little while sitting.
     let lookX = 0.008 * U * Math.sin(t * 0.6) * moving;
     let lookY = this.gesture === 'gaze' ? -0.035 : sit * 0.012;
+    if (g === 'sulk') {
+      // Looks away, over its shoulder.
+      lookX = -0.03 * U * Math.min(1, k * 4);
+    }
+    if (g === 'boing') lookY = -0.03;
     if (g === 'window' || g === 'peer') {
       // Out of the window, or at the signpost ahead: forward and a little up.
       const settle = Math.min(1, k * 5) * Math.min(1, (1 - k) * 5);
@@ -700,6 +801,39 @@ export class Wanderer {
       lookY = -0.005;
     }
     this.eyes.position.set(lookX, ty(EYE_Y) + lookY * U);
+  }
+
+  /**
+   * Lay the leaf's points from the stalk's foot (at the origin) to the tip.
+   * `base` turns the whole leaf, `bend` curls it increasingly towards the tip
+   * (positive is forward, to the right), and `flutter` adds a small wave.
+   */
+  private shapeLeaf(base: number, bend: number, flutter: number): void {
+    const tex = this.leafTexture;
+    if (!tex || !this.leafRope) return;
+    const n = this.leafPoints.length;
+    const seg = tex.width / (n - 1);
+    let x = 0;
+    let y = 0;
+    this.leafPoints[0].set(0, 0);
+    for (let i = 1; i < n; i++) {
+      const f = i / (n - 1);
+      const a = base + bend * Math.pow(f, 1.3) + flutter * Math.sin(f * 3 - this.time * 2);
+      x += seg * Math.sin(a);
+      y -= seg * Math.cos(a);
+      this.leafPoints[i].set(x, y);
+    }
+  }
+
+  /** A small wrapped sweet: brick-red middle, paper twists at the ends. */
+  private drawCandy(): void {
+    const c = this.candy;
+    const r = 0.05 * U;
+    const line = { color: WANDERER.ink, width: STROKE * 0.9, join: 'round' as const };
+    c.poly([-r * 1.1, 0, -r * 1.9, -r * 0.8, -r * 1.7, 0, -r * 1.9, r * 0.8]).fill({ color: WANDERER.breath }).stroke(line);
+    c.poly([r * 1.1, 0, r * 1.9, -r * 0.8, r * 1.7, 0, r * 1.9, r * 0.8]).fill({ color: WANDERER.breath }).stroke(line);
+    c.circle(0, 0, r).fill({ color: WANDERER.scarf }).stroke(line);
+    c.circle(-r * 0.35, -r * 0.35, r * 0.25).fill({ color: WANDERER.breath, alpha: 0.8 });
   }
 
   /**
@@ -759,6 +893,14 @@ export class Wanderer {
     }
     if (mode === 'front') {
       for (const p of EYE_FRONT) e.circle(p.x * U, ty(p.y), EYE_R * U).fill({ color: ink });
+      return;
+    }
+    if (mode === 'flat') {
+      // Two short level lines: unimpressed.
+      const r = EYE_R * 1.3;
+      for (const x of [EYE_SIDE.x, EYE_SIDE.x - BODY_HALF_W * 0.45]) {
+        e.moveTo((x - r) * U, ty(EYE_Y)).lineTo((x + r) * U, ty(EYE_Y)).stroke({ color: WANDERER.ink, width: STROKE * 1.7, cap: 'round' });
+      }
       return;
     }
     if (mode === 'closed') {

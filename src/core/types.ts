@@ -274,9 +274,27 @@ export interface WandererState {
   windLean: number;
   /** Curled up asleep by the road: the person's local 2:00 to 4:00 (design section 5). */
   asleep: boolean;
+  /** How the leaf on its head answers the world around it. */
+  leaf: LeafState;
   /** Walking pace multiplier, 0 stands still. */
   pace: number;
   /** Multiplicative tint for the whole figure: white by day, bluish by night. */
+  tint: number;
+}
+
+/**
+ * The leaf as a small plant: it droops when wet, hot or in the dark, turns a
+ * little towards the sun, stiffens in the cold, and changes colour with the
+ * season where the person lives.
+ */
+export interface LeafState {
+  /** 0..1 how far it hangs: rain on it, heat, night. */
+  droop: number;
+  /** -1..1 lean towards the sun across the screen (negative is left, towards the east). */
+  toSun: number;
+  /** 0..1 how stiff it is in the cold: less sway, less flutter. */
+  stiff: number;
+  /** Multiplicative tint for the leaf pictures, 0xRRGGBB; white leaves the painted green as is. */
   tint: number;
 }
 
