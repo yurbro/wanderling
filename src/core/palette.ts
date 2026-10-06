@@ -104,12 +104,12 @@ export const WEATHER_TONES = {
  */
 export const WANDERER = {
   ink: '#4A4A52',
-  body: '#F1E9D6',
-  bodyShade: '#E2D7BF',
+  body: '#F3ECDD',
+  bodyShade: '#E4DAC4',
   leaf: '#7E9A8C',
   leafShade: '#587868',
-  legs: '#4F5566',
-  backpack: '#A48A6A',
+  legs: '#3E3E46',
+  backpack: '#9C8A6A',
   backpackFlap: '#7C6650',
   scarf: '#B86B5A',
   breath: '#F4EFE4',
