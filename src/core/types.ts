@@ -272,6 +272,8 @@ export interface WandererState {
   cold: boolean;
   /** 0..1 how hard the wind blows: the body leans in, leaf and scarf stream sideways. */
   windLean: number;
+  /** Curled up asleep by the road: the person's local 2:00 to 4:00 (design section 5). */
+  asleep: boolean;
   /** Walking pace multiplier, 0 stands still. */
   pace: number;
   /** Multiplicative tint for the whole figure: white by day, bluish by night. */

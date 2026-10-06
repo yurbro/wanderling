@@ -92,6 +92,7 @@ export class SceneRenderer {
   private signpostX = 0;
   private signpostHome = 0;
   private signpostAhead = false;
+  private signpostNoticed = false;
   private sea = new SeaPainter();
   private transport = new TransportPainter();
   private weather = new WeatherPainter();
@@ -148,6 +149,7 @@ export class SceneRenderer {
       this.transport.behind,
       this.wanderer.glow,
       this.wanderer.view,
+      this.wanderer.firefly,
       this.weather.fogNear,
       this.weather.precip,
       this.transport.front,
@@ -363,6 +365,10 @@ export class SceneRenderer {
     if (!st) return;
     // No stopping to look at the sky while a place is coming into view.
     this.wanderer.allowPause = !this.marker.visible && Math.abs(this.signpostX - this.signpostHome) > this.w * 2;
+    // The signpost comes into view ahead: the wanderling peers at it, once per approach.
+    const inSight = this.marker.visible && this.signpostAhead && this.signpostX < this.w * 1.05;
+    if (inSight && !this.signpostNoticed) this.wanderer.noticeSignpost();
+    this.signpostNoticed = inSight;
     this.wanderer.frame(dt);
     // Aboard a vehicle the wanderer sits and sways with it.
     const f = this.figure();
