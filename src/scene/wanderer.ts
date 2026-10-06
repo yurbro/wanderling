@@ -114,6 +114,8 @@ export class Wanderer {
   private leafUmbrella = new Sprite();
   private lantern = new Sprite();
   private breath = new Graphics();
+  /** A soft patch of shade under the boots, so the figure stands on the ground rather than over it. */
+  private shadow = new Graphics();
 
   private state: WandererState | null = null;
   private wind = 0;
@@ -155,7 +157,7 @@ export class Wanderer {
       this.lantern,
       this.leafUmbrella,
     );
-    this.view.addChild(this.backLeg, this.frontLeg, this.trunk, this.breath);
+    this.view.addChild(this.shadow, this.backLeg, this.frontLeg, this.trunk, this.breath);
     // Nothing shows until the pictures are in; the eyes wait with them.
     this.trunk.visible = false;
     this.backLeg.visible = false;
@@ -165,6 +167,7 @@ export class Wanderer {
     this.breath.visible = false;
     this.glow.visible = false;
     this.drawBreath();
+    this.shadow.ellipse(0.02 * U, 0.01 * U, BODY_HALF_W * 1.05 * U, 0.045 * U).fill({ color: WANDERER.ink, alpha: 0.14 });
     this.drawEyes('side');
     void loadParts().then((parts) => this.dress(parts)).catch((err) => console.warn('[wanderling] parts not loaded', err));
   }
@@ -382,6 +385,8 @@ export class Wanderer {
     // The body rises a touch at each stride and rocks with it; walking it leans a little forward.
     const bob = -Math.abs(s) * 0.025 * U * moving;
     this.trunk.y = PIVOT.y * U + bob;
+    // The shade shrinks a touch as the body rises off its stride.
+    this.shadow.scale.set(1 - Math.abs(s) * 0.1 * moving, 1);
     // Gazing: the whole body eases back to look up at the sky. Wind: it leans in.
     const gazeTarget = this.gesture === 'gaze' ? -0.3 : 0;
     this.tilt += (gazeTarget - this.tilt) * ease;

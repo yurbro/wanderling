@@ -1,4 +1,4 @@
-import { Application, Container, FillGradient, Graphics } from 'pixi.js';
+import { Application, Container, FillGradient, Graphics, Texture, TilingSprite } from 'pixi.js';
 import { mix } from '../core/color';
 import { CELESTIAL } from '../core/palette';
 import type { RenderState } from '../core/types';
@@ -95,6 +95,8 @@ export class SceneRenderer {
   private sea = new SeaPainter();
   private transport = new TransportPainter();
   private weather = new WeatherPainter();
+  /** Paper grain over the whole picture, so sky, land and the wanderling sit on one sheet. */
+  private paper: TilingSprite | null = null;
   /** Hill wave phase offsets, in fractions of the screen width. */
   private scroll = { far: 0, mid: 0, near: 0 };
   private state: RenderState | null = null;
@@ -153,6 +155,11 @@ export class SceneRenderer {
       this.transport.front,
       this.weather.flash,
     );
+    this.paper = new TilingSprite({ texture: paperTexture(), width: 1, height: 1 });
+    this.paper.alpha = PAPER_ALPHA;
+    // Finer than a screen pixel on a retina phone, so it reads as grain, not dots.
+    this.paper.tileScale.set(0.6);
+    this.app.stage.addChild(this.paper);
 
     this.app.renderer.on('resize', () => this.layout());
     this.layout();
@@ -201,6 +208,10 @@ export class SceneRenderer {
   private layout(): void {
     this.w = Math.max(1, this.app.screen.width);
     this.h = Math.max(1, this.app.screen.height);
+    if (this.paper) {
+      this.paper.width = this.w;
+      this.paper.height = this.h;
+    }
     this.makeStars();
     this.makeDetails();
     this.placeWanderer();
@@ -326,14 +337,20 @@ export class SceneRenderer {
     this.ground.rect(0, skyH, w, h - skyH).fill({ color: st.ground });
     const pathY = skyH + (h - skyH) * 0.42;
     const pathH = (h - skyH) * 0.1;
+    const step = 8;
     this.ground
       .moveTo(0, pathY + pathH * 0.3)
       .quadraticCurveTo(w * 0.5, pathY - pathH * 0.35, w, pathY + pathH * 0.15)
       .lineTo(w, pathY + pathH * 1.15)
       .quadraticCurveTo(w * 0.5, pathY + pathH * 0.7, 0, pathY + pathH * 1.3)
       .closePath()
-      .fill({ color: st.path })
-      .stroke({ color: mix(st.path, WANDERER.ink, 0.4), width: 1, alpha: 0.35 });
+      .fill({ color: st.path });
+    // Pencil lines: where the ground meets the hills, and along both edges of the path.
+    const inkOnGround = mix(st.ground, WANDERER.ink, 0.5);
+    sketchLine(this.ground, straight(0, skyH + 0.5, w, step), inkOnGround, 0.35, 3.1);
+    const inkOnPath = mix(st.path, WANDERER.ink, 0.5);
+    sketchLine(this.ground, quad(0, pathY + pathH * 0.3, w * 0.5, pathY - pathH * 0.35, w, pathY + pathH * 0.15, 28), inkOnPath, 0.5, 1.3);
+    sketchLine(this.ground, quad(0, pathY + pathH * 1.3, w * 0.5, pathY + pathH * 0.7, w, pathY + pathH * 1.15, 28), inkOnPath, 0.5, 4.7);
   }
 
   /** Advance the walk: the wanderer strides, the world slides past. */
@@ -490,11 +507,10 @@ export class SceneRenderer {
     }
     pts.push(w + step, h);
     g.poly(pts).fill({ color });
-    // A pencil line along the ridge, like an outline in a sketchbook.
+    // A pencil line along the ridge, like an outline in a sketchbook: its
+    // thickness wanders and it sits a hair off the fill, the way a hand draws.
     if (relief > 0.05) {
-      g.moveTo(pts[2], pts[3]);
-      for (let i = 4; i < pts.length - 2; i += 2) g.lineTo(pts[i], pts[i + 1]);
-      g.stroke({ color: mix(color, WANDERER.ink, 0.45), width: 1.1, alpha: 0.5, join: 'round', cap: 'round' });
+      sketchLine(g, pts.slice(2, pts.length - 2), mix(color, WANDERER.ink, 0.6), 0.7, spec.phases[0] + offset * 40);
     }
   }
 
@@ -644,4 +660,95 @@ function seeded(seed: number): () => number {
     s = (s * 1664525 + 1013904223) >>> 0;
     return s / 0x100000000;
   };
+}
+
+/* --------------------------------------------------------- sketch lines */
+
+/** How strong the paper grain shows. */
+const PAPER_ALPHA = 0.42;
+
+/**
+ * Draw a polyline as a pencil stroke: a thin filled ribbon whose width
+ * wanders between about one and two pixels and which wobbles a hair, so the
+ * line reads as drawn by hand and matches the wanderling's cut-out outlines.
+ * `pts` is [x0, y0, x1, y1, ...]; `phase` varies the wobble per line.
+ */
+function sketchLine(g: Graphics, pts: number[], color: number, alpha: number, phase: number): void {
+  const n = pts.length / 2;
+  if (n < 2) return;
+  const top: number[] = [];
+  const bottom: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = pts[i * 2];
+    const y = pts[i * 2 + 1];
+    const u = i * 0.37 + phase;
+    const wobble = Math.sin(u * 1.9) * 0.6 + Math.sin(u * 4.3 + 1.1) * 0.35;
+    const half = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(u * 0.8 + 0.7)) + 0.2 * Math.sin(u * 2.7);
+    top.push(x, y + wobble - half);
+    bottom.unshift(x, y + wobble + half);
+  }
+  g.poly([...top, ...bottom]).fill({ color, alpha });
+}
+
+/** Points along a horizontal line. */
+function straight(x0: number, y: number, x1: number, step: number): number[] {
+  const out: number[] = [];
+  for (let x = x0; x <= x1 + step; x += step) out.push(x, y);
+  return out;
+}
+
+/** Points along a quadratic curve from (x0,y0) via control (cx,cy) to (x1,y1). */
+function quad(x0: number, y0: number, cx: number, cy: number, x1: number, y1: number, n: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const a = (1 - t) * (1 - t);
+    const b = 2 * (1 - t) * t;
+    const c = t * t;
+    out.push(a * x0 + b * cx + c * x1, a * y0 + b * cy + c * y1);
+  }
+  return out;
+}
+
+/**
+ * A tile of paper grain: scattered faint dark fibres and light flecks on a
+ * transparent ground, so it tints neither day nor night, only textures them.
+ */
+function paperTexture(size = 256): Texture {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return Texture.WHITE;
+  const img = ctx.createImageData(size, size);
+  const rng = seeded(99);
+  const d = img.data;
+  for (let i = 0; i < size * size; i++) {
+    const v = rng();
+    const o = i * 4;
+    if (v < 0.2) {
+      d[o] = 70; d[o + 1] = 64; d[o + 2] = 56;
+      d[o + 3] = Math.round(255 * (0.05 + 0.13 * rng()));
+    } else if (v > 0.84) {
+      d[o] = 255; d[o + 1] = 252; d[o + 2] = 244;
+      d[o + 3] = Math.round(255 * (0.05 + 0.12 * rng()));
+    } else {
+      d[o + 3] = 0;
+    }
+  }
+  // A few soft fibres: short faint streaks.
+  ctx.putImageData(img, 0, 0);
+  ctx.strokeStyle = 'rgba(70,64,56,0.07)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 90; i++) {
+    const x = rng() * size;
+    const y = rng() * size;
+    const len = 4 + rng() * 14;
+    const a = rng() * Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+    ctx.stroke();
+  }
+  return Texture.from(canvas);
 }
