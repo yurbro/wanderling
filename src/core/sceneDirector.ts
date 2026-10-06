@@ -106,7 +106,9 @@ export function direct(ws: WorldState): RenderState {
     windLean: windLean(ws.weather?.windSpeed ?? 0),
     // Standing still while resting, once the route is walked, or aboard a train or plane.
     pace: journey && (journey.resting || journey.finished || journey.mode !== 'walk') ? 0 : 1,
-    tint: mix(mix('#FFFFFF', tint, night * 0.55), WEATHER_TONES.landGreyDay, gloom * 0.12),
+    // The figure takes less of the night and the grey than the land, so the cream
+    // body and the red scarf stay readable (session 22).
+    tint: mix(mix('#FFFFFF', tint, night * 0.4), WEATHER_TONES.landGreyDay, gloom * 0.06),
   };
 
   // The land: shaped by the terrain of the current leg, flat sea at the coast.

@@ -14,9 +14,10 @@ import { WeatherPainter } from './weatherLayers';
 const HORIZON = 0.62;
 /**
  * The wanderling's figure unit as a fraction of the screen height. The body is
- * 0.85 of a unit tall, so this puts it at about 8% of the screen (design section 5).
+ * 0.85 of a unit tall, so this puts it at about 9% of the screen (design says
+ * about 8%; Yu asked for a touch bigger in session 22).
  */
-const WANDERLING_HEIGHT = 0.094;
+const WANDERLING_HEIGHT = 0.105;
 /** A new sky or weather eases in over this many seconds instead of jumping. */
 const BLEND_SECONDS = 2;
 /** How fast the ground slides past while the wanderer walks, in px/s. */
