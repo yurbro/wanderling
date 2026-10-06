@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hexToRgb } from '../src/core/color';
 import { skyAt } from '../src/core/palette';
-import { direct, isSleepingHour, windLean } from '../src/core/sceneDirector';
+import { direct, isSleepingHour, leafSeasonTint, windLean } from '../src/core/sceneDirector';
 import { routeFromHome } from '../src/core/geo';
 import { KM_PER_HOUR, advance, locate, startJourney } from '../src/core/journey';
 import { TO_THE_SEA } from '../src/data/routes';
@@ -214,6 +214,47 @@ describe('direct decides what the wanderer carries', () => {
     expect(rs.wanderer.asleep).toBe(true);
     expect(rs.wanderer.pace).toBe(0);
     expect(direct(buildWorldState(noon, LONDON, null)).wanderer.asleep).toBe(false);
+  });
+
+  it('lets the leaf answer rain, sun, cold and heat', () => {
+    const dry = direct(buildWorldState(noon, LONDON, demoWeather('clear', noon))).wanderer.leaf;
+    expect(dry.droop).toBeCloseTo(0, 5);
+    expect(dry.stiff).toBe(0);
+    // Noon in London: the sun is to the south, near the middle, a touch west.
+    expect(Math.abs(dry.toSun)).toBeLessThan(0.3);
+    const wet = direct(buildWorldState(noon, LONDON, demoWeather('rain', noon))).wanderer.leaf;
+    // The big leaf is up as an umbrella in the rain, so the small one stays dry.
+    expect(wet.droop).toBeCloseTo(0, 5);
+    const wetAboard = direct(buildWorldState(noon, LONDON, demoWeather('rain', noon), null)).wanderer.leaf;
+    void wetAboard;
+    const hot = direct(buildWorldState(noon, LONDON, demoWeather('clear', noon, { temperature: 36 }))).wanderer.leaf;
+    expect(hot.droop).toBeGreaterThan(0.4);
+    const cold = direct(buildWorldState(noon, LONDON, demoWeather('clear', noon, { temperature: -5 }))).wanderer.leaf;
+    expect(cold.stiff).toBe(1);
+    const night = direct(buildWorldState(midnight, LONDON, null)).wanderer.leaf;
+    expect(night.droop).toBeCloseTo(0.2, 5);
+    expect(night.toSun).toBe(0);
+    // Morning: the sun is in the east, which is the left of the screen.
+    const morning = new Date(Date.UTC(2026, 5, 21, 7, 30, 0));
+    expect(direct(buildWorldState(morning, LONDON, null)).wanderer.leaf.toSun).toBeLessThan(-0.3);
+  });
+
+  it('colours the leaf by season and hemisphere', () => {
+    const white = 0xffffff;
+    // Mid-July in the north: the painted summer green, so no tint.
+    expect(leafSeasonTint(new Date(Date.UTC(2026, 6, 20)), 51)).toBe(white);
+    // Mid-October in the north: yellower, so the blue channel is held back.
+    const autumn = hexToRgb(leafSeasonTint(new Date(Date.UTC(2026, 9, 20)), 51));
+    expect(autumn.r).toBe(255);
+    expect(autumn.b).toBeLessThan(200);
+    // The same date in the south is spring: fresher green, blue a little back, red a little back.
+    const spring = hexToRgb(leafSeasonTint(new Date(Date.UTC(2026, 9, 20)), -33));
+    expect(spring.g).toBe(255);
+    expect(spring.r).toBeLessThan(255);
+    // Smooth: a day apart changes little.
+    const a = hexToRgb(leafSeasonTint(new Date(Date.UTC(2026, 8, 1)), 51));
+    const b = hexToRgb(leafSeasonTint(new Date(Date.UTC(2026, 8, 2)), 51));
+    expect(Math.abs(a.b - b.b)).toBeLessThan(4);
   });
 
   it('tints the figure darker at night', () => {

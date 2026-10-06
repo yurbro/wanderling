@@ -1,6 +1,6 @@
 import { clamp01, hexToRgb, mix, smoothstep } from './color';
 import { CELESTIAL, LAND, WEATHER_TONES, skyAt } from './palette';
-import type { CelestialPlacement, DayPhase, LegMode, PlaceMarker, RenderState, Terrain, WorldState } from './types';
+import type { CelestialPlacement, DayPhase, LeafState, LegMode, PlaceMarker, RenderState, Terrain, WorldState } from './types';
 import { TERRAIN, landAt } from './journey';
 import { NO_WEATHER, weatherIntensities } from './weather';
 
@@ -105,6 +105,7 @@ export function direct(ws: WorldState): RenderState {
     cold: (temperature !== undefined && temperature < 0) || fx.snow > 0,
     windLean: windLean(ws.weather?.windSpeed ?? 0),
     asleep: isSleepingHour(ws.now),
+    leaf: leafState(ws, fx.rain > 0.05 && travelMode === 'walk', sun),
     // Standing still while resting, once the route is walked, aboard a train or plane, or asleep.
     pace: isSleepingHour(ws.now) || (journey && (journey.resting || journey.finished || journey.mode !== 'walk')) ? 0 : 1,
     // The figure takes less of the night and the grey than the land, so the cream
@@ -158,6 +159,75 @@ export function direct(ws: WorldState): RenderState {
     marker,
     darkInk: luminance(sky.top) > 0.55,
   };
+}
+
+/**
+ * The leaf answers the weather, the sun and the season (design: the leaf is
+ * the piece of "the same sky" the wanderling wears).
+ */
+export function leafState(ws: WorldState, umbrella: boolean, sun: CelestialPlacement): LeafState {
+  const temp = ws.weather?.temperature;
+  const fx = weatherIntensities(ws.weather);
+  // Wet leaves hang, unless it is held up as the umbrella, which keeps the small one dry too.
+  const wet = umbrella ? 0 : smoothstep(0.05, 0.6, fx.rain) * 0.55;
+  const heat = temp !== undefined ? smoothstep(28, 36, temp) * 0.5 : 0;
+  const dark = (1 - smoothstep(-10, -2, ws.sun.altitude)) * 0.2;
+  const droop = clamp01(Math.max(wet, heat) + dark);
+  // Towards the sun, once it is a little way up; the screen's x runs east (left) to west (right).
+  const up = smoothstep(2, 20, ws.sun.altitude);
+  const toSun = sun.visible ? (sun.x - 0.5) * 2 * up : 0;
+  const stiff = temp !== undefined ? 1 - smoothstep(-2, 6, temp) : 0;
+  return { droop, toSun, stiff, tint: leafSeasonTint(ws.now, ws.location.lat) };
+}
+
+/** Leaf colours through the year, in the style guide's muted greens; the painted leaf is LEAF_PAINT. */
+const LEAF_PAINT = '#7E9A8C';
+// A tint can only hold channels back, so each season is written as the paint
+// with some channels lowered: spring greener (less red and blue), autumn
+// yellow-olive (blue well back), winter greyer and a touch darker.
+const LEAF_SEASONS = {
+  spring: '#6C9A78',
+  summer: '#7E9A8C',
+  autumn: '#7E9268',
+  winter: '#6F8A86',
+};
+
+/**
+ * The leaf's tint for the date and hemisphere: a multiplicative colour that
+ * turns the painted grey-green into the season's green. Blends smoothly
+ * between four keyframes (20 April, 20 July, 20 October, 20 January in the
+ * north; six months shifted in the south).
+ */
+export function leafSeasonTint(now: Date, lat: number): number {
+  const start = Date.UTC(now.getUTCFullYear(), 0, 1);
+  let day = (now.getTime() - start) / 86_400_000;
+  if (lat < 0) day += 182.5;
+  const year = 365.25;
+  day = ((day % year) + year) % year;
+  // Keyframes at day of year: winter 20 Jan (19), spring 20 Apr (109), summer 20 Jul (200), autumn 20 Oct (292).
+  const keys: [number, string][] = [
+    [19, LEAF_SEASONS.winter],
+    [109, LEAF_SEASONS.spring],
+    [200, LEAF_SEASONS.summer],
+    [292, LEAF_SEASONS.autumn],
+    [19 + year, LEAF_SEASONS.winter],
+  ];
+  let d = day < 19 ? day + year : day;
+  let color = LEAF_SEASONS.winter as number | string;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const [d0, c0] = keys[i];
+    const [d1, c1] = keys[i + 1];
+    if (d >= d0 && d <= d1) {
+      color = mix(c0, c1, (d - d0) / (d1 - d0));
+      break;
+    }
+  }
+  d = 0;
+  // Tint = season / paint per channel, clamped: white keeps the paint, less than white darkens that channel.
+  const want = hexToRgb(color);
+  const paint = hexToRgb(LEAF_PAINT);
+  const ch = (w: number, p: number): number => Math.round(Math.min(255, (w / p) * 255));
+  return (ch(want.r, paint.r) << 16) | (ch(want.g, paint.g) << 8) | ch(want.b, paint.b);
 }
 
 /** The wanderling sleeps from 2:00 until 4:00 by the person's own clock. */
