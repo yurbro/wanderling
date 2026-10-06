@@ -1,4 +1,4 @@
-import { Assets, Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { Assets, Container, Graphics, MeshRope, Point, Sprite, Texture } from 'pixi.js';
 import { WANDERER } from '../core/palette';
 import type { RenderState, WandererState } from '../core/types';
 
@@ -65,6 +65,11 @@ const SCARF_Y = BODY_TOP + BODY_H * 0.45;
 /** Lantern: anchored at the handle, the glass sits this far down its height. */
 const LANTERN_H = BODY_H * 0.4;
 const LANTERN_GLASS = 0.62;
+/** How many points the scarf tail bends through. */
+const TAIL_POINTS = 9;
+/** How high a boot lifts off the ground mid-stride, in units. */
+const STEP_LIFT = 0.07;
+const STEP_SWING = 0.55;
 
 /** y in trunk space (relative to the pivot) for a y in figure space. */
 const ty = (y: number): number => (y - PIVOT.y) * U;
@@ -110,7 +115,11 @@ export class Wanderer {
   private leaf = new Sprite();
   private eyes = new Graphics();
   private scarf = new Sprite();
-  private scarfTail = new Sprite();
+  /** The scarf tail is a ribbon of points so it can really ripple. */
+  private tail = new Container();
+  private tailRope: MeshRope | null = null;
+  private tailPoints: Point[] = [];
+  private tailTexture: Texture | null = null;
   private leafUmbrella = new Sprite();
   private lantern = new Sprite();
   private breath = new Graphics();
@@ -138,8 +147,14 @@ export class Wanderer {
   private cold = false;
   /** The sprites' scales as fitted by dress(), so pose() can scale relative to them. */
   private leafBase = { x: 1, y: 1 };
-  private tailBase = { x: 1, y: 1 };
   private scarfBase = { x: 1, y: 1 };
+  /** Parts with weight follow the body half a beat late and settle like springs. */
+  private leafSpring = { a: 0, v: 0 };
+  private packSpring = { a: 0, v: 0 };
+  private frontHandSpring = { a: 0, v: 0 };
+  private backHandSpring = { a: 0, v: 0 };
+  private lanternSpring = { a: 0, v: 0 };
+  private lanternLastX = 0;
   /** The renderer clears this while a signpost is near, so pauses never fight an arrival. */
   allowPause = true;
 
@@ -148,7 +163,7 @@ export class Wanderer {
     this.trunk.addChild(
       this.backHand,
       this.backpack,
-      this.scarfTail,
+      this.tail,
       this.body,
       this.leaf,
       this.scarf,
@@ -207,9 +222,9 @@ export class Wanderer {
     this.gestures(dt);
     this.blink(dt);
     this.breathe(dt);
-    // A leisurely 1.5 steps a second.
+    // A dawdling 1.1 steps a second.
     const pace = this.paused ? 0 : this.state.pace;
-    this.phase += dt * Math.PI * 2 * 1.5 * pace;
+    this.phase += dt * Math.PI * 2 * 1.1 * pace;
     this.pose();
   }
 
@@ -238,11 +253,18 @@ export class Wanderer {
     this.scarf.width = BODY_HALF_W * 2 * 1.08 * U;
     this.scarf.height = BODY_H * 0.14 * U;
 
-    // Scarf tail: knotted at its right end, behind the body.
-    this.scarfTail.texture = parts['scarf-tail'];
-    this.scarfTail.anchor.set(0.96, 0.4);
-    this.scarfTail.position.set(-BODY_HALF_W * 0.93 * U, ty(SCARF_Y - 0.005));
-    fit(this.scarfTail, BODY_H * 0.24);
+    // Scarf tail: a rope of points from the knot at the back out to the tip, so
+    // the picture bends along a wave instead of turning as one stiff piece.
+    const tailTex = parts['scarf-tail'];
+    this.tailTexture = tailTex;
+    this.tailPoints = Array.from({ length: TAIL_POINTS }, () => new Point(0, 0));
+    this.tailRope = new MeshRope({ texture: tailTex, points: this.tailPoints });
+    this.tail.removeChildren();
+    this.tail.addChild(this.tailRope);
+    this.tail.position.set(-BODY_HALF_W * 0.93 * U, ty(SCARF_Y - 0.005));
+    const tailScale = (BODY_H * 0.26 * U) / tailTex.height;
+    this.tail.scale.set(tailScale);
+    this.shapeTail(1, 0, 0);
 
     // Backpack: most of it behind the body, flap on top.
     this.backpack.texture = parts.backpack;
@@ -284,7 +306,6 @@ export class Wanderer {
     fit(this.lantern, LANTERN_H);
 
     this.leafBase = { x: this.leaf.scale.x, y: this.leaf.scale.y };
-    this.tailBase = { x: this.scarfTail.scale.x, y: this.scarfTail.scale.y };
     this.scarfBase = { x: this.scarf.scale.x, y: this.scarf.scale.y };
     this.trunk.visible = true;
     this.backLeg.visible = true;
@@ -374,46 +395,71 @@ export class Wanderer {
   private pose(): void {
     const st = this.state;
     if (!st) return;
-    const s = Math.sin(this.phase);
+    const dt = this.lastDt;
     const moving = st.pace > 0 && !this.paused ? 1 : 0;
-    const swing = 0.5 * moving;
-    const ease = Math.min(1, this.lastDt * 5);
+    const ease = Math.min(1, dt * 5);
+    const t = this.time;
 
-    this.frontLeg.rotation = s * swing;
-    this.backLeg.rotation = -s * swing;
+    // Gait: each boot swings forward through the air, then stands while the
+    // ground carries it back. The two are half a cycle apart.
+    const lifts = [0, 0];
+    [this.frontLeg, this.backLeg].forEach((leg, i) => {
+      const ph = this.phase + i * Math.PI;
+      const forward = -Math.sin(ph) * STEP_SWING * moving;
+      const lift = Math.max(0, Math.cos(ph)) * moving;
+      lifts[i] = lift;
+      leg.rotation = forward * 0.6 - lift * 0.25;
+      leg.position.y = (BODY_BOTTOM - 0.03) * U - lift * STEP_LIFT * U;
+      leg.position.x = ((i === 0 ? 1 : -1) * BODY_HALF_W * 0.3 + Math.sin(ph) * 0.11 * moving) * U;
+    });
+    const airborne = Math.max(lifts[0], lifts[1]);
 
-    // The body rises a touch at each stride and rocks with it; walking it leans a little forward.
-    const bob = -Math.abs(s) * 0.025 * U * moving;
+    // The body: a hop with each step, squashing as it lands and stretching as
+    // it rises; a slow breath when standing. Rocks a little with the stride.
+    const bob = -airborne * 0.03 * U;
     this.trunk.y = PIVOT.y * U + bob;
-    // The shade shrinks a touch as the body rises off its stride.
-    this.shadow.scale.set(1 - Math.abs(s) * 0.1 * moving, 1);
+    const stretch = moving ? 1 + 0.035 * (airborne - 0.5) * 2 : 1 + 0.012 * Math.sin(t * 1.6);
+    this.trunk.scale.set(1 - (stretch - 1) * 0.8, stretch);
+    this.shadow.scale.set(1 - airborne * 0.12, 1);
+    this.shadow.alpha = 1 - airborne * 0.25;
     // Gazing: the whole body eases back to look up at the sky. Wind: it leans in.
     const gazeTarget = this.gesture === 'gaze' ? -0.3 : 0;
     this.tilt += (gazeTarget - this.tilt) * ease;
     this.lean += (st.windLean * 0.28 + moving * 0.05 - this.lean) * ease;
-    const rock = moving ? Math.sin(this.phase * 2) * 0.025 : Math.sin(this.time * 0.8) * 0.03;
+    const rock = moving ? Math.sin(this.phase) * 0.03 : Math.sin(t * 0.8) * 0.03;
     this.trunk.rotation = this.tilt + this.lean + rock;
 
     // The leaf: a vane for the real wind, a flutter on top, and it perks up
-    // (stands straighter, a little taller) when something is interesting.
+    // (stands straighter, a little taller) when something is interesting. It
+    // has weight: it follows the body's rocking a beat late and overshoots.
     const perkTarget = this.gesture !== 'none' ? 1 : 0;
     this.perk += (perkTarget - this.perk) * ease;
     const gust = Math.abs(this.wind);
-    const flutter = Math.sin(this.time * (2.2 + gust * 7)) * (0.05 + gust * 0.14 + st.windLean * 0.1);
+    const flutter = Math.sin(t * (2.2 + gust * 7)) * (0.05 + gust * 0.14 + st.windLean * 0.1);
     // In a strong wind the leaf lies back whatever the compass says, as on the pose sheet.
     const vane = this.wind * (0.55 + st.windLean * 0.4) * (1 - this.perk * 0.6) - st.windLean * 0.7;
-    this.leaf.rotation = vane + flutter * (1 - this.perk * 0.5) - this.perk * 0.08;
+    spring(this.leafSpring, vane + flutter * (1 - this.perk * 0.5) - this.perk * 0.08, dt, 40, 5);
+    this.leaf.rotation = this.leafSpring.a - this.trunk.rotation * 1.6;
     const leafScale = 1 + this.perk * 0.12;
     this.leaf.scale.set(this.leafBase.x * leafScale, this.leafBase.y * leafScale);
 
-    // Hands: the leaf umbrella takes the front hand, the lantern whichever is free.
-    let frontRot = -s * swing * 0.6;
-    let backRot = s * swing * 0.6;
-    if (st.umbrella) frontRot = -2.7 + s * 0.03;
+    // The backpack sits loosely: it swings back a little when the body rocks.
+    spring(this.packSpring, 0, dt, 90, 10);
+    this.backpack.rotation = this.packSpring.a - this.trunk.rotation * 0.5;
+
+    // Hands: swing opposite the same-side leg, lagging like pendulums. The
+    // leaf umbrella takes the front hand, the lantern whichever is free.
+    let frontTarget = Math.sin(this.phase) * 0.45 * moving;
+    let backTarget = -Math.sin(this.phase) * 0.45 * moving;
+    if (st.umbrella) frontTarget = -2.7 + Math.sin(this.phase) * 0.03;
     if (st.lantern) {
-      if (st.umbrella) backRot = 0.6 + s * 0.04;
-      else frontRot = -0.55 + s * 0.05;
+      if (st.umbrella) backTarget = 0.6 + Math.sin(this.phase) * 0.04;
+      else frontTarget = -0.55 + Math.sin(this.phase) * 0.05;
     }
+    spring(this.frontHandSpring, frontTarget, dt, 70, 9);
+    spring(this.backHandSpring, backTarget, dt, 70, 9);
+    const frontRot = this.frontHandSpring.a;
+    const backRot = this.backHandSpring.a;
     this.frontHand.rotation = frontRot;
     this.backHand.rotation = backRot;
 
@@ -421,31 +467,61 @@ export class Wanderer {
       const hand = handOf(frontRot);
       this.leafUmbrella.position.set(hand.x * U, hand.y * U);
       // Tip into the wind a little, sway with the stride a little.
-      this.leafUmbrella.rotation = -this.wind * 0.3 + s * 0.02;
+      this.leafUmbrella.rotation = -this.wind * 0.3 + Math.sin(this.phase) * 0.02;
     }
     if (st.lantern) {
       const hand = handOf(st.umbrella ? backRot : frontRot);
-      const rot = Math.sin(this.phase - 0.6) * 0.12 * moving;
+      // The lantern hangs plumb and swings after the hand, not with it.
+      spring(this.lanternSpring, -this.trunk.rotation - (hand.x - this.lanternLastX) * 6, dt, 50, 6);
+      this.lanternLastX = hand.x;
+      const rot = this.lanternSpring.a;
       this.lantern.position.set(hand.x * U, hand.y * U);
       this.lantern.rotation = rot;
       // The glow follows the glass, which hangs below the handle and swings with it.
-      // The hand lives in the trunk, so account for the trunk's offset and rotation.
+      // The hand lives in the trunk, so account for the trunk's offset, scale and rotation.
       const drop = LANTERN_H * LANTERN_GLASS;
       const gx = hand.x + drop * Math.sin(rot);
-      const gy = hand.y + drop * Math.cos(rot);
+      const gy = (hand.y + drop * Math.cos(rot)) * this.trunk.scale.y;
       const c = Math.cos(this.trunk.rotation);
       const sn = Math.sin(this.trunk.rotation);
       const wx = PIVOT.x + gx * c - gy * sn;
       const wy = this.trunk.y / U + gx * sn + gy * c;
       this.glow.position.set(this.feet.x + wx * U * this.scale, this.feet.y + wy * U * this.scale);
     }
-    // The scarf tail streams behind, blown about by the wind; shorter when wrapped tight.
-    this.scarfTail.rotation = Math.sin(this.time * 2.2) * 0.08 + this.wind * 0.4 + st.windLean * 0.3;
-    const tailLen = this.cold ? 0.65 : 1;
-    this.scarfTail.scale.set(this.tailBase.x * tailLen, this.tailBase.y);
+
+    // The scarf tail ripples behind, lifted and stretched by the wind; shorter when wrapped tight.
+    this.shapeTail(this.cold ? 0.65 : 1, this.wind, st.windLean);
+    this.tail.rotation = this.wind * 0.25 + st.windLean * 0.2;
     // Wrapped tight: the band is thicker.
     this.scarf.scale.set(this.scarfBase.x, this.scarfBase.y * (this.cold ? 1.45 : 1));
+
+    // Eyes: a glance up while gazing, and a tiny drift of attention while walking.
+    const look = this.gesture === 'gaze' ? -0.035 : 0;
+    this.eyes.position.set(0.008 * U * Math.sin(t * 0.6) * moving, ty(EYE_Y) + look * U);
   }
+
+  /**
+   * Lay the scarf tail's points along a wave. `len` scales the length, the
+   * wind lifts and straightens it, and the ripple grows towards the tip.
+   * Points run from the tip (texture left) to the knot (texture right).
+   */
+  private shapeTail(len: number, wind: number, windLean: number): void {
+    const tex = this.tailTexture;
+    if (!tex || !this.tailRope) return;
+    const w = tex.width;
+    const h = tex.height;
+    const n = this.tailPoints.length;
+    const t = this.time;
+    const ripple = h * (0.28 + windLean * 0.3 + Math.abs(wind) * 0.2);
+    for (let i = 0; i < n; i++) {
+      const f = 1 - i / (n - 1); // 0 at the knot, 1 at the tip
+      const x = -w * len * f * (1 - windLean * 0.05);
+      const wave = Math.sin(t * 3.2 - f * 3.6) * ripple * Math.pow(f, 1.4);
+      const lift = -windLean * h * 0.9 * f * f;
+      this.tailPoints[i].set(x, h * 0.4 + wave + lift);
+    }
+  }
+
 
   /* ------------------------------------------------------------ drawing */
 
@@ -515,4 +591,11 @@ function handOf(rotation: number): { x: number; y: number } {
     x: SHOULDER.x - ARM_LEN * Math.sin(rotation),
     y: SHOULDER.y - PIVOT.y + ARM_LEN * Math.cos(rotation),
   };
+}
+
+/** One step of a damped spring: `a` chases `target` with stiffness `k` and damping `c`. */
+function spring(sp: { a: number; v: number }, target: number, dt: number, k: number, c: number): void {
+  const step = Math.min(dt, 0.05);
+  sp.v += ((target - sp.a) * k - sp.v * c) * step;
+  sp.a += sp.v * step;
 }
