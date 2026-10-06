@@ -12,8 +12,11 @@ import { WeatherPainter } from './weatherLayers';
 
 /** Fraction of the screen height where the sky meets the land. */
 const HORIZON = 0.62;
-/** The wanderling's body height as a fraction of the screen height. */
-const WANDERLING_HEIGHT = 0.085;
+/**
+ * The wanderling's figure unit as a fraction of the screen height. The body is
+ * 0.85 of a unit tall, so this puts it at about 8% of the screen (design section 5).
+ */
+const WANDERLING_HEIGHT = 0.094;
 /** A new sky or weather eases in over this many seconds instead of jumping. */
 const BLEND_SECONDS = 2;
 /** How fast the ground slides past while the wanderer walks, in px/s. */
@@ -378,7 +381,6 @@ export class SceneRenderer {
     return { x: w * 0.42, feetY: pathY + pathH * 0.6, height: ground * 0.36 };
   }
 
-  /** The wanderling is small: about 9% of the screen, leaf included (design section 5). */
   private placeWanderer(): void {
     const f = this.figure();
     this.wanderer.layout(f.x, f.feetY, this.h * WANDERLING_HEIGHT);
