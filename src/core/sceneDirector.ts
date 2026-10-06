@@ -104,8 +104,9 @@ export function direct(ws: WorldState): RenderState {
     lanternGlow: 1 - smoothstep(-10, -2, alt),
     cold: (temperature !== undefined && temperature < 0) || fx.snow > 0,
     windLean: windLean(ws.weather?.windSpeed ?? 0),
-    // Standing still while resting, once the route is walked, or aboard a train or plane.
-    pace: journey && (journey.resting || journey.finished || journey.mode !== 'walk') ? 0 : 1,
+    asleep: isSleepingHour(ws.now),
+    // Standing still while resting, once the route is walked, aboard a train or plane, or asleep.
+    pace: isSleepingHour(ws.now) || (journey && (journey.resting || journey.finished || journey.mode !== 'walk')) ? 0 : 1,
     // The figure takes less of the night and the grey than the land, so the cream
     // body and the red scarf stay readable (session 22).
     tint: mix(mix('#FFFFFF', tint, night * 0.4), WEATHER_TONES.landGreyDay, gloom * 0.06),
@@ -157,6 +158,12 @@ export function direct(ws: WorldState): RenderState {
     marker,
     darkInk: luminance(sky.top) > 0.55,
   };
+}
+
+/** The wanderling sleeps from 2:00 until 4:00 by the person's own clock. */
+export function isSleepingHour(now: Date): boolean {
+  const h = now.getHours();
+  return h >= 2 && h < 4;
 }
 
 /**

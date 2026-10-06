@@ -36,6 +36,9 @@ import { createMap } from './ui/map';
  */
 const LANG_KEY = 'wanderling.lang';
 
+/** The translator under another name, for scopes where `t` is a Date. */
+const say = t;
+
 async function main(): Promise<void> {
   const root = document.getElementById('app')!;
   const params = new URLSearchParams(window.location.search);
@@ -236,6 +239,7 @@ async function main(): Promise<void> {
 
   let world: WorldState;
   let render: RenderState;
+  let wasAsleep = false;
 
   /** A journey that has barely begun restarts from the new home; an old one carries on. */
   const barelyStarted = (): boolean => journey.km < 2 && journey.arrivals.length <= 1 && !demoJourney;
@@ -305,6 +309,10 @@ async function main(): Promise<void> {
     const position = locate(route, journey, wall);
     world = buildWorldState(t, location, weatherFor(t), position);
     render = direct(world);
+    // Falling asleep: the firefly's one line, once.
+    // A beat later, so it is not covered by the postcard line that may follow an arrival.
+    if (render.wanderer.asleep && !wasAsleep) window.setTimeout(() => hud.setNote(say('hushAsleep'), 15_000), 80);
+    wasAsleep = render.wanderer.asleep;
     renderer.setState(render);
     hud.update(world, render);
     hud.setJourney(describeJourney(position));

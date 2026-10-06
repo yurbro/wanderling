@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hexToRgb } from '../src/core/color';
 import { skyAt } from '../src/core/palette';
-import { direct, windLean } from '../src/core/sceneDirector';
+import { direct, isSleepingHour, windLean } from '../src/core/sceneDirector';
 import { routeFromHome } from '../src/core/geo';
 import { KM_PER_HOUR, advance, locate, startJourney } from '../src/core/journey';
 import { TO_THE_SEA } from '../src/data/routes';
@@ -202,6 +202,18 @@ describe('direct decides what the wanderer carries', () => {
     // Aboard a plane the wind still blows outside, but the lean is a walking posture.
     const rs = direct(buildWorldState(noon, LONDON, demoWeather('thunderstorm', noon)));
     expect(rs.wanderer.windLean).toBeGreaterThan(0.5);
+  });
+
+  it('sleeps from 2 to 4 by the local clock, standing still', () => {
+    expect(isSleepingHour(new Date(2026, 9, 6, 1, 59))).toBe(false);
+    expect(isSleepingHour(new Date(2026, 9, 6, 2, 0))).toBe(true);
+    expect(isSleepingHour(new Date(2026, 9, 6, 3, 30))).toBe(true);
+    expect(isSleepingHour(new Date(2026, 9, 6, 4, 0))).toBe(false);
+    const three = new Date(2026, 9, 6, 3, 0);
+    const rs = direct(buildWorldState(three, LONDON, null));
+    expect(rs.wanderer.asleep).toBe(true);
+    expect(rs.wanderer.pace).toBe(0);
+    expect(direct(buildWorldState(noon, LONDON, null)).wanderer.asleep).toBe(false);
   });
 
   it('tints the figure darker at night', () => {

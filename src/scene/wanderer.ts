@@ -39,7 +39,7 @@ import type { RenderState, WandererState } from '../core/types';
  * at the viewer, a look left and right, a small hop, a shake of the rain off,
  * a stretch, a doze while sitting, and a wave when pressed.
  */
-type Gesture = 'none' | 'gaze' | 'glance' | 'lookaround' | 'hop' | 'shake' | 'stretch' | 'doze' | 'wave';
+type Gesture = 'none' | 'gaze' | 'glance' | 'lookaround' | 'hop' | 'shake' | 'stretch' | 'doze' | 'wave' | 'window' | 'peer' | 'kick';
 /** Eyes: one dot in profile, two dots or a smile facing the viewer, a squint, or closed. */
 type EyeMode = 'side' | 'front' | 'smile' | 'squint' | 'closed';
 /** How long each gesture runs, in seconds. */
@@ -52,6 +52,9 @@ const GESTURE_SECONDS: Record<Exclude<Gesture, 'none'>, number> = {
   stretch: 1.8,
   doze: 2.4,
   wave: 2.6,
+  window: 3.2,
+  peer: 2.2,
+  kick: 1.2,
 };
 /** Gestures during which the walk stops. */
 const STOPPING: ReadonlySet<Gesture> = new Set<Gesture>(['gaze', 'lookaround', 'stretch', 'wave']);
@@ -102,6 +105,13 @@ export function loadParts(): Promise<Record<PartName, Texture>> {
   if (!partsPromise) {
     const base = import.meta.env.BASE_URL;
     partsPromise = Promise.all(PART_NAMES.map((n) => Assets.load<Texture>(`${base}art/${n}.png`))).then((textures) => {
+      // Mipmaps: the pictures are drawn a little smaller than they are, and
+      // without them the edges shimmer and step.
+      for (const tex of textures) {
+        tex.source.autoGenerateMipmaps = true;
+        tex.source.scaleMode = 'linear';
+        tex.source.update();
+      }
       const out = {} as Record<PartName, Texture>;
       PART_NAMES.forEach((n, i) => (out[n] = textures[i]));
       return out;
@@ -144,6 +154,12 @@ export class Wanderer {
   private breath = new Graphics();
   /** A soft patch of shade under the boots, so the figure stands on the ground rather than over it. */
   private shadow = new Graphics();
+  /** A pebble to kick along the path now and then. */
+  private pebble = new Graphics();
+  /** The firefly that keeps watch while the wanderling sleeps; untinted, add above the figure. */
+  readonly firefly = new Graphics();
+  private asleep = false;
+  private mode: 'walk' | 'ride' | 'fly' = 'walk';
 
   private state: WandererState | null = null;
   private wind = 0;
@@ -198,7 +214,9 @@ export class Wanderer {
       this.lantern,
       this.leafUmbrella,
     );
-    this.view.addChild(this.shadow, this.backLeg, this.frontLeg, this.trunk, this.breath);
+    this.view.addChild(this.shadow, this.pebble, this.backLeg, this.frontLeg, this.trunk, this.breath);
+    this.pebble.visible = false;
+    this.firefly.visible = false;
     // Nothing shows until the pictures are in; the eyes wait with them.
     this.trunk.visible = false;
     this.backLeg.visible = false;
@@ -208,6 +226,7 @@ export class Wanderer {
     this.breath.visible = false;
     this.glow.visible = false;
     this.drawBreath();
+    this.pebble.ellipse(0, 0, 0.035 * U, 0.025 * U).fill({ color: 0x9a9a8c }).stroke({ color: WANDERER.ink, width: STROKE * 0.8, alpha: 0.7 });
     this.shadow.ellipse(0.02 * U, 0.01 * U, BODY_HALF_W * 1.05 * U, 0.045 * U).fill({ color: WANDERER.ink, alpha: 0.14 });
     this.drawEyes('side');
     void loadParts().then((parts) => this.dress(parts)).catch((err) => console.warn('[wanderling] parts not loaded', err));
@@ -221,6 +240,11 @@ export class Wanderer {
   /** Turn and wave at whoever is watching (a long press). */
   wave(): void {
     this.begin('wave');
+  }
+
+  /** The signpost has come into view ahead: peer at it (does not stop the walk). */
+  noticeSignpost(): void {
+    if (this.gesture === 'none' && this.state && this.state.pace > 0 && !this.asleep) this.begin('peer');
   }
 
   /** How far into the current gesture, 0 to 1. */
@@ -257,7 +281,11 @@ export class Wanderer {
     this.lantern.visible = w.lantern;
     this.view.tint = w.tint;
     this.cold = w.cold;
-    this.drawGlow(w.lantern ? w.lanternGlow : 0);
+    this.asleep = w.asleep;
+    this.mode = rs.travel.mode;
+    // Asleep, the lantern is put down (out of sight) and the firefly comes.
+    this.lantern.visible = w.lantern && !w.asleep;
+    this.drawGlow(w.lantern && !w.asleep ? w.lanternGlow : 0);
     this.chooseEyes();
     this.pose();
   }
@@ -270,6 +298,7 @@ export class Wanderer {
     this.blink(dt);
     this.breathe(dt);
     this.shiver(dt);
+    this.fly(dt);
     // A dawdling 1.1 steps a second.
     const pace = this.paused ? 0 : this.state.pace;
     this.phase += dt * Math.PI * 2 * 1.1 * pace;
@@ -378,21 +407,28 @@ export class Wanderer {
     this.nextGesture -= dt;
     if (this.nextGesture > 0) return;
     const r = Math.random();
+    if (this.asleep) return;
     if (st.pace <= 0) {
-      // Sitting: a doze, a stretch, or a look around.
-      this.begin(r < 0.45 ? 'doze' : r < 0.7 ? 'stretch' : 'lookaround');
+      // Aboard a train or plane: mostly watching the window go by. Resting: a doze, a stretch, or a look around.
+      if (this.mode !== 'walk') this.begin(r < 0.6 ? 'window' : r < 0.8 ? 'doze' : 'lookaround');
+      else this.begin(r < 0.45 ? 'doze' : r < 0.7 ? 'stretch' : 'lookaround');
       return;
     }
-    if (st.umbrella && r < 0.18) this.begin('shake');
-    else if (r < 0.36) this.begin('hop');
-    else if (r < 0.56 && this.allowPause) this.begin('gaze');
-    else if (r < 0.78 && this.allowPause) this.begin('lookaround');
+    if (st.umbrella && r < 0.15) this.begin('shake');
+    else if (r < 0.3) this.begin('hop');
+    else if (r < 0.42) this.begin('kick');
+    else if (r < 0.6 && this.allowPause) this.begin('gaze');
+    else if (r < 0.8 && this.allowPause) this.begin('lookaround');
     else this.begin('glance');
   }
 
   /** Which eyes to show for the moment. */
   private chooseEyes(): void {
     const st = this.state;
+    if (this.asleep) {
+      this.setEyes('closed');
+      return;
+    }
     switch (this.gesture) {
       case 'glance':
       case 'wave':
@@ -422,6 +458,23 @@ export class Wanderer {
       this.nextBlink = 2.5 + Math.random() * 4;
       if (this.eyeMode === 'side' || this.eyeMode === 'front') this.blinkLeft = 0.12;
     }
+  }
+
+  /** While the wanderling sleeps a firefly drifts about its head, pulsing softly. */
+  private fly(dt: number): void {
+    void dt;
+    const show = this.asleep && this.trunk.visible;
+    this.firefly.visible = show;
+    if (!show) return;
+    const t = this.time;
+    const u = U * this.scale;
+    const x = this.feet.x + (0.25 + 0.4 * Math.sin(t * 0.6) + 0.1 * Math.sin(t * 1.7)) * u;
+    const y = this.feet.y - (0.85 + 0.22 * Math.sin(t * 0.9 + 1) + 0.06 * Math.sin(t * 2.3)) * u;
+    const pulse = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 2.6));
+    this.firefly.clear();
+    this.firefly.circle(x, y, 0.14 * u).fill({ color: WANDERER.glow, alpha: 0.08 * pulse });
+    this.firefly.circle(x, y, 0.07 * u).fill({ color: WANDERER.glow, alpha: 0.18 * pulse });
+    this.firefly.circle(x, y, 0.025 * u).fill({ color: WANDERER.glow, alpha: 0.95 * pulse });
   }
 
   /** Below freezing: now and then a short shiver. */
@@ -481,7 +534,8 @@ export class Wanderer {
 
     // Sitting down when there is nowhere to walk: resting at a place, at the
     // end of a route, or aboard a train or plane. Eased, so it sits and rises.
-    const sitTarget = st.pace <= 0 && g !== 'wave' && g !== 'stretch' ? 1 : 0;
+    const sitTarget = (st.pace <= 0 || this.asleep) && g !== 'wave' && g !== 'stretch' ? 1 : 0;
+    const asleep = this.asleep ? 1 : 0;
     this.sit += (sitTarget - this.sit) * slow;
     const sit = this.sit;
     const stand = 1 - sit;
@@ -492,12 +546,15 @@ export class Wanderer {
     let airborne = hop;
     [this.frontLeg, this.backLeg].forEach((leg, i) => {
       const ph = this.phase + i * Math.PI;
-      const forward = -Math.sin(ph) * STEP_SWING * moving;
+      // A kick: the front boot swings well forward once, then falls back.
+      const kick = g === 'kick' && i === 0 ? Math.sin(Math.PI * Math.min(1, Math.max(0, (k - 0.1) / 0.5))) : 0;
+      const forward = -Math.sin(ph) * STEP_SWING * moving - kick * 1.1;
       const lift = Math.max(Math.max(0, Math.cos(ph)) * moving, hop);
       airborne = Math.max(airborne, lift);
       const side = i === 0 ? 1 : -1;
       // Standing: hanging from the hip. Sitting: stuck out in front, toes up.
       leg.rotation = (forward * 0.6 - lift * 0.25 - hop * 0.4) * stand - 1.35 * sit;
+      if (kick > 0) leg.position.y -= kick * 0.05 * U;
       leg.position.y = (BODY_BOTTOM - 0.03) * U - lift * STEP_LIFT * U * stand + sit * 0.07 * U;
       leg.position.x = (side * BODY_HALF_W * 0.3 + Math.sin(ph) * 0.11 * moving) * U * stand + (0.22 + side * 0.06) * U * sit;
     });
@@ -506,7 +563,7 @@ export class Wanderer {
     // it rises; a slow breath when standing or sitting. Rocks with the stride.
     const bob = -airborne * (0.03 + hop * 0.1) * U;
     this.trunk.y = PIVOT.y * U + bob + sit * 0.075 * U;
-    const breath = 1 + 0.012 * Math.sin(t * 1.6);
+    const breath = 1 + (0.012 + asleep * 0.012) * Math.sin(t * (1.6 - asleep * 0.7));
     let stretch = moving ? 1 + 0.035 * (airborne - 0.5) * 2 : breath;
     if (g === 'stretch') stretch *= 1 + 0.07 * Math.sin(Math.PI * k);
     if (hop > 0) stretch *= 1 + 0.05 * hop;
@@ -524,14 +581,14 @@ export class Wanderer {
     this.lean += (st.windLean * 0.28 + moving * 0.05 - this.lean) * ease;
     const rock = moving ? Math.sin(this.phase) * 0.03 : Math.sin(t * 0.8) * 0.03 * stand;
     const shake = g === 'shake' ? Math.sin(k * Math.PI * 6) * 0.14 * (1 - k) : 0;
-    this.trunk.rotation = this.tilt + this.lean + rock + shake - 0.08 * sit;
+    this.trunk.rotation = this.tilt + this.lean + rock + shake - 0.08 * sit - 0.1 * asleep * sit + (g === 'peer' ? 0.06 * Math.sin(Math.PI * k) : 0);
 
     // The leaf: a vane for the real wind, a flutter on top, and it perks up
     // (stands straighter, a little taller) when something is interesting,
     // droops when dozing. It has weight: it follows the body a beat late.
-    const perkTarget = g === 'gaze' || g === 'lookaround' || g === 'glance' || g === 'wave' ? 1 : 0;
+    const perkTarget = g === 'gaze' || g === 'lookaround' || g === 'glance' || g === 'wave' || g === 'peer' || g === 'window' ? 1 : 0;
     this.perk += (perkTarget - this.perk) * ease;
-    this.droop += ((g === 'doze' ? 1 : 0) - this.droop) * slow;
+    this.droop += ((g === 'doze' || this.asleep ? 1 : 0) - this.droop) * slow;
     const gust = Math.abs(this.wind);
     const flutter = Math.sin(t * (2.2 + gust * 7)) * (0.05 + gust * 0.14 + st.windLean * 0.1);
     // In a strong wind the leaf lies back whatever the compass says, as on the pose sheet.
@@ -606,10 +663,36 @@ export class Wanderer {
     // Wrapped tight: the band is thicker.
     this.scarf.scale.set(this.scarfBase.x, this.scarfBase.y * (this.cold ? 1.45 : 1));
 
+    // The pebble: lies ahead of the front boot, flies off in a little arc when
+    // kicked, bounces once and rolls out of sight.
+    if (g === 'kick') {
+      this.pebble.visible = true;
+      const start = 0.38;
+      if (k < start) {
+        this.pebble.position.set((BODY_HALF_W * 0.3 + 0.2) * U, -0.012 * U);
+        this.pebble.alpha = Math.min(1, k * 6);
+      } else {
+        const f = (k - start) / (1 - start);
+        const x = (BODY_HALF_W * 0.3 + 0.2 + f * 0.9) * U;
+        const arc = f < 0.6 ? Math.sin((f / 0.6) * Math.PI) * 0.16 : Math.sin(((f - 0.6) / 0.4) * Math.PI) * 0.04;
+        this.pebble.position.set(x, -0.012 * U - arc * U);
+        this.pebble.rotation = f * 7;
+        this.pebble.alpha = f > 0.85 ? 1 - (f - 0.85) / 0.15 : 1;
+      }
+    } else {
+      this.pebble.visible = false;
+    }
+
     // Eyes: up while gazing, left then right while looking around, a tiny
     // drift of attention while walking, down a little while sitting.
     let lookX = 0.008 * U * Math.sin(t * 0.6) * moving;
     let lookY = this.gesture === 'gaze' ? -0.035 : sit * 0.012;
+    if (g === 'window' || g === 'peer') {
+      // Out of the window, or at the signpost ahead: forward and a little up.
+      const settle = Math.min(1, k * 5) * Math.min(1, (1 - k) * 5);
+      lookX = 0.03 * U * settle;
+      lookY = -0.015 * settle;
+    }
     if (g === 'lookaround') {
       const side = k < 0.5 ? -1 : 1;
       const settle = Math.min(1, ((k % 0.5) / 0.5) * 6);
