@@ -187,6 +187,13 @@ export interface Postcard {
   terrain: Terrain;
   /** Arrival time, milliseconds since the epoch. */
   at: number;
+  /**
+   * When the card reaches the person: hours to days after `at`, the farther
+   * from home the slower (slow post, decisions.md section 7). Until then it
+   * is "in the post" and stays out of the album. Cards from before slow post
+   * have no `deliverAt` and count as delivered.
+   */
+  deliverAt?: number;
   /** The wanderer's line. */
   note: string;
   /** Weather at the moment of arrival, when known. */

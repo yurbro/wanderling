@@ -33,6 +33,7 @@ export function isPostcard(v: unknown): v is Postcard {
     str(c.placeName) &&
     str(c.terrain) &&
     num(c.at) &&
+    (c.deliverAt === undefined || num(c.deliverAt)) &&
     str(c.note) &&
     (c.weather === null || (!!c.weather && typeof c.weather === 'object')) &&
     !!colors &&

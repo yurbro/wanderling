@@ -64,16 +64,34 @@ describe('advance', () => {
 
   it('arrives at the exact moment and then rests', () => {
     const s = startJourney(ROUTE, T0);
-    const legHours = 8 / KM_PER_HOUR; // 2 h
-    const { state, arrived } = advance(ROUTE, s, T0 + 3 * H);
+    const legHours = 8 / KM_PER_HOUR;
+    const { state, arrived } = advance(ROUTE, s, T0 + (legHours + 1) * H);
     expect(arrived.map((p) => p.id)).toEqual(['b']);
     expect(state.arrivals[1]).toEqual({ placeId: 'b', at: T0 + legHours * H });
     expect(state.km).toBe(8);
     expect(state.restingUntil).toBe(T0 + legHours * H + REST_MS);
-    const pos = locate(ROUTE, state, T0 + 3 * H);
+    const pos = locate(ROUTE, state, T0 + (legHours + 1) * H);
     expect(pos.resting).toBe(true);
     expect(pos.from.id).toBe('b');
     expect(describeJourney(pos)).toBe('Resting in Bravo');
+  });
+
+  it('carries on from the saved kilometre when the pace changes (D10 migration)', () => {
+    // A journey saved by an older build that walked 6 km/h and rested 3 h:
+    // mid-leg, 5.5 km along, last checkpoint an hour after setting out.
+    const saved = { ...startJourney(ROUTE, T0), km: 5.5, updatedAt: T0 + 1 * H };
+    const later = advance(ROUTE, saved, T0 + 2 * H);
+    // No rewind, no skipped place: just one more hour at today's pace.
+    expect(later.state.km).toBeCloseTo(5.5 + KM_PER_HOUR, 6);
+    expect(later.arrived).toEqual([]);
+    expect(later.state.arrivals).toHaveLength(1);
+    // A rest saved under the old 3 h rule is honoured as saved, then walking resumes.
+    const oldRest = T0 + 10 * H + 3 * H;
+    const resting = { ...saved, km: 8, arrivals: [...saved.arrivals, { placeId: 'b', at: T0 + 10 * H }], restingUntil: oldRest, updatedAt: T0 + 11 * H };
+    expect(locate(ROUTE, resting, T0 + 12 * H).resting).toBe(true);
+    const walking = advance(ROUTE, resting, oldRest + 1 * H);
+    expect(walking.state.km).toBeCloseTo(8 + KM_PER_HOUR, 6);
+    expect(walking.state.restingUntil).toBeNull();
   });
 
   it('sets off again after the rest and reaches the end', () => {

@@ -57,6 +57,8 @@ const DICT: Dict = {
   leftWithSand: { en: 'Left {name} with sand still in my boots.', zh: '靴子里还有沙，就离开了{name}。' },
   // Album
   close: { en: 'Close', zh: '关闭' },
+  postcardPosted: { en: 'A postcard is in the post. It will take a while.', zh: '他寄了一张明信片，在路上。' },
+  postcardArrived: { en: 'A postcard has arrived.', zh: '一张明信片到了。' },
   noPostcards: { en: 'No postcards yet. The first one arrives with the first place.', zh: '还没有明信片。到第一站就会收到。' },
   morning: { en: 'morning', zh: '早上' },
   afternoon: { en: 'afternoon', zh: '下午' },

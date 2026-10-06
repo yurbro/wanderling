@@ -247,8 +247,9 @@ describe('direct follows the journey', () => {
   });
 
   it('stands still while resting, with the sea in view at the coast', () => {
-    const s = advance(route, startJourney(route, t0), t0 + 3 * 3_600_000).state;
-    const pos = locate(route, s, t0 + 3 * 3_600_000);
+    const t1 = t0 + (8 / KM_PER_HOUR + 1) * 3_600_000;
+    const s = advance(route, startJourney(route, t0), t1).state;
+    const pos = locate(route, s, t1);
     expect(pos.resting).toBe(true);
     const rs = direct(buildWorldState(noon, LONDON, null, pos));
     expect(rs.wanderer.pace).toBe(0);
