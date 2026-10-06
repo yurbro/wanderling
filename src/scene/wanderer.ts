@@ -34,8 +34,27 @@ import type { RenderState, WandererState } from '../core/types';
  * both eyes, bent into a smile.
  */
 
-type Gesture = 'none' | 'gaze' | 'glance';
-type EyeMode = 'side' | 'front' | 'squint';
+/**
+ * Little things the wanderling does on its own: a look up at the sky, a smile
+ * at the viewer, a look left and right, a small hop, a shake of the rain off,
+ * a stretch, a doze while sitting, and a wave when pressed.
+ */
+type Gesture = 'none' | 'gaze' | 'glance' | 'lookaround' | 'hop' | 'shake' | 'stretch' | 'doze' | 'wave';
+/** Eyes: one dot in profile, two dots or a smile facing the viewer, a squint, or closed. */
+type EyeMode = 'side' | 'front' | 'smile' | 'squint' | 'closed';
+/** How long each gesture runs, in seconds. */
+const GESTURE_SECONDS: Record<Exclude<Gesture, 'none'>, number> = {
+  gaze: 4,
+  glance: 2,
+  lookaround: 2.6,
+  hop: 0.65,
+  shake: 0.8,
+  stretch: 1.8,
+  doze: 2.4,
+  wave: 2.6,
+};
+/** Gestures during which the walk stops. */
+const STOPPING: ReadonlySet<Gesture> = new Set<Gesture>(['gaze', 'lookaround', 'stretch', 'wave']);
 
 const U = 100;
 /** Body height in units; the boots take the rest below it. */
@@ -134,7 +153,14 @@ export class Wanderer {
   private scale = 1;
   private gesture: Gesture = 'none';
   private gestureLeft = 0;
-  private nextGesture = 18;
+  private gestureLength = 1;
+  private nextGesture = 12;
+  /** 0 standing, 1 sat down on the path (eased). */
+  private sit = 0;
+  /** Leaf drooping while dozing (eased). */
+  private droop = 0;
+  private shiverLeft = 0;
+  private nextShiver = 5;
   private tilt = 0;
   private lean = 0;
   private perk = 0;
@@ -187,9 +213,30 @@ export class Wanderer {
     void loadParts().then((parts) => this.dress(parts)).catch((err) => console.warn('[wanderling] parts not loaded', err));
   }
 
-  /** True while the wanderling has stopped to look at the sky. */
+  /** True while the wanderling has stopped walking for a gesture. */
   get paused(): boolean {
-    return this.gesture === 'gaze';
+    return STOPPING.has(this.gesture);
+  }
+
+  /** Turn and wave at whoever is watching (a long press). */
+  wave(): void {
+    this.begin('wave');
+  }
+
+  /** How far into the current gesture, 0 to 1. */
+  private get progress(): number {
+    return this.gesture === 'none' ? 0 : 1 - Math.max(0, this.gestureLeft) / this.gestureLength;
+  }
+
+  /** Start a gesture now (also used by the demo and screenshots). */
+  begin(g: Exclude<Gesture, 'none'>): void {
+    this.gesture = g;
+    this.gestureLength = GESTURE_SECONDS[g];
+    this.gestureLeft = this.gestureLength;
+    // A shake throws the leaf about; a hop flicks it.
+    if (g === 'shake') this.leafSpring.v += 9;
+    if (g === 'hop') this.leafSpring.v -= 3;
+    this.chooseEyes();
   }
 
   /** Place the boots at (x, groundY) and scale the figure to `height` pixels per unit. */
@@ -222,6 +269,7 @@ export class Wanderer {
     this.gestures(dt);
     this.blink(dt);
     this.breathe(dt);
+    this.shiver(dt);
     // A dawdling 1.1 steps a second.
     const pace = this.paused ? 0 : this.state.pace;
     this.phase += dt * Math.PI * 2 * 1.1 * pace;
@@ -315,7 +363,7 @@ export class Wanderer {
 
   /* ----------------------------------------------------------- gestures */
 
-  /** Every so often while walking: a few seconds looking up, or a look at the viewer. */
+  /** Every so often, something small: which one depends on whether it is walking, sitting, wet or cold. */
   private gestures(dt: number): void {
     const st = this.state!;
     if (this.gesture !== 'none') {
@@ -323,32 +371,46 @@ export class Wanderer {
       if (this.gestureLeft <= 0) {
         this.gesture = 'none';
         this.chooseEyes();
-        this.nextGesture = 35 + Math.random() * 50;
+        this.nextGesture = 9 + Math.random() * 16;
       }
       return;
     }
-    if (st.pace <= 0) return;
     this.nextGesture -= dt;
     if (this.nextGesture > 0) return;
-    if (Math.random() < 0.55 && this.allowPause) {
-      this.gesture = 'gaze';
-      this.gestureLeft = 3 + Math.random() * 2;
-    } else {
-      this.gesture = 'glance';
-      this.gestureLeft = 1.6 + Math.random() * 0.6;
+    const r = Math.random();
+    if (st.pace <= 0) {
+      // Sitting: a doze, a stretch, or a look around.
+      this.begin(r < 0.45 ? 'doze' : r < 0.7 ? 'stretch' : 'lookaround');
+      return;
     }
-    this.chooseEyes();
+    if (st.umbrella && r < 0.18) this.begin('shake');
+    else if (r < 0.36) this.begin('hop');
+    else if (r < 0.56 && this.allowPause) this.begin('gaze');
+    else if (r < 0.78 && this.allowPause) this.begin('lookaround');
+    else this.begin('glance');
   }
 
-  /** Which eyes to show: a smile for the viewer, a squint in a gale, else one dot in profile. */
+  /** Which eyes to show for the moment. */
   private chooseEyes(): void {
     const st = this.state;
-    if (this.gesture === 'glance') this.setEyes('front');
-    else if (st && st.windLean > 0.6) this.setEyes('squint');
-    else this.setEyes('side');
+    switch (this.gesture) {
+      case 'glance':
+      case 'wave':
+        this.setEyes('smile');
+        return;
+      case 'lookaround':
+        this.setEyes('front');
+        return;
+      case 'stretch':
+      case 'doze':
+        this.setEyes('closed');
+        return;
+      default:
+        this.setEyes(st && st.windLean > 0.6 ? 'squint' : 'side');
+    }
   }
 
-  /** A quick blink every few seconds; the smile and the squint do not blink. */
+  /** A quick blink every few seconds; smiles, squints and closed eyes do not blink. */
   private blink(dt: number): void {
     if (this.blinkLeft > 0) {
       this.blinkLeft -= dt;
@@ -358,7 +420,21 @@ export class Wanderer {
     this.nextBlink -= dt;
     if (this.nextBlink <= 0) {
       this.nextBlink = 2.5 + Math.random() * 4;
-      if (this.eyeMode === 'side') this.blinkLeft = 0.12;
+      if (this.eyeMode === 'side' || this.eyeMode === 'front') this.blinkLeft = 0.12;
+    }
+  }
+
+  /** Below freezing: now and then a short shiver. */
+  private shiver(dt: number): void {
+    if (this.shiverLeft > 0) {
+      this.shiverLeft -= dt;
+      return;
+    }
+    if (!this.cold) return;
+    this.nextShiver -= dt;
+    if (this.nextShiver <= 0) {
+      this.nextShiver = 5 + Math.random() * 5;
+      this.shiverLeft = 0.6;
     }
   }
 
@@ -396,65 +472,99 @@ export class Wanderer {
     const st = this.state;
     if (!st) return;
     const dt = this.lastDt;
-    const moving = st.pace > 0 && !this.paused ? 1 : 0;
     const ease = Math.min(1, dt * 5);
+    const slow = Math.min(1, dt * 3);
     const t = this.time;
+    const g = this.gesture;
+    const k = this.progress;
+    const moving = st.pace > 0 && !this.paused ? 1 : 0;
+
+    // Sitting down when there is nowhere to walk: resting at a place, at the
+    // end of a route, or aboard a train or plane. Eased, so it sits and rises.
+    const sitTarget = st.pace <= 0 && g !== 'wave' && g !== 'stretch' ? 1 : 0;
+    this.sit += (sitTarget - this.sit) * slow;
+    const sit = this.sit;
+    const stand = 1 - sit;
 
     // Gait: each boot swings forward through the air, then stands while the
-    // ground carries it back. The two are half a cycle apart.
-    const lifts = [0, 0];
+    // ground carries it back. The two are half a cycle apart. A hop lifts both.
+    const hop = g === 'hop' ? Math.sin(Math.PI * k) : 0;
+    let airborne = hop;
     [this.frontLeg, this.backLeg].forEach((leg, i) => {
       const ph = this.phase + i * Math.PI;
       const forward = -Math.sin(ph) * STEP_SWING * moving;
-      const lift = Math.max(0, Math.cos(ph)) * moving;
-      lifts[i] = lift;
-      leg.rotation = forward * 0.6 - lift * 0.25;
-      leg.position.y = (BODY_BOTTOM - 0.03) * U - lift * STEP_LIFT * U;
-      leg.position.x = ((i === 0 ? 1 : -1) * BODY_HALF_W * 0.3 + Math.sin(ph) * 0.11 * moving) * U;
+      const lift = Math.max(Math.max(0, Math.cos(ph)) * moving, hop);
+      airborne = Math.max(airborne, lift);
+      const side = i === 0 ? 1 : -1;
+      // Standing: hanging from the hip. Sitting: stuck out in front, toes up.
+      leg.rotation = (forward * 0.6 - lift * 0.25 - hop * 0.4) * stand - 1.35 * sit;
+      leg.position.y = (BODY_BOTTOM - 0.03) * U - lift * STEP_LIFT * U * stand + sit * 0.07 * U;
+      leg.position.x = (side * BODY_HALF_W * 0.3 + Math.sin(ph) * 0.11 * moving) * U * stand + (0.22 + side * 0.06) * U * sit;
     });
-    const airborne = Math.max(lifts[0], lifts[1]);
 
     // The body: a hop with each step, squashing as it lands and stretching as
-    // it rises; a slow breath when standing. Rocks a little with the stride.
-    const bob = -airborne * 0.03 * U;
-    this.trunk.y = PIVOT.y * U + bob;
-    const stretch = moving ? 1 + 0.035 * (airborne - 0.5) * 2 : 1 + 0.012 * Math.sin(t * 1.6);
+    // it rises; a slow breath when standing or sitting. Rocks with the stride.
+    const bob = -airborne * (0.03 + hop * 0.1) * U;
+    this.trunk.y = PIVOT.y * U + bob + sit * 0.075 * U;
+    const breath = 1 + 0.012 * Math.sin(t * 1.6);
+    let stretch = moving ? 1 + 0.035 * (airborne - 0.5) * 2 : breath;
+    if (g === 'stretch') stretch *= 1 + 0.07 * Math.sin(Math.PI * k);
+    if (hop > 0) stretch *= 1 + 0.05 * hop;
     this.trunk.scale.set(1 - (stretch - 1) * 0.8, stretch);
-    this.shadow.scale.set(1 - airborne * 0.12, 1);
-    this.shadow.alpha = 1 - airborne * 0.25;
+    this.shadow.scale.set((1 - airborne * 0.12) * (1 + sit * 0.3), 1);
+    this.shadow.alpha = 1 - airborne * 0.3;
+    // A shiver in the cold: a quick side to side.
+    this.trunk.x = PIVOT.x * U + (this.shiverLeft > 0 ? Math.sin(t * 48) * 0.012 * U : 0);
+
     // Gazing: the whole body eases back to look up at the sky. Wind: it leans in.
-    const gazeTarget = this.gesture === 'gaze' ? -0.3 : 0;
-    this.tilt += (gazeTarget - this.tilt) * ease;
+    // Sitting: leans back on the pack. Waving: leans towards the viewer a touch.
+    let tiltTarget = g === 'gaze' ? -0.3 : 0;
+    if (g === 'wave') tiltTarget = -0.08;
+    this.tilt += (tiltTarget - this.tilt) * ease;
     this.lean += (st.windLean * 0.28 + moving * 0.05 - this.lean) * ease;
-    const rock = moving ? Math.sin(this.phase) * 0.03 : Math.sin(t * 0.8) * 0.03;
-    this.trunk.rotation = this.tilt + this.lean + rock;
+    const rock = moving ? Math.sin(this.phase) * 0.03 : Math.sin(t * 0.8) * 0.03 * stand;
+    const shake = g === 'shake' ? Math.sin(k * Math.PI * 6) * 0.14 * (1 - k) : 0;
+    this.trunk.rotation = this.tilt + this.lean + rock + shake - 0.08 * sit;
 
     // The leaf: a vane for the real wind, a flutter on top, and it perks up
-    // (stands straighter, a little taller) when something is interesting. It
-    // has weight: it follows the body's rocking a beat late and overshoots.
-    const perkTarget = this.gesture !== 'none' ? 1 : 0;
+    // (stands straighter, a little taller) when something is interesting,
+    // droops when dozing. It has weight: it follows the body a beat late.
+    const perkTarget = g === 'gaze' || g === 'lookaround' || g === 'glance' || g === 'wave' ? 1 : 0;
     this.perk += (perkTarget - this.perk) * ease;
+    this.droop += ((g === 'doze' ? 1 : 0) - this.droop) * slow;
     const gust = Math.abs(this.wind);
     const flutter = Math.sin(t * (2.2 + gust * 7)) * (0.05 + gust * 0.14 + st.windLean * 0.1);
     // In a strong wind the leaf lies back whatever the compass says, as on the pose sheet.
     const vane = this.wind * (0.55 + st.windLean * 0.4) * (1 - this.perk * 0.6) - st.windLean * 0.7;
-    spring(this.leafSpring, vane + flutter * (1 - this.perk * 0.5) - this.perk * 0.08, dt, 40, 5);
+    spring(this.leafSpring, vane + flutter * (1 - this.perk * 0.5) - this.perk * 0.08 + this.droop * 0.5, dt, 40, 5);
     this.leaf.rotation = this.leafSpring.a - this.trunk.rotation * 1.6;
-    const leafScale = 1 + this.perk * 0.12;
+    const leafScale = 1 + this.perk * 0.12 - this.droop * 0.06;
     this.leaf.scale.set(this.leafBase.x * leafScale, this.leafBase.y * leafScale);
 
     // The backpack sits loosely: it swings back a little when the body rocks.
     spring(this.packSpring, 0, dt, 90, 10);
     this.backpack.rotation = this.packSpring.a - this.trunk.rotation * 0.5;
 
-    // Hands: swing opposite the same-side leg, lagging like pendulums. The
+    // Hands: swing opposite the same-side leg, lagging like pendulums; rest
+    // when sitting; both up for a stretch; one up and waving for a wave. The
     // leaf umbrella takes the front hand, the lantern whichever is free.
     let frontTarget = Math.sin(this.phase) * 0.45 * moving;
     let backTarget = -Math.sin(this.phase) * 0.45 * moving;
+    if (g === 'stretch') {
+      const up = Math.sin(Math.PI * k);
+      frontTarget = -2.6 * up;
+      backTarget = 2.6 * up;
+    }
     if (st.umbrella) frontTarget = -2.7 + Math.sin(this.phase) * 0.03;
     if (st.lantern) {
       if (st.umbrella) backTarget = 0.6 + Math.sin(this.phase) * 0.04;
       else frontTarget = -0.55 + Math.sin(this.phase) * 0.05;
+    }
+    if (g === 'wave') {
+      const up = Math.min(1, k * 4) * Math.min(1, (1 - k) * 4);
+      const waving = -2.4 * up + Math.sin(t * 13) * 0.35 * up;
+      if (st.umbrella) backTarget = -waving;
+      else frontTarget = waving;
     }
     spring(this.frontHandSpring, frontTarget, dt, 70, 9);
     spring(this.backHandSpring, backTarget, dt, 70, 9);
@@ -466,11 +576,12 @@ export class Wanderer {
     if (st.umbrella) {
       const hand = handOf(frontRot);
       this.leafUmbrella.position.set(hand.x * U, hand.y * U);
-      // Tip into the wind a little, sway with the stride a little.
-      this.leafUmbrella.rotation = -this.wind * 0.3 + Math.sin(this.phase) * 0.02;
+      // Tip into the wind a little, sway with the stride a little, flap when shaken.
+      this.leafUmbrella.rotation = -this.wind * 0.3 + Math.sin(this.phase) * 0.02 + shake * 0.6;
     }
     if (st.lantern) {
-      const hand = handOf(st.umbrella ? backRot : frontRot);
+      // The lantern moves to the back hand while the front one waves.
+      const hand = handOf(st.umbrella || g === 'wave' ? backRot : frontRot);
       // The lantern hangs plumb and swings after the hand, not with it.
       spring(this.lanternSpring, -this.trunk.rotation - (hand.x - this.lanternLastX) * 6, dt, 50, 6);
       this.lanternLastX = hand.x;
@@ -491,13 +602,21 @@ export class Wanderer {
 
     // The scarf tail ripples behind, lifted and stretched by the wind; shorter when wrapped tight.
     this.shapeTail(this.cold ? 0.65 : 1, this.wind, st.windLean);
-    this.tail.rotation = this.wind * 0.25 + st.windLean * 0.2;
+    this.tail.rotation = this.wind * 0.25 + st.windLean * 0.2 + sit * 0.3;
     // Wrapped tight: the band is thicker.
     this.scarf.scale.set(this.scarfBase.x, this.scarfBase.y * (this.cold ? 1.45 : 1));
 
-    // Eyes: a glance up while gazing, and a tiny drift of attention while walking.
-    const look = this.gesture === 'gaze' ? -0.035 : 0;
-    this.eyes.position.set(0.008 * U * Math.sin(t * 0.6) * moving, ty(EYE_Y) + look * U);
+    // Eyes: up while gazing, left then right while looking around, a tiny
+    // drift of attention while walking, down a little while sitting.
+    let lookX = 0.008 * U * Math.sin(t * 0.6) * moving;
+    let lookY = this.gesture === 'gaze' ? -0.035 : sit * 0.012;
+    if (g === 'lookaround') {
+      const side = k < 0.5 ? -1 : 1;
+      const settle = Math.min(1, ((k % 0.5) / 0.5) * 6);
+      lookX = side * 0.035 * U * settle;
+      lookY = -0.005;
+    }
+    this.eyes.position.set(lookX, ty(EYE_Y) + lookY * U);
   }
 
   /**
@@ -532,7 +651,7 @@ export class Wanderer {
     this.breath.circle(-0.03 * U, -0.04 * U, 0.035 * U).fill({ color: WANDERER.breath });
   }
 
-  /** Two ink dots. From the side one shows; turned to the viewer both do, bent into a smile; in a gale they squint. */
+  /** Two ink dots. From the side one shows; turned to the viewer both do, as dots or a smile; a squint in a gale; closed when dozing. */
   private drawEyes(mode: EyeMode): void {
     const ink = WANDERER.ink;
     const e = this.eyes;
@@ -552,6 +671,20 @@ export class Wanderer {
           .lineTo(x * U, ty(EYE_Y))
           .lineTo((x - r) * U, ty(EYE_Y) + r * U)
           .stroke({ color: ink, width: STROKE * 1.6, cap: 'round', join: 'round' });
+      }
+      return;
+    }
+    if (mode === 'front') {
+      for (const p of EYE_FRONT) e.circle(p.x * U, ty(p.y), EYE_R * U).fill({ color: ink });
+      return;
+    }
+    if (mode === 'closed') {
+      // Two short, gently drooping arcs at eye height; not a mouth-like curve.
+      const r = EYE_R * 1.4;
+      for (const x of [EYE_SIDE.x, EYE_SIDE.x - BODY_HALF_W * 0.45]) {
+        e.moveTo((x - r) * U, ty(EYE_Y) - r * 0.2 * U)
+          .quadraticCurveTo(x * U, ty(EYE_Y) + r * 0.5 * U, (x + r) * U, ty(EYE_Y) - r * 0.2 * U)
+          .stroke({ color: ink, width: STROKE * 1.6, cap: 'round' });
       }
       return;
     }

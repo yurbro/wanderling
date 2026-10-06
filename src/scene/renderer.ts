@@ -1,4 +1,4 @@
-import { Application, Container, FillGradient, Graphics, Texture, TilingSprite } from 'pixi.js';
+import { Application, Container, FillGradient, Graphics } from 'pixi.js';
 import { mix } from '../core/color';
 import { CELESTIAL } from '../core/palette';
 import type { RenderState } from '../core/types';
@@ -95,8 +95,6 @@ export class SceneRenderer {
   private sea = new SeaPainter();
   private transport = new TransportPainter();
   private weather = new WeatherPainter();
-  /** Paper grain over the whole picture, so sky, land and the wanderling sit on one sheet. */
-  private paper: TilingSprite | null = null;
   /** Hill wave phase offsets, in fractions of the screen width. */
   private scroll = { far: 0, mid: 0, near: 0 };
   private state: RenderState | null = null;
@@ -155,11 +153,21 @@ export class SceneRenderer {
       this.transport.front,
       this.weather.flash,
     );
-    this.paper = new TilingSprite({ texture: paperTexture(), width: 1, height: 1 });
-    this.paper.alpha = PAPER_ALPHA;
-    // Blotches a few dozen pixels across: paper, not grain.
-    this.paper.tileScale.set(1.4);
-    this.app.stage.addChild(this.paper);
+    // A long press on the wanderling makes it turn and wave.
+    this.wanderer.view.eventMode = 'static';
+    this.wanderer.view.cursor = 'pointer';
+    let pressTimer: number | null = null;
+    const cancel = (): void => {
+      if (pressTimer !== null) window.clearTimeout(pressTimer);
+      pressTimer = null;
+    };
+    this.wanderer.view.on('pointerdown', () => {
+      cancel();
+      pressTimer = window.setTimeout(() => this.wanderer.wave(), 450);
+    });
+    this.wanderer.view.on('pointerup', cancel);
+    this.wanderer.view.on('pointerupoutside', cancel);
+    this.wanderer.view.on('pointercancel', cancel);
 
     this.app.renderer.on('resize', () => this.layout());
     this.layout();
@@ -208,10 +216,6 @@ export class SceneRenderer {
   private layout(): void {
     this.w = Math.max(1, this.app.screen.width);
     this.h = Math.max(1, this.app.screen.height);
-    if (this.paper) {
-      this.paper.width = this.w;
-      this.paper.height = this.h;
-    }
     this.makeStars();
     this.makeDetails();
     this.placeWanderer();
@@ -664,9 +668,6 @@ function seeded(seed: number): () => number {
 
 /* --------------------------------------------------------- sketch lines */
 
-/** How strong the paper grain shows. */
-const PAPER_ALPHA = 0.55;
-
 /**
  * Draw a polyline as a pencil stroke: a thin filled ribbon whose width
  * wanders between about one and two pixels and which wobbles a hair, so the
@@ -708,41 +709,4 @@ function quad(x0: number, y0: number, cx: number, cy: number, x1: number, y1: nu
     out.push(a * x0 + b * cx + c * x1, a * y0 + b * cy + c * y1);
   }
   return out;
-}
-
-/**
- * A tile of soft paper mottling: large faint blotches, light and dark, like
- * watercolour pooling on cold-pressed paper. No per-pixel noise, which reads
- * as camera grain on a phone. Blotches are drawn wrapped so the tile repeats
- * without seams.
- */
-function paperTexture(size = 256): Texture {
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return Texture.WHITE;
-  const rng = seeded(99);
-  const blot = (x: number, y: number, r: number, color: string, alpha: number): void => {
-    for (const dx of [-size, 0, size]) {
-      for (const dy of [-size, 0, size]) {
-        const g = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
-        g.addColorStop(0, color.replace('A', alpha.toFixed(3)));
-        g.addColorStop(1, color.replace('A', '0'));
-        ctx.fillStyle = g;
-        ctx.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
-      }
-    }
-  };
-  for (let i = 0; i < 70; i++) {
-    const dark = rng() < 0.55;
-    blot(
-      rng() * size,
-      rng() * size,
-      18 + rng() * 48,
-      dark ? 'rgba(70,64,56,A)' : 'rgba(255,250,240,A)',
-      (dark ? 0.05 : 0.07) + rng() * 0.05,
-    );
-  }
-  return Texture.from(canvas);
 }
