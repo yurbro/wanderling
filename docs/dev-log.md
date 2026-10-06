@@ -469,8 +469,9 @@
   - 旧测试里 5 处写死了「6 公里每小时」的小时数，改成按常量算。测试 129 个（新增 7 个）。
 - 产出：新 PR。
 - 注意：Yu 手机上的旅程会从现在的位置开始慢下来，当前这一段会比之前预计的久很多，这是设计想要的。因为慢递，打开应用的第一张明信片（出发地）也要等几小时才到。HUD 的「还有 X 公里」按 decisions.md 第 7 节暂时保留。
-- 下一步：路线图第 4 项，信箱与信件引擎 v0。
-- Yu 的作业：合并 PR；打开 https://yurbro.github.io/wanderling/ 看「还有 X 公里」是不是走得慢了；试 `?km=13` 看「在路上」的提示，`?km=13&postcards=now` 看立刻送达。
+- 会话 22 下半场（画风）：Yu 觉得代码画的旅人不如参考图好看。给了三条路：代码模仿手绘感、整张贴图、部件贴图；Yu 选了部件贴图。记录在 `docs/design/art/README.md`（含部件清单和生图提示词）和路线图新增的 3b 项，这条决定要在下次 Cowork 评审回写到 decisions.md 第 5 节。顺手做了两处微调：旅人从屏幕高度的 8% 放大到约 9%；夜晚和阴天对他的套色减弱，米白身体和红围巾更清楚。
+- 下一步：Yu 先去生成部件表；部件表到了就做 3b，没到就做路线图第 4 项，信箱与信件引擎 v0。
+- Yu 的作业：合并 PR；按 `docs/design/art/README.md` 末尾的提示词生成部件表 `character-wanderling-parts.png` 上传；打开 https://yurbro.github.io/wanderling/ 看「还有 X 公里」是不是走得慢了；试 `?km=13` 看「在路上」的提示，`?km=13&postcards=now` 看立刻送达。
 
 ## 停车场（MVP 之外的想法）
 
@@ -493,5 +494,5 @@
 1. 读 `CLAUDE.md`、`docs/design/decisions.md`、`docs/roadmap.md` 与本文件；`git fetch origin main` 看会话 22 的 PR 是否已合并；没合并就先提醒 Yu。
 2. `npm install`，`npm test`，确认 129 个测试通过。
 3. 先处理 Yu 的反馈。
-4. 本次目标：路线图第 4 项，信箱与信件引擎 v0（decisions.md 第 8 节）。纯逻辑引擎加测试，文本放数据文件，红线检查脚本接进 `npm test`，HUD 加「信」按钮。
+4. 本次目标：如果 Yu 上传了 `character-wanderling-parts.png`，先做路线图 3b（旅人贴图化）；否则做第 4 项，信箱与信件引擎 v0（decisions.md 第 8 节）。纯逻辑引擎加测试，文本放数据文件，红线检查脚本接进 `npm test`，HUD 加「信」按钮。
 5. 结束前：推送、开 PR；在 `docs/roadmap.md` 把第 4 项标为完成，更新本日志，回复里给出线上地址和「这次看哪里」。

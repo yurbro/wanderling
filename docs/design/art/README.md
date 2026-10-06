@@ -1,6 +1,8 @@
 # 旅人 wanderling 的角色参考图
 
-2026-10-06 定稿。这几张是 AI 生图，只作为代码绘制的参考，不直接放进场景。场景里的旅人仍然由 `src/scene/wanderer.ts` 用代码画。
+2026-10-06 定稿。这几张是 AI 生图，作为代码绘制的参考。
+
+2026-10-06 Yu 在 Code 会话 22 决定：代码画的旅人画风不够像参考图，改为「部件贴图」：用生图出一张部件表（见文末），Claude 抠出每个部件贴到现有骨架上，动作逻辑不变。部件表到之前，场景里的旅人仍由 `src/scene/wanderer.ts` 用代码画。这条决定需要在下次 Cowork 评审时回写到 decisions.md 第 5 节。
 
 | 文件 | 用途 |
 | --- | --- |
@@ -45,3 +47,43 @@
 
 - 背面图里围巾两侧都有尾巴，以侧面图为准：结在后面，只有一条尾巴。
 - 3/4 视图里眼睛位置偏后，以正面和侧面为准。
+
+## 部件表（待生成）
+
+目的：把旅人拆成单独的部件各画一张，Claude 抠图后作为贴图挂到 `wanderer.ts` 现有的 8 个可动部件上。要求所有部件同一画风、同一比例，和三视图的侧面走路那张一致。
+
+每个部件之间留足空白，白底，没有阴影，没有文字。建议上传 `character-wanderling-turnaround.png` 作为风格参考，输出 2048×2048。
+
+部件清单（都是面向右的侧面视角，比例以身体高度为 1）：
+
+| 编号 | 部件 | 要求 |
+| --- | --- | --- |
+| 1 | 身体 | 蛋形，米白，带轻微纸纹和水彩阴影；不画眼睛、不画围巾、不画叶子（这些单独画或由代码画） |
+| 2 | 叶子 | 叶柄加叶片，竖直向上，叶柄底端在最下方 |
+| 3 | 围巾带 | 只画绕在身体上的那一圈砖红色带子，形状按身体 0.45 处的弧度 |
+| 4 | 围巾尾 | 一条飘向左边的尾巴，根部在右端 |
+| 5 | 背包 | 侧面，高约 0.8，颜色 #9C8A6A，带翻盖和一个小口袋 |
+| 6 | 靴子 | 一只深色短靴，侧面 |
+| 7 | 手 | 一只小椭圆的手，米白 |
+| 8 | 大叶子伞 | 一片大叶子加长叶柄，叶柄在下，比头顶叶子大 3 倍左右 |
+| 9 | 灯 | 一盏小煤油灯，玻璃罩暖黄，提环在上 |
+
+提示词：
+
+```
+Character parts sheet of a tiny round creature called a wanderling, for a paper-doll animation. Nine separate parts laid out in a 3 by 3 grid on a plain pure white background, generous spacing, nothing overlapping, no labels, no text, no shadows. All parts in side view facing right, same scale, same style:
+1. the body alone: a soft egg-shaped cream body with gentle watercolor shading, NO eyes, NO scarf, NO leaf;
+2. a single small leaf on a short curved stalk, standing upright;
+3. a brick-red scarf band only, curved as if wrapped around the body;
+4. one brick-red scarf tail, streaming to the left;
+5. a brown canvas travel backpack with a flap and a small pocket, side view;
+6. one small dark grey boot, side view;
+7. one tiny cream oval hand;
+8. a big leaf on a long stalk held like an umbrella, stalk pointing down;
+9. a small kerosene lantern with a warm yellow glass and a handle on top.
+{style suffix}
+```
+
+`{style suffix}` 用风格指南第 6 节的基础风格后缀。生成后把原图上传到对话里，命名 `character-wanderling-parts.png`，Claude 负责抠图、按比例裁切并接入。
+
+抠图小贴士：背景要纯白（不是纸色），部件内部可以有纸纹；部件之间别挨着；如果工具总是给部件加阴影，在提示词里再写一遍 no drop shadow。
