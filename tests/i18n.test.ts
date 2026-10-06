@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { detectLang, placeName, placeNote, setLang, t } from '../src/core/i18n';
-import { advance, describeJourney, locate, startJourney } from '../src/core/journey';
+import { KM_PER_HOUR, advance, describeJourney, locate, startJourney } from '../src/core/journey';
 import { describeArrival, makePostcard } from '../src/core/postcards';
 import { demoWeather } from '../src/core/weather';
 import { ROUTES, TO_THE_SEA } from '../src/data/routes';
@@ -36,8 +36,10 @@ describe('i18n', () => {
   it('journey lines, postcards and captions come out in Chinese', () => {
     setLang('zh');
     const t0 = new Date(2026, 9, 4, 15, 0).getTime();
-    const s = advance(TO_THE_SEA, startJourney(TO_THE_SEA, t0), t0 + 3_600_000).state;
-    expect(describeJourney(locate(TO_THE_SEA, s, t0 + 3_600_000))).toBe('走向里士满公园 · 还有 7 公里');
+    // An hour's walk at 6 km/h, whatever today's pace is, leaves 7 of the 13 km.
+    const t1 = t0 + (6 / KM_PER_HOUR) * 3_600_000;
+    const s = advance(TO_THE_SEA, startJourney(TO_THE_SEA, t0), t1).state;
+    expect(describeJourney(locate(TO_THE_SEA, s, t1))).toBe('走向里士满公园 · 还有 7 公里');
     expect(placeName(TO_THE_SEA.places[0])).toBe('伦敦');
     expect(placeNote(TO_THE_SEA.places[0])).toBe('鞋带系好。出发。');
     const card = makePostcard(TO_THE_SEA, { placeId: 'brighton', at: t0 }, { lat: 51.51, lon: -0.13 }, demoWeather('rain', new Date(t0), { temperature: 11 }))!;

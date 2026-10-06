@@ -5,7 +5,7 @@ import { buildSegmentRoute, chooseNext, departureNote, nextSegment, routeOptions
 import { homeFrom, nearestRoute, routeFromHome } from './core/geo';
 import { detectLang, placeName, placeNote, setLang, t } from './core/i18n';
 import { REST_MS, advance, describeJourney, lastArrival, locate, startJourney } from './core/journey';
-import { demoPostcards, makePostcard, missingArrivals } from './core/postcards';
+import { deliveredCards, demoPostcards, makePostcard, missingArrivals } from './core/postcards';
 import { CONDITIONS, conditionFromCode, demoWeather } from './core/weather';
 import { buildWorldState } from './core/world';
 import { reverseGeocode, searchCity } from './data/geocode';
@@ -32,6 +32,7 @@ import { createMap } from './ui/map';
  *   ?journey=reset     start the journey again from the first place
  *   ?journey=next      jump to the next segment of the chain right away (not saved)
  *   ?postcards=demo    add three sample postcards to the album (not saved)
+ *   ?postcards=now     hand over postcards the moment they are posted (slow post off)
  */
 const LANG_KEY = 'wanderling.lang';
 
@@ -102,11 +103,12 @@ async function main(): Promise<void> {
       tick();
     },
     onAlbum: () => {
-      album.setCards(allCards());
+      album.setCards(visibleCards());
+      markPostcardsSeen();
       album.open();
     },
     onMap: () => {
-      map.update(route, locate(route, journey, Date.now()), allCards(), routeOptions(journey, route, ROUTES));
+      map.update(route, locate(route, journey, Date.now()), visibleCards(), routeOptions(journey, route, ROUTES));
       map.open();
     },
   });
@@ -115,7 +117,7 @@ async function main(): Promise<void> {
     onChoose: (id) => {
       journey = chooseNext(journey, id);
       if (!demoJourney) saveJourney(journey);
-      map.update(route, locate(route, journey, Date.now()), allCards(), routeOptions(journey, route, ROUTES));
+      map.update(route, locate(route, journey, Date.now()), visibleCards(), routeOptions(journey, route, ROUTES));
     },
   });
   const city = createCityChooser(root, searchCity, (picked) => {
@@ -175,23 +177,58 @@ async function main(): Promise<void> {
   journey = first.state;
   if (!demoJourney) saveJourney(journey);
 
-  // Postcards: one per arrival. Any arrival without a card gets one on the
-  // next tick, so a week away still fills the album, in order.
+  // Postcards: one per arrival, posted on arrival and delivered hours to days
+  // later by distance (slow post). Any arrival without a card gets one on the
+  // next tick, so a week away still fills the album, in order. Only delivered
+  // cards show; the album button pulses until the person has looked at them.
   let postcards = loadPostcards();
+  const deliverNow = params.get('postcards') === 'now';
   const sampleCards = params.get('postcards') === 'demo' ? demoPostcards(route, location, Date.now()) : [];
-  const allCards = () => [...sampleCards, ...postcards];
-  let freshCards = false;
-  const syncPostcards = (): void => {
+  const visibleCards = () => [...sampleCards, ...deliveredCards(postcards, deliverNow ? Infinity : Date.now())];
+  const SEEN_KEY = 'wanderling.postcardsSeen';
+  let seenCount = 0;
+  try {
+    seenCount = Number(localStorage.getItem(SEEN_KEY) ?? 0) || 0;
+  } catch {
+    // Fine.
+  }
+  const markPostcardsSeen = (): void => {
+    seenCount = visibleCards().length;
+    hud.setPostcards(seenCount, false);
+    try {
+      localStorage.setItem(SEEN_KEY, String(seenCount));
+    } catch {
+      // Fine.
+    }
+  };
+  let shownCount = -1;
+  /** Keep the album button in step with what has been delivered; say so when something new lands. */
+  const syncDelivered = (announce: boolean): void => {
+    const count = visibleCards().length;
+    if (count === shownCount) return;
+    const landed = shownCount >= 0 && count > shownCount;
+    shownCount = count;
+    hud.setPostcards(count, count > seenCount);
+    if (landed && announce) hud.setNote(t('postcardArrived'), 12_000);
+    if (album.isOpen) album.setCards(visibleCards());
+  };
+  let postedTimer: number | null = null;
+  const syncPostcards = (arrivedNow: boolean): void => {
     const missing = missingArrivals(route, journey, postcards);
     if (missing.length === 0) return;
     for (const arrival of missing) {
-      const card = makePostcard(route, arrival, location, forcedWeather ? null : weather.current(new Date(arrival.at)));
+      const card = makePostcard(route, arrival, location, forcedWeather ? null : weather.current(new Date(arrival.at)), {
+        home: journey.home,
+        deliverNow,
+      });
       if (card) postcards = [...postcards, card];
     }
     if (!demoJourney) savePostcards(postcards);
-    freshCards = true;
-    hud.setPostcards(allCards().length, true);
-    if (album.isOpen) album.setCards(allCards());
+    // "In the post": after the arrival line if there was one just now, else right away.
+    if (!deliverNow && deliveredCards(postcards, Date.now()).length < postcards.length) {
+      if (postedTimer !== null) window.clearTimeout(postedTimer);
+      postedTimer = window.setTimeout(() => hud.setNote(t('postcardPosted'), 12_000), arrivedNow ? 20_000 : 0);
+    }
   };
 
   const weatherFor = (t: Date): WeatherState | null =>
@@ -220,7 +257,8 @@ async function main(): Promise<void> {
       postcards = [];
       clearPostcards();
       saveJourney(journey);
-      hud.setPostcards(0, false);
+      shownCount = -1;
+      markPostcardsSeen();
     }
     tick();
   };
@@ -262,27 +300,27 @@ async function main(): Promise<void> {
       const firstLeg = route.legs[0];
       hud.setNote(departureNote(firstLeg?.mode ?? 'walk', route.places[1] ? placeName(route.places[1]) : route.name), 15_000);
     }
-    syncPostcards();
+    syncPostcards(step.arrived.length > 0);
+    syncDelivered(true);
     const position = locate(route, journey, wall);
     world = buildWorldState(t, location, weatherFor(t), position);
     render = direct(world);
     renderer.setState(render);
     hud.update(world, render);
     hud.setJourney(describeJourney(position));
-    if (map.isOpen) map.update(route, position, allCards(), routeOptions(journey, route, ROUTES));
+    if (map.isOpen) map.update(route, position, visibleCards(), routeOptions(journey, route, ROUTES));
     const skyCss = '#' + render.sky.top.toString(16).padStart(6, '0');
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', skyCss);
     rememberSky(skyCss);
   };
 
-  hud.setPostcards(allCards().length, false);
-  freshCards = false;
+  // The first tick makes any cards owed and sets the button; cards delivered
+  // while the app was closed pulse because the seen count is behind.
   tick();
   if (departure) hud.setNote(departure, 15_000);
-  if (postcards.length > 1 || sampleCards.length > 0) hud.setPostcards(allCards().length, freshCards);
   // A read-only peek for debugging and screenshots: window.__wanderling.render
   Object.defineProperty(window, '__wanderling', {
-    value: { get world() { return world; }, get render() { return render; }, get journey() { return journey; }, get postcards() { return allCards(); }, renderer, album, map },
+    value: { get world() { return world; }, get render() { return render; }, get journey() { return journey; }, get postcards() { return visibleCards(); }, get allPostcards() { return postcards; }, renderer, album, map },
     configurable: true,
   });
   if (first.arrived.length > 0) {

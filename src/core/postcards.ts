@@ -1,6 +1,7 @@
 import { getLang, placeName, placeNote, placeRegion, t } from './i18n';
 import { direct } from './sceneDirector';
-import type { Arrival, GeoPoint, JourneyState, Place, Postcard, Route, WeatherCondition, WeatherState } from './types';
+import { haversineKm } from './geo';
+import type { Arrival, GeoPoint, Home, JourneyState, Place, Postcard, Route, WeatherCondition, WeatherState } from './types';
 import { buildWorldState } from './world';
 
 /**
@@ -18,22 +19,68 @@ export function missingArrivals(route: Route, journey: JourneyState, cards: Post
   return journey.arrivals.filter((a) => !have.has(postcardId(route.id, a)));
 }
 
+const HOUR_MS = 3_600_000;
+/** Slow post: at least this long, and up to this long from the far side of the world. */
+export const DELIVERY_MIN_MS = 3 * HOUR_MS;
+export const DELIVERY_MAX_MS = 48 * HOUR_MS;
+/** A card from this far away takes the full two days. */
+const DELIVERY_FAR_KM = 1500;
+/** When neither home nor the place has coordinates. */
+const DELIVERY_UNKNOWN_MS = 6 * HOUR_MS;
+
+/**
+ * How long a postcard takes to arrive from `km` away: three hours from next
+ * door, two days from 1500 km or more, in between in proportion. Null km
+ * (no coordinates) gets a modest default.
+ */
+export function deliveryDelayMs(km: number | null): number {
+  if (km === null) return DELIVERY_UNKNOWN_MS;
+  const far = Math.min(1, Math.max(0, km) / DELIVERY_FAR_KM);
+  return Math.round(DELIVERY_MIN_MS + (DELIVERY_MAX_MS - DELIVERY_MIN_MS) * far);
+}
+
+/** The distance a card travels: from the place to home, when both are known. */
+export function postingDistanceKm(place: Place, home: Home | null | undefined): number | null {
+  if (!home || typeof place.lat !== 'number' || typeof place.lon !== 'number') return null;
+  return haversineKm({ lat: place.lat, lon: place.lon }, home);
+}
+
+/** Cards that have reached the person by `now` (old cards without a delivery time count). */
+export function deliveredCards(cards: Postcard[], now: number): Postcard[] {
+  return cards.filter((c) => c.deliverAt === undefined || c.deliverAt <= now);
+}
+
+/** Cards still in the post at `now`. */
+export function pendingCards(cards: Postcard[], now: number): Postcard[] {
+  return cards.filter((c) => c.deliverAt !== undefined && c.deliverAt > now);
+}
+
+export interface PostcardOptions {
+  /** Where the card is going; sets the delivery delay. */
+  home?: Home | null;
+  /** Demo: hand the card over at once. */
+  deliverNow?: boolean;
+}
+
 /**
  * Make the postcard for an arrival. The sky is computed for the arrival
  * moment at the person's own location (the postcard shows "your sky then"),
- * and the weather is whatever was known for that moment.
+ * and the weather is whatever was known for that moment. The card is posted
+ * on arrival and delivered later, by distance.
  */
 export function makePostcard(
   route: Route,
   arrival: Arrival,
   location: GeoPoint,
   weather: WeatherState | null,
+  opts: PostcardOptions = {},
 ): Postcard | null {
   const place = route.places.find((p) => p.id === arrival.placeId);
   if (!place) return null;
   const at = new Date(arrival.at);
   const rs = direct(buildWorldState(at, location, weather, null));
   const seaAmount = place.terrain === 'coast' ? 1 : place.terrain === 'lake' ? 0.7 : 0;
+  const deliverAt = opts.deliverNow ? arrival.at : arrival.at + deliveryDelayMs(postingDistanceKm(place, opts.home));
   return {
     id: postcardId(route.id, arrival),
     routeId: route.id,
@@ -42,6 +89,7 @@ export function makePostcard(
     region: placeRegion(place),
     terrain: place.terrain,
     at: arrival.at,
+    deliverAt,
     note: placeNote(place),
     weather: weather
       ? { condition: weather.condition, code: weather.code, temperature: weather.temperature }
@@ -140,7 +188,7 @@ export function demoPostcards(route: Route, location: GeoPoint, now: number): Po
   }
   return picks
     .map(({ place, hoursAgo, weather }) =>
-      makePostcard(route, { placeId: place.id, at: now - hoursAgo * 3_600_000 }, location, weather),
+      makePostcard(route, { placeId: place.id, at: now - hoursAgo * 3_600_000 }, location, weather, { deliverNow: true }),
     )
     .filter((c): c is Postcard => c !== null);
 }

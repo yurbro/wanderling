@@ -108,7 +108,7 @@ describe('mapProgress', () => {
   });
 
   it('lights every place and ends at the last one when finished', () => {
-    const t = T0 + 200 * H;
+    const t = T0 + 365 * 24 * H;
     const pos = locate(TO_THE_SEA, advance(TO_THE_SEA, startJourney(TO_THE_SEA, T0), t).state, t);
     const p = mapProgress(layout, pos);
     expect(p.reached).toHaveLength(8);

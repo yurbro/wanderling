@@ -14,13 +14,19 @@ import type { Arrival, JourneyState, Leg, LegMode, Place, Position, Route, Terra
  */
 
 /**
- * Walking pace: a brisk walker who never stops, day or night. Faster than
- * real legs so that something new happens every few hours; the one knob
- * for the rhythm of the whole journey (Yu asked for quicker, session 7).
+ * Walking pace. The design (decisions.md, D10) wants a new place every 2 to
+ * 3 days, with real distances on the map: so the wanderling simply walks
+ * slowly, about 0.9 km/h day and night, and rests half a day at each place.
+ * Over the seven routes' legs (about 44 km on average) that is 2.5 days a
+ * stop. The one knob for the rhythm of the whole journey.
+ *
+ * Changing these is safe for a journey already under way: the engine
+ * checkpoints `km` and `updatedAt` on every tick and only ever walks on from
+ * there, so a new pace never rewinds or skips a place (see the journey tests).
  */
-export const KM_PER_HOUR = 6;
-/** How long the wanderer lingers at each place before walking on. */
-export const REST_MS = 3 * 60 * 60_000;
+export const KM_PER_HOUR = 0.9;
+/** How long the wanderling lingers at each place before walking on. */
+export const REST_MS = 12 * 60 * 60_000;
 /** Between routes the wanderer may take a train, or a plane across the sea. */
 export const RIDE_KM_PER_HOUR = 60;
 export const FLY_KM_PER_HOUR = 700;
