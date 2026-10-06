@@ -2,7 +2,7 @@
 
 2026-10-06 定稿。这几张是 AI 生图，作为代码绘制的参考。
 
-2026-10-06 Yu 在 Code 会话 22 决定：代码画的旅人画风不够像参考图，改为「部件贴图」：用生图出一张部件表（见文末），Claude 抠出每个部件贴到现有骨架上，动作逻辑不变。部件表到之前，场景里的旅人仍由 `src/scene/wanderer.ts` 用代码画。这条决定需要在下次 Cowork 评审时回写到 decisions.md 第 5 节。
+2026-10-06 Yu 在 Code 会话 22 决定：代码画的旅人画风不够像参考图，改为「部件贴图」：用生图出一张部件表（见文末），Claude 抠出每个部件贴到现有骨架上，动作逻辑不变。部件表已到（会话 23），`src/scene/wanderer.ts` 现在把这些贴图挂在原来的骨架上；只有眼睛和白气还由代码画，便于眨眼、笑眼和眯眼。这条决定需要在下次 Cowork 评审时回写到 decisions.md 第 5 节。
 
 | 文件 | 用途 |
 | --- | --- |
@@ -10,6 +10,7 @@
 | `character-wanderling-poses.png` | 8 个动作，对应 decisions.md 第 5 节的动作状态 |
 | `character-wanderling-explore.png` | 体型探索稿：取最右边的身体、最左边的背包 |
 | `character-wanderling-direction.png` | 合成后的代码草图，侧面比例的简化版 |
+| `character-wanderling-parts.png` | 部件表：9 个部件各一张，抠图后放在 `public/art/`，场景里的旅人就是用这些贴图拼的 |
 
 ## 比例（从三视图量的，近似值）
 
@@ -48,7 +49,7 @@
 - 背面图里围巾两侧都有尾巴，以侧面图为准：结在后面，只有一条尾巴。
 - 3/4 视图里眼睛位置偏后，以正面和侧面为准。
 
-## 部件表（待生成）
+## 部件表（2026-10-06 已生成：`character-wanderling-parts.png`）
 
 目的：把旅人拆成单独的部件各画一张，Claude 抠图后作为贴图挂到 `wanderer.ts` 现有的 8 个可动部件上。要求所有部件同一画风、同一比例，和三视图的侧面走路那张一致。
 
@@ -87,3 +88,5 @@ Character parts sheet of a tiny round creature called a wanderling, for a paper-
 `{style suffix}` 用风格指南第 6 节的基础风格后缀。生成后把原图上传到对话里，命名 `character-wanderling-parts.png`，Claude 负责抠图、按比例裁切并接入。
 
 抠图小贴士：背景要纯白（不是纸色），部件内部可以有纸纹；部件之间别挨着；如果工具总是给部件加阴影，在提示词里再写一遍 no drop shadow。
+
+抠图记录（会话 23）：用 ImageMagick 从四角泛洪填充把白底变透明（容差 7%，灯的提环内侧单独补了一个种子点），再用连通区域找到 9 个部件的包围盒，各留 4 像素边裁出。部件在骨架上的锚点和尺寸写在 `wanderer.ts` 的 `dress()` 里，以身体高度为单位。

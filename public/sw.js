@@ -9,7 +9,15 @@
  */
 const VERSION = '__VERSION__';
 const CACHE = `wanderling-${VERSION}`;
-const SHELL = ['./', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
+const SHELL = [
+  './',
+  './manifest.webmanifest',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/apple-touch-icon.png',
+  // The wanderling's parts, so the figure is there offline too.
+  ...['body', 'leaf', 'scarf-band', 'scarf-tail', 'backpack', 'boot', 'hand', 'leaf-umbrella', 'lantern'].map((n) => `./art/${n}.png`),
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
