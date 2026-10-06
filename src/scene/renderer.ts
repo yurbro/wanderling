@@ -157,8 +157,8 @@ export class SceneRenderer {
     );
     this.paper = new TilingSprite({ texture: paperTexture(), width: 1, height: 1 });
     this.paper.alpha = PAPER_ALPHA;
-    // Finer than a screen pixel on a retina phone, so it reads as grain, not dots.
-    this.paper.tileScale.set(0.6);
+    // Blotches a few dozen pixels across: paper, not grain.
+    this.paper.tileScale.set(1.4);
     this.app.stage.addChild(this.paper);
 
     this.app.renderer.on('resize', () => this.layout());
@@ -665,7 +665,7 @@ function seeded(seed: number): () => number {
 /* --------------------------------------------------------- sketch lines */
 
 /** How strong the paper grain shows. */
-const PAPER_ALPHA = 0.42;
+const PAPER_ALPHA = 0.55;
 
 /**
  * Draw a polyline as a pencil stroke: a thin filled ribbon whose width
@@ -711,8 +711,10 @@ function quad(x0: number, y0: number, cx: number, cy: number, x1: number, y1: nu
 }
 
 /**
- * A tile of paper grain: scattered faint dark fibres and light flecks on a
- * transparent ground, so it tints neither day nor night, only textures them.
+ * A tile of soft paper mottling: large faint blotches, light and dark, like
+ * watercolour pooling on cold-pressed paper. No per-pixel noise, which reads
+ * as camera grain on a phone. Blotches are drawn wrapped so the tile repeats
+ * without seams.
  */
 function paperTexture(size = 256): Texture {
   const canvas = document.createElement('canvas');
@@ -720,35 +722,27 @@ function paperTexture(size = 256): Texture {
   canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (!ctx) return Texture.WHITE;
-  const img = ctx.createImageData(size, size);
   const rng = seeded(99);
-  const d = img.data;
-  for (let i = 0; i < size * size; i++) {
-    const v = rng();
-    const o = i * 4;
-    if (v < 0.2) {
-      d[o] = 70; d[o + 1] = 64; d[o + 2] = 56;
-      d[o + 3] = Math.round(255 * (0.05 + 0.13 * rng()));
-    } else if (v > 0.84) {
-      d[o] = 255; d[o + 1] = 252; d[o + 2] = 244;
-      d[o + 3] = Math.round(255 * (0.05 + 0.12 * rng()));
-    } else {
-      d[o + 3] = 0;
+  const blot = (x: number, y: number, r: number, color: string, alpha: number): void => {
+    for (const dx of [-size, 0, size]) {
+      for (const dy of [-size, 0, size]) {
+        const g = ctx.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+        g.addColorStop(0, color.replace('A', alpha.toFixed(3)));
+        g.addColorStop(1, color.replace('A', '0'));
+        ctx.fillStyle = g;
+        ctx.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
+      }
     }
-  }
-  // A few soft fibres: short faint streaks.
-  ctx.putImageData(img, 0, 0);
-  ctx.strokeStyle = 'rgba(70,64,56,0.07)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 90; i++) {
-    const x = rng() * size;
-    const y = rng() * size;
-    const len = 4 + rng() * 14;
-    const a = rng() * Math.PI;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
-    ctx.stroke();
+  };
+  for (let i = 0; i < 70; i++) {
+    const dark = rng() < 0.55;
+    blot(
+      rng() * size,
+      rng() * size,
+      18 + rng() * 48,
+      dark ? 'rgba(70,64,56,A)' : 'rgba(255,250,240,A)',
+      (dark ? 0.05 : 0.07) + rng() * 0.05,
+    );
   }
   return Texture.from(canvas);
 }
