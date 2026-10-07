@@ -1,4 +1,4 @@
-import { Application, Container, FillGradient, Graphics } from 'pixi.js';
+import { Application, Container, FillGradient, Graphics, Sprite, TilingSprite } from 'pixi.js';
 import { mix } from '../core/color';
 import { CELESTIAL } from '../core/palette';
 import type { RenderState } from '../core/types';
@@ -9,6 +9,7 @@ import { SeaPainter } from './seaLayer';
 import { TransportPainter } from './transport';
 import { Wanderer } from './wanderer';
 import { WeatherPainter } from './weatherLayers';
+import { loadTerrainKit, type BandName, type TerrainKit } from './terrain';
 
 /** Fraction of the screen height where the sky meets the land. */
 const HORIZON = 0.62;
@@ -41,7 +42,9 @@ interface Detail {
   y: number;
   /** 0 = at the horizon, 1 = at the bottom edge. Closer things move faster. */
   depth: number;
-  g: Graphics;
+  g: Container;
+  /** Size at depth 0; the kit's pictures each need their own. */
+  base: number;
 }
 
 interface HillSpec {
@@ -53,6 +56,17 @@ interface HillSpec {
   freqs: number[];
   phases: number[];
 }
+
+/** A hill layer: the flat fill below the ridge, and the painted band once the kit is in. */
+interface HillLayer {
+  view: Container;
+  fill: Graphics;
+  band: TilingSprite | null;
+}
+
+/** Painted band heights as a fraction of the screen height, and where each band's bottom sits below its ridge base. */
+const BAND_HEIGHT: Record<BandName, number> = { far: 0.1, mid: 0.13, near: 0.15, ground: 0.07 };
+const BAND_DROP: Record<BandName, number> = { far: 0.05, mid: 0.075, near: 0.1, ground: 0 };
 
 /**
  * Draws the scene from a RenderState. All layout is proportional so the same
@@ -74,10 +88,23 @@ export class SceneRenderer {
   private sunDisc = new Graphics();
   private moonDisc = new Graphics();
   private moonShadow = new Graphics();
-  private hillFar = new Graphics();
-  private hillMid = new Graphics();
-  private hillNear = new Graphics();
+  /** Each hill layer: a flat fill below the ridge, and once the kit is in, a painted band on top. */
+  private hills: Record<'far' | 'mid' | 'near', HillLayer> = {
+    far: { view: new Container(), fill: new Graphics(), band: null },
+    mid: { view: new Container(), fill: new Graphics(), band: null },
+    near: { view: new Container(), fill: new Graphics(), band: null },
+  };
   private ground = new Graphics();
+  /** The painted grass edge along the horizon, once the kit is in. */
+  private groundBand: TilingSprite | null = null;
+  private groundScroll = 0;
+  /** The path and its pencil lines, above the grass band. */
+  private pathLayer = new Graphics();
+  /** The terrain kit, once loaded: painted bands and props replace the drawn ones. */
+  private kit: TerrainKit | null = null;
+  private signpostSprite = new Sprite();
+  private lampSprite = new Sprite();
+  private cottageSprite = new Sprite();
   private detailLayer = new Container();
   private details: Detail[] = [];
   private wanderer = new Wanderer();
@@ -135,14 +162,15 @@ export class SceneRenderer {
       this.moonShadow,
       this.weather.clouds,
       this.sea.gulls,
-      this.hillFar,
+      this.hills.far.view,
       this.weather.fogFar,
-      this.hillMid,
+      this.hills.mid.view,
       this.sea.waves,
       this.sea.boats,
       this.weather.fogMid,
-      this.hillNear,
+      this.hills.near.view,
       this.ground,
+      this.pathLayer,
       this.detailLayer,
       this.marker,
       this.markerLights,
@@ -186,8 +214,13 @@ export class SceneRenderer {
       this.wanderer.leafTapped();
     });
 
+    for (const layer of Object.values(this.hills)) layer.view.addChild(layer.fill);
+
     this.app.renderer.on('resize', () => this.layout());
     this.layout();
+    void loadTerrainKit()
+      .then((kit) => this.dressTerrain(kit))
+      .catch((err) => console.warn('[wanderling] terrain kit not loaded', err));
     this.app.ticker.add((ticker) => this.frame(ticker.deltaMS));
   }
 
@@ -353,25 +386,38 @@ export class SceneRenderer {
     this.drawHills();
     if (syncMarker) this.placeSignpost();
 
-    // Ground and a lighter path band.
+    // Ground: a flat fill, and with the kit a painted grass edge along the horizon.
     this.ground.clear();
     this.ground.rect(0, skyH, w, h - skyH).fill({ color: st.ground });
+    if (this.groundBand && this.kit) {
+      const tex = this.kit.bands.ground;
+      const bandH = h * 0.07;
+      const k = bandH / tex.height;
+      this.groundBand.tileScale.set(k);
+      this.groundBand.width = w + 2;
+      this.groundBand.height = bandH;
+      this.groundBand.position.set(-1, skyH - bandH * 0.4);
+      this.groundBand.tint = st.ground;
+    }
+    // A lighter path band, with pencil lines along its edges.
     const pathY = skyH + (h - skyH) * 0.42;
     const pathH = (h - skyH) * 0.1;
     const step = 8;
-    this.ground
-      .moveTo(0, pathY + pathH * 0.3)
+    const pl = this.pathLayer;
+    pl.clear();
+    pl.moveTo(0, pathY + pathH * 0.3)
       .quadraticCurveTo(w * 0.5, pathY - pathH * 0.35, w, pathY + pathH * 0.15)
       .lineTo(w, pathY + pathH * 1.15)
       .quadraticCurveTo(w * 0.5, pathY + pathH * 0.7, 0, pathY + pathH * 1.3)
       .closePath()
       .fill({ color: st.path });
-    // Pencil lines: where the ground meets the hills, and along both edges of the path.
-    const inkOnGround = mix(st.ground, WANDERER.ink, 0.5);
-    sketchLine(this.ground, straight(0, skyH + 0.5, w, step), inkOnGround, 0.35, 3.1);
+    if (!this.groundBand) {
+      const inkOnGround = mix(st.ground, WANDERER.ink, 0.5);
+      sketchLine(pl, straight(0, skyH + 0.5, w, step), inkOnGround, 0.35, 3.1);
+    }
     const inkOnPath = mix(st.path, WANDERER.ink, 0.5);
-    sketchLine(this.ground, quad(0, pathY + pathH * 0.3, w * 0.5, pathY - pathH * 0.35, w, pathY + pathH * 0.15, 28), inkOnPath, 0.5, 1.3);
-    sketchLine(this.ground, quad(0, pathY + pathH * 1.3, w * 0.5, pathY + pathH * 0.7, w, pathY + pathH * 1.15, 28), inkOnPath, 0.5, 4.7);
+    sketchLine(pl, quad(0, pathY + pathH * 0.3, w * 0.5, pathY - pathH * 0.35, w, pathY + pathH * 0.15, 28), inkOnPath, 0.5, 1.3);
+    sketchLine(pl, quad(0, pathY + pathH * 1.3, w * 0.5, pathY + pathH * 0.7, w, pathY + pathH * 1.15, 28), inkOnPath, 0.5, 4.7);
   }
 
   /** Advance the walk: the wanderer strides, the world slides past. */
@@ -412,6 +458,10 @@ export class SceneRenderer {
     this.scroll.near += perWidth * 0.18;
     this.drawHills();
     this.moveDetails(dt, groundSpeed);
+    if (this.groundBand) {
+      this.groundScroll += groundSpeed * dt * 0.62;
+      this.groundBand.tilePosition.x = -this.groundScroll;
+    }
   }
 
   /** Where the wanderer stands and how tall they are, shared with the vehicles. */
@@ -432,10 +482,11 @@ export class SceneRenderer {
   /** In the air there is no land to draw: hills, ground, sea, fog and markers all go. */
   private showLand(show: boolean): void {
     for (const layer of [
-      this.hillFar,
-      this.hillMid,
-      this.hillNear,
+      this.hills.far.view,
+      this.hills.mid.view,
+      this.hills.near.view,
       this.ground,
+      this.pathLayer,
       this.detailLayer,
       this.marker,
       this.markerLights,
@@ -456,12 +507,27 @@ export class SceneRenderer {
     this.details = [];
     const rng = seeded(23);
     const count = Math.round(14 + this.w / 40);
+    const ground = this.h - this.h * HORIZON;
     for (let i = 0; i < count; i++) {
       const r = rng();
       const kind: Detail['kind'] = r < 0.6 ? 'tuft' : r < 0.85 ? 'stone' : 'flower';
-      const g = new Graphics();
-      drawDetail(g, kind, rng);
-      const d: Detail = { kind, x: rng() * (this.w + 60) - 30, y: 0, depth: 0, g };
+      let g: Container;
+      let base = 1;
+      if (this.kit) {
+        // A painted tuft, stone or flower, sized to the ground.
+        const pool = kind === 'tuft' ? this.kit.grass : kind === 'stone' ? this.kit.stones : this.kit.flowers;
+        const tex = pool[Math.floor(rng() * pool.length)];
+        const sprite = new Sprite(tex);
+        sprite.anchor.set(0.5, 1);
+        const height = ground * (kind === 'tuft' ? 0.055 : kind === 'stone' ? 0.03 : 0.05) * (0.8 + rng() * 0.4);
+        base = height / tex.height;
+        g = sprite;
+      } else {
+        const gr = new Graphics();
+        drawDetail(gr, kind, rng);
+        g = gr;
+      }
+      const d: Detail = { kind, x: rng() * (this.w + 60) - 30, y: 0, depth: 0, g, base };
       this.dropDetail(d, rng());
       this.detailLayer.addChild(g);
       this.details.push(d);
@@ -479,7 +545,7 @@ export class SceneRenderer {
     // About a third of the details sit beyond the path, the rest in front.
     d.y = r < 0.35 ? skyH + ground * 0.08 + (r / 0.35) * (pathTop - skyH - ground * 0.08) : pathBottom + ((r - 0.35) / 0.65) * (h - 12 - pathBottom);
     d.depth = (d.y - skyH) / ground;
-    d.g.scale.set(0.7 + d.depth * 0.9);
+    d.g.scale.set(d.base * (0.7 + d.depth * 0.9));
     d.g.position.set(d.x, d.y);
   }
 
@@ -496,6 +562,11 @@ export class SceneRenderer {
   }
 
   private tintDetails(st: RenderState): void {
+    if (this.kit) {
+      // Painted props carry their own colours; they only take the night and the grey.
+      for (const d of this.details) d.g.tint = st.wanderer.tint;
+      return;
+    }
     const tuft = mix(st.ground, st.hills.near, 0.55);
     const stone = mix(st.ground, st.path, 0.7);
     const flower = mix(st.path, 0xf4efe4, 0.5);
@@ -510,14 +581,31 @@ export class SceneRenderer {
     const { relief, sea, seaColor, seaNear } = st.land;
     // At the coast the far and mid layers lie down flat and turn to water,
     // the mid one a little lower so the water has some width to it.
-    this.drawHill(this.hillFar, this.hillSpecs.far, mix(st.hills.far, seaColor, sea), this.scroll.far, relief * (1 - sea), 0);
-    this.drawHill(this.hillMid, this.hillSpecs.mid, mix(st.hills.mid, seaNear, sea), this.scroll.mid, relief * (1 - sea), sea * 0.022);
-    this.drawHill(this.hillNear, this.hillSpecs.near, st.hills.near, this.scroll.near, relief, 0);
+    this.drawHill(this.hills.far, this.hillSpecs.far, mix(st.hills.far, seaColor, sea), this.scroll.far, relief * (1 - sea), 0, 'far');
+    this.drawHill(this.hills.mid, this.hillSpecs.mid, mix(st.hills.mid, seaNear, sea), this.scroll.mid, relief * (1 - sea), sea * 0.022, 'mid');
+    this.drawHill(this.hills.near, this.hillSpecs.near, st.hills.near, this.scroll.near, relief, 0, 'near');
   }
 
-  private drawHill(g: Graphics, spec: HillSpec, color: number, offset: number, relief: number, sink: number): void {
+  private drawHill(layer: HillLayer, spec: HillSpec, color: number, offset: number, relief: number, sink: number, name: BandName): void {
     const { w, h } = this;
+    const g = layer.fill;
     g.clear();
+    if (layer.band && this.kit) {
+      // The painted band: its ridge is the picture's own; the land below it is a flat fill.
+      const tex = this.kit.bands[name];
+      const bandH = h * BAND_HEIGHT[name] * Math.max(0.12, relief);
+      const k = bandH / tex.height;
+      const bottom = h * (spec.base + BAND_DROP[name] + sink);
+      layer.band.tileScale.set(k);
+      layer.band.width = w + 2;
+      layer.band.height = bandH;
+      layer.band.position.set(-1, bottom - bandH);
+      // The scroll is in screen widths; the picture scrolls at the same pace in screen pixels.
+      layer.band.tilePosition.x = -offset * w;
+      layer.band.tint = color;
+      g.rect(0, bottom - 1, w, h - bottom + 1).fill({ color });
+      return;
+    }
     const step = 8;
     const pts: number[] = [0, h];
     // Flatter land sits a little lower, so the layers still stack cleanly.
@@ -539,15 +627,50 @@ export class SceneRenderer {
     }
   }
 
+  /** The terrain kit has loaded: hang its pictures on the layers and redraw. */
+  private dressTerrain(kit: TerrainKit): void {
+    this.kit = kit;
+    for (const name of ['far', 'mid', 'near'] as const) {
+      const layer = this.hills[name];
+      const band = new TilingSprite({ texture: kit.bands[name], width: 10, height: 10 });
+      layer.view.addChild(band);
+      layer.band = band;
+    }
+    this.groundBand = new TilingSprite({ texture: kit.bands.ground, width: 10, height: 10 });
+    // Just above the ground fill, below the path.
+    this.app.stage.addChildAt(this.groundBand, this.app.stage.getChildIndex(this.ground) + 1);
+    this.weather.setCloudTextures(kit.clouds, this.app.renderer);
+    this.makeDetails();
+    this.drawMarker();
+    this.redraw();
+  }
+
   /**
    * The props that mark a place: a wooden signpost with arrow boards (no
    * words), and in towns a lamp post by the path and a cottage beyond it.
    */
   private drawMarker(): void {
     this.marker.removeChildren();
-    this.marker.addChild(this.cottage, this.lamp, this.signpost);
     const ground = this.h - this.h * HORIZON;
     const s = ground * 0.36; // same unit as the wanderer's height
+    if (this.kit) {
+      // The painted props: each stands on its bottom edge.
+      const fit = (sprite: Sprite, tex: typeof this.kit.signpost, height: number): void => {
+        sprite.texture = tex;
+        sprite.anchor.set(0.5, 1);
+        sprite.scale.set(height / tex.height);
+      };
+      fit(this.signpostSprite, this.kit.signpost, s * 0.9);
+      fit(this.lampSprite, this.kit.lamp, s * 1.25);
+      fit(this.cottageSprite, this.kit.cottage, s * 0.78);
+      this.signpostSprite.position.set(0, 0);
+      this.lampSprite.position.set(s * 0.42, 0);
+      this.cottageSprite.position.set(-s * 0.55, -ground * 0.17);
+      this.marker.addChild(this.cottageSprite, this.lampSprite, this.signpostSprite);
+      this.placeSignpost();
+      return;
+    }
+    this.marker.addChild(this.cottage, this.lamp, this.signpost);
     const ink = 0x4a4a52;
     const line = { color: ink, width: s * 0.012, join: 'round' as const };
 
@@ -604,6 +727,27 @@ export class SceneRenderer {
     g.visible = true;
     const ground = this.h - this.h * HORIZON;
     const s = ground * 0.36;
+    if (this.kit) {
+      // The painted lamp's glass sits near its top; the cottage's window is on its right half.
+      const lampH = s * 1.25;
+      const lx = s * 0.42;
+      const ly = -lampH * 0.84;
+      for (const [r, a] of [
+        [0.55, 0.035],
+        [0.38, 0.05],
+        [0.22, 0.07],
+      ] as const) {
+        g.circle(lx, ly, r * s).fill({ color: WANDERER.glow, alpha: a * glow });
+      }
+      g.roundRect(lx - s * 0.05, ly - s * 0.05, s * 0.1, s * 0.1, s * 0.02).fill({ color: WANDERER.glow, alpha: 0.7 * glow });
+      const cw = this.cottageSprite.width;
+      const ch = this.cottageSprite.height;
+      const cx = -s * 0.55 - cw / 2;
+      const cy = -ground * 0.17 - ch;
+      g.rect(cx + cw * 0.63, cy + ch * 0.64, cw * 0.13, ch * 0.19).fill({ color: WANDERER.glow, alpha: 0.75 * glow });
+      g.circle(cx + cw * 0.695, cy + ch * 0.735, s * 0.3).fill({ color: WANDERER.glow, alpha: 0.05 * glow });
+      return;
+    }
     const lx = s * 0.42;
     const ly = -s * 1.045;
     for (const [r, a] of [
@@ -651,6 +795,8 @@ export class SceneRenderer {
     this.marker.tint = st.wanderer.tint;
     this.lamp.visible = st.marker.cottage;
     this.cottage.visible = st.marker.cottage;
+    this.lampSprite.visible = st.marker.cottage;
+    this.cottageSprite.visible = st.marker.cottage;
     this.drawMarkerLights(st.wanderer.lantern ? st.wanderer.lanternGlow : 0, st.marker.cottage);
     this.markerLights.alpha = this.markerLights.visible ? 1 : 0;
     this.setMarkerX(x, x > -w * 0.6 && x < w * 1.6);

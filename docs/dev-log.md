@@ -501,8 +501,15 @@
 - 前提：会话 23 的六个 PR 已合并。
 - 背景：Yu 希望背景也换成和旅人一样的手绘画风。评审 v1 的 P9「地形套件」正是这条路。
 - 做了什么：写了 `docs/design/art/terrain-kit.md`：做法（灰阶画、代码套色、镜像接龙平铺）、代码怎么接（哪些层换图、哪些不变）、第一张「丘陵四条带子」和第二张「小物与道具」的部件清单与提示词、验收标准、其余七种地形的差别表。只改文档。
-- 下一步：Yu 生成两张图上传；我抠图、入库、接进 `renderer.ts`，截正午、傍晚、夜晚、雨天四张。做完再和 Yu 谈要不要排进路线图、排在哪。
-- Yu 的作业：按 terrain-kit.md 的提示词生成 `terrain-hills-layers.png` 和 `terrain-hills-props.png`，上传到对话。
+- 下半场：Yu 当场生成了两张图。做了什么：
+  - 原图存为 `docs/design/art/terrain-hills-layers.png` 和 `terrain-hills-props.png`。四条带子按行裁出（去掉 AI 画的边框线），白底泛洪变透明，`-level 0,80%` 把灰底提到近白好让代码套色，再和自己的镜像拼成一张实现无缝平铺（3056 像素宽），底部 40% 到 55% 渐隐，和下面的平色衔接。17 个道具用连通区域找出、收边、缩到 60%。全部在 `public/art/terrain/`（约 1.3 MB），`sw.js` 预缓存。
+  - `src/scene/terrain.ts`：加载套件，开 mipmap，带子设为 repeat。
+  - `renderer.ts`：三层山改为「平色填充加一条 TilingSprite 带子」（`HillLayer`），带子按地形起伏系数拉伸、按天空套色、按原来的视差滚动；地面加一条草地带子跟地面一起滚；小物（草、石、花）、路牌、路灯、小屋换成画好的道具，夜里套旅人的同一个色；路灯光晕和小屋窗灯按新道具的位置重算。贴图没加载完之前仍用原来的代码画法（没网也不空）。
+  - `weatherLayers.ts`：`setCloudTextures()`，云换成画好的四种，仍按天气套色、随风漂。
+  - 带子高度和位置的常量在 `renderer.ts` 的 `BAND_HEIGHT`、`BAND_DROP`。测试 132 个不变。
+- 注意：带子是灰阶画加代码套色，所以天空同步、昼夜、阴天、海岸（远中两层压扁成海）全部照旧；其余七种地形仍是代码画法，等套件。
+- 下一步：Yu 看效果，谈要不要把其余七种地形排进路线图、排在哪；否则路线图第 4 项信件引擎。
+- Yu 的作业：合并 PR；打开 https://yurbro.github.io/wanderling/ 看手绘的山、草地、云和路边道具；试 `?t=18:20`、`?t=22:30`、`?weather=rain`、`?km=99999`（到站歇脚，路牌路灯小屋都在）。
 
 ## 停车场（MVP 之外的想法）
 
@@ -526,5 +533,5 @@
 1. 读 `CLAUDE.md`、`docs/design/decisions.md`、`docs/roadmap.md` 与本文件；`git fetch origin main` 看会话 23 的 PR 是否已合并；没合并就先提醒 Yu。
 2. `npm install`，`npm test`，确认 132 个测试通过。
 3. 先处理 Yu 对贴图版旅人和纸纹背景的反馈（纸纹强度在 `renderer.ts` 的 `PAPER_ALPHA`，铅笔线在 `sketchLine()`）。
-4. 本次目标：如果 Yu 上传了地形套件的两张图，先做丘陵地形套件（见 `docs/design/art/terrain-kit.md`）；否则做路线图第 4 项，信箱与信件引擎 v0。
+4. 本次目标：由 Yu 定：其余地形的套件（每种一张带子图，道具共用），或路线图第 4 项信箱与信件引擎 v0。
 5. 结束前：推送、开 PR；在 `docs/roadmap.md` 把第 4 项标为完成，更新本日志，回复里给出线上地址和「这次看哪里」。

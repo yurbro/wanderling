@@ -54,6 +54,8 @@ export class WeatherPainter {
 
   private cloudList: Cloud[] = [];
   private cloudTextures: Texture[] = [];
+  /** Painted clouds from the terrain kit; while empty, clouds are drawn. */
+  private paintedClouds: Texture[] = [];
   private drops: Drop[] = [];
   private flakes: Drop[] = [];
   private w = 1;
@@ -94,6 +96,12 @@ export class WeatherPainter {
 
   /* ---------------------------------------------------------------- clouds */
 
+  /** Use the kit's painted clouds from now on. */
+  setCloudTextures(textures: Texture[], renderer: Renderer): void {
+    this.paintedClouds = textures;
+    this.makeClouds(renderer);
+  }
+
   private makeClouds(renderer: Renderer): void {
     this.clouds.removeChildren();
     for (const t of this.cloudTextures) t.destroy(true);
@@ -104,15 +112,22 @@ export class WeatherPainter {
     const resolution = Math.min(window.devicePixelRatio || 1, 2);
     for (let i = 0; i < MAX_CLOUDS; i++) {
       const depth = rng();
-      const g = new Graphics();
-      const scale = unit * (0.045 + depth * 0.075);
-      drawCloud(g, scale, rng);
-      // Bake the shape: a sprite fades as one solid piece, a Graphics would
-      // show every overlapping puff while translucent.
-      const texture = renderer.generateTexture({ target: g, resolution, antialias: true });
-      g.destroy();
-      this.cloudTextures.push(texture);
-      const sprite = new Sprite(texture);
+      let sprite: Sprite;
+      if (this.paintedClouds.length > 0) {
+        const tex = this.paintedClouds[Math.floor(rng() * this.paintedClouds.length)];
+        sprite = new Sprite(tex);
+        sprite.scale.set((unit * (0.16 + depth * 0.26)) / tex.width);
+      } else {
+        const g = new Graphics();
+        const scale = unit * (0.045 + depth * 0.075);
+        drawCloud(g, scale, rng);
+        // Bake the shape: a sprite fades as one solid piece, a Graphics would
+        // show every overlapping puff while translucent.
+        const texture = renderer.generateTexture({ target: g, resolution, antialias: true });
+        g.destroy();
+        this.cloudTextures.push(texture);
+        sprite = new Sprite(texture);
+      }
       const cloud: Cloud = {
         sprite,
         x: rng(),
