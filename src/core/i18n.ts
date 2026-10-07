@@ -28,8 +28,8 @@ const DICT: Dict = {
   // HUD
   postcards: { en: 'Postcards', zh: '明信片' },
   map: { en: 'Map', zh: '地图' },
-  useLocation: { en: 'Use my location', zh: '用我的位置' },
-  finding: { en: 'Finding your sky…', zh: '正在找你的天空…' },
+  useLocation: { en: 'Locate me', zh: '定位' },
+  finding: { en: 'Finding…', zh: '正在找…' },
   yourSky: { en: 'Your sky', zh: '你的天空' },
   weather: { en: 'Weather', zh: '天气' },
   real: { en: 'real', zh: '真实' },
