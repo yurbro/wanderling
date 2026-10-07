@@ -1,6 +1,6 @@
 import { clamp01, hexToRgb, mix, smoothstep } from './color';
 import { CELESTIAL, LAND, WEATHER_TONES, skyAt } from './palette';
-import type { CelestialPlacement, DayPhase, LeafState, LegMode, PlaceMarker, Position, RenderState, Terrain, WorldState } from './types';
+import type { SurpriseShow, CelestialPlacement, DayPhase, LeafState, LegMode, PlaceMarker, Position, RenderState, Terrain, WorldState } from './types';
 import { TERRAIN, landAt } from './journey';
 import { NO_WEATHER, weatherIntensities } from './weather';
 
@@ -23,7 +23,10 @@ export function direct(ws: WorldState): RenderState {
   const travelMode: LegMode =
     ws.journey && !ws.journey.resting && !ws.journey.finished ? ws.journey.mode : 'walk';
   const measured = weatherIntensities(ws.weather);
-  const fx = travelMode === 'fly' ? { ...NO_WEATHER, wind: measured.wind } : measured;
+  const show = ws.surprises ?? NO_SURPRISES;
+  const base = travelMode === 'fly' ? { ...NO_WEATHER, wind: measured.wind } : measured;
+  // The snow globe: a flurry over whatever the weather is doing.
+  const fx = show.snowGlobe > 0 ? { ...base, snow: Math.max(base.snow, show.snowGlobe) } : base;
   // How grey the day feels. Clouds do most of it, rain and fog add a little.
   const gloom = clamp01(fx.cloud * 0.9 + fx.rain * 0.25 + fx.snow * 0.1 + fx.fog * 0.3);
 
@@ -109,7 +112,8 @@ export function direct(ws: WorldState): RenderState {
     asleep: isSleepingHour(ws.now),
     leaf: leafState(ws, fx.rain > 0.05 && travelMode === 'walk', sun),
     // Standing still while resting, once the route is walked, aboard a train or plane, or asleep.
-    pace: isSleepingHour(ws.now) || (journey && (journey.resting || journey.finished || journey.mode !== 'walk')) ? 0 : 1,
+    // Also while sat watching the full moon.
+    pace: isSleepingHour(ws.now) || show.moonWatch || (journey && (journey.resting || journey.finished || journey.mode !== 'walk')) ? 0 : 1,
     // The figure takes less of the night and the grey than the land, so the cream
     // body and the red scarf stay readable (session 22).
     tint: mix(mix('#FFFFFF', tint, night * 0.4), WEATHER_TONES.landGreyDay, gloom * 0.06),
@@ -162,8 +166,12 @@ export function direct(ws: WorldState): RenderState {
     travel: { mode: travelMode },
     marker,
     darkInk: luminance(sky.top) > 0.55,
+    // A rainbow stands opposite the sun; it needs the sun up and the walk outdoors.
+    surprise: { ...show, rainbow: sun.visible && travelMode === 'walk' ? show.rainbow : 0, rainbowX: 1 - sun.x },
   };
 }
+
+const NO_SURPRISES: SurpriseShow = { rainbow: 0, moonWatch: false, snowGlobe: 0 };
 
 /**
  * The leaf answers the weather, the sun and the season (design: the leaf is

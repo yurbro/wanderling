@@ -217,6 +217,18 @@ export interface WorldState {
   weather: WeatherState | null;
   /** Null before a journey exists; the scene then shows generic hills. */
   journey: Position | null;
+  /** What the surprise engine has going on right now; absent means nothing. */
+  surprises?: SurpriseShow;
+}
+
+/** The surprises as the scene shows them (src/core/surprises.ts decides when). */
+export interface SurpriseShow {
+  /** 0..1 how fully the rainbow stands. */
+  rainbow: number;
+  /** Sat down, looking up at the full moon. */
+  moonWatch: boolean;
+  /** 0..1 the snow globe shake: a flurry and a wobble. */
+  snowGlobe: number;
 }
 
 /** Colors are 0xRRGGBB numbers so they can go straight into PixiJS. */
@@ -341,4 +353,8 @@ export interface RenderState {
   marker: PlaceMarker | null;
   /** True when the HUD text should be dark ink instead of pale paper. */
   darkInk: boolean;
+  surprise: SurpriseShow & {
+    /** Where the rainbow's centre stands across the sky, 0..1: opposite the sun. */
+    rainbowX: number;
+  };
 }

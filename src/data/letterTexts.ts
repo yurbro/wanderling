@@ -51,6 +51,13 @@ export const SKELETONS: Skeleton[] = [
   { id: 'w.wind1', kind: 'weather', outlook: 'wind', en: 'A big wind tomorrow where you are. Hold on to your hat.', zh: '明天你那边风很大。按住帽子。' },
   { id: 'w.wind2', kind: 'weather', outlook: 'wind', en: 'The wind is coming your way tomorrow. My leaf already knows.', zh: '风明天往你那边去。我的叶子已经知道了。' },
 
+  // --- Meanwhile: a surprise that came and went while the person was away --
+  { id: 'x.rainbow1', kind: 'missed', en: 'There was a rainbow after the rain. I stood under it a while and thought of you.', zh: '雨后出了彩虹。我在下面站了一会儿，想到了你。' },
+  { id: 'x.rainbow2', kind: 'missed', en: 'The rain stopped and the sky made a rainbow. It did not stay long. I looked for us both.', zh: '雨停了，天上出了一道彩虹。没停留多久。我替我们俩看了。' },
+  { id: 'x.moon1', kind: 'missed', en: 'The moon was full tonight. I sat and watched it for a long time. It was very round.', zh: '今晚月亮圆了。我坐着看了很久。真的很圆。' },
+  { id: 'x.moon2', kind: 'missed', en: 'A full moon tonight. I did not walk. Some things you just look at.', zh: '今晚满月。我没有走路。有些东西只能看着。' },
+  { id: 'x.sleep1', kind: 'missed', en: 'I slept by the road last night. A firefly kept watch. I hope you slept well too.', zh: '昨晚我在路边睡了。一只萤火虫替我守着。希望你也睡得好。' },
+
   // --- The back of a postcard, when a place has no line of its own ------
   { id: 'p.here', kind: 'postcard', en: 'I am in {place} now. I will tell you about it soon.', zh: '我到{place}了。回头慢慢跟你说。' },
   { id: 'p.sky', kind: 'postcard', en: 'This is {place}. The sky here is a different kind of big.', zh: '这是{place}。这里的天空是另一种大。' },
@@ -68,6 +75,10 @@ export function momentsFor(terrain: Terrain): Skeleton[] {
 
 export function weatherSkeletons(outlook: 'rain' | 'snow' | 'wind'): Skeleton[] {
   return SKELETONS.filter((s) => s.kind === 'weather' && s.outlook === outlook);
+}
+
+export function missedSkeletons(): Skeleton[] {
+  return skeletonsOf('missed');
 }
 
 export function skeletonById(id: string): Skeleton | undefined {

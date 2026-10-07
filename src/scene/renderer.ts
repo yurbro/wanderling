@@ -91,6 +91,8 @@ export class SceneRenderer {
   private sunDisc = new Graphics();
   private moonDisc = new Graphics();
   private moonShadow = new Graphics();
+  /** The rainbow after the rain: soft bands opposite the sun, behind the far hills. */
+  private rainbow = new Graphics();
   /** Each hill layer: a flat fill below the ridge, and once the kit is in, a painted band on top. */
   private hills: Record<'far' | 'mid' | 'near', HillLayer> = {
     far: { view: new Container(), fill: new Graphics(), band: null },
@@ -168,6 +170,7 @@ export class SceneRenderer {
       this.moonDisc,
       this.moonShadow,
       this.weather.clouds,
+      this.rainbow,
       this.sea.gulls,
       this.hills.far.view,
       this.weather.fogFar,
@@ -205,6 +208,7 @@ export class SceneRenderer {
       pressTimer = window.setTimeout(() => {
         pressed = true;
         this.wanderer.wave();
+        this.waveListener?.();
       }, 450);
     });
     // Let go before the long press fires: that was a tap.
@@ -264,6 +268,22 @@ export class SceneRenderer {
   resume(): void {
     this.paused = false;
     this.app.ticker.start();
+  }
+
+  private waveListener: (() => void) | null = null;
+  /** Called whenever a long press makes the wanderling wave. */
+  onWave(fn: () => void): void {
+    this.waveListener = fn;
+  }
+
+  /** Make the wanderling turn and wave (the demo). */
+  wave(): void {
+    this.wanderer.wave();
+  }
+
+  /** The phone was shaken: the wanderling shakes the snow off too. */
+  shaken(): void {
+    this.wanderer.begin('shake');
   }
 
   /** Current canvas size, handy for tests and tooling. */
@@ -326,6 +346,12 @@ export class SceneRenderer {
     this.sea.frame(dt, this.elapsed);
     this.fadeBands(dt);
     this.walk(dt);
+    // The snow globe: the whole scene is given a little shake.
+    const globe = this.state.surprise.snowGlobe;
+    if (globe > 0.001 || this.app.stage.x !== 0) {
+      const amp = globe * Math.min(8, this.w * 0.015);
+      this.app.stage.position.set(amp * Math.sin(this.elapsed * 22), amp * 0.5 * Math.sin(this.elapsed * 31 + 1));
+    }
     const base = this.state.starAlpha;
     if (base <= 0.001) {
       if (this.starLayer.visible) this.starLayer.visible = false;
@@ -392,6 +418,7 @@ export class SceneRenderer {
       }
     }
 
+    this.drawRainbow(st.surprise.rainbow, st.surprise.rainbowX, w, skyH);
     this.drawHills();
     if (syncMarker) this.placeSignpost();
 
@@ -474,6 +501,22 @@ export class SceneRenderer {
   }
 
   /** Where the wanderer stands and how tall they are, shared with the vehicles. */
+  /** Seven thin paper bands, red outside, with the outer bands faintest, fading at the horizon. */
+  private drawRainbow(strength: number, cx: number, w: number, skyH: number): void {
+    this.rainbow.clear();
+    if (strength <= 0.005) return;
+    const r = Math.max(w, skyH) * 0.62;
+    const band = Math.max(3, w * 0.011);
+    const x = cx * w;
+    const y = skyH * 1.04;
+    const colors = [0xd9736a, 0xe3a35a, 0xe6d06b, 0x9bbd7a, 0x7fb0b7, 0x7f93c4, 0xa98cc0];
+    colors.forEach((color, i) => {
+      const radius = r - i * band;
+      const edge = i === 0 || i === colors.length - 1 ? 0.7 : 1;
+      this.rainbow.arc(x, y, radius, Math.PI, 2 * Math.PI).stroke({ color, width: band, alpha: 0.34 * strength * edge });
+    });
+  }
+
   private figure(): { x: number; feetY: number; height: number } {
     const { w, h } = this;
     const skyH = h * HORIZON;

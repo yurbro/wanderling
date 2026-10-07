@@ -331,6 +331,12 @@ export function weatherAt(snap: WeatherSnapshot, now: Date): WeatherState | null
   return null;
 }
 
+/** The hours the snapshot knows, each with how hard it rained, for the surprise engine. */
+export function rainHours(snap: WeatherSnapshot | null): { time: number; rain: number }[] {
+  if (!snap) return [];
+  return snap.hourly.map((h) => ({ time: h.time, rain: weatherIntensities(toState(h, 'forecast')).rain }));
+}
+
 /** What tomorrow holds where the person is, for a word of warning in a letter. */
 export interface Outlook {
   rain: boolean;
