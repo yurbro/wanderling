@@ -84,7 +84,7 @@ export const WEATHER_TONES = {
   fogDay: '#D9DBD8',
   fogNight: '#2A2F40',
   cloudDay: '#F4EFE4',
-  cloudNight: '#303652',
+  cloudNight: '#3A405E',
   cloudGreyDay: '#C3C7CB',
   cloudGreyNight: '#2A2E40',
   snowDay: '#E9E6DC',

@@ -166,7 +166,7 @@ export class WeatherPainter {
       const target = c.rank < shown ? 1 : 0;
       // Ease towards the target so clouds fade in and out instead of popping.
       c.alpha += (target - c.alpha) * Math.min(1, dt * 1.5);
-      c.sprite.alpha = c.alpha;
+      c.sprite.alpha = c.alpha * L.cloudAlpha;
       c.sprite.visible = c.alpha > 0.01;
     }
     this.placeClouds();
