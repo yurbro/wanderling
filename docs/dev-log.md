@@ -524,8 +524,9 @@
   - 测试 134 个（新增 1 个）。
 - 产出：新 PR；`screenshots/terrains.png` 六种地形并排（平原、丘陵、森林、海岸、山地、湖）。
 - 注意：海岸和湖的远中两层仍由代码画海，带子被压成一条细线盖在海色上，正好像远处的岸。切换地形时是淡入新带子，没有做两套带子的交叉淡出，走路时偶尔会看到旧带子先消失一下，可以接受。
-- 下一步：Yu 重发沙漠、城市、专属道具三张图，补齐 3c；然后路线图第 4 项信件引擎。
-- Yu 的作业：合并 PR；重发那三张图；打开 https://yurbro.github.io/wanderling/?route=tokyo-hot-springs-v1&km=108 看山地，`?route=jiangnan-v1&km=76` 看湖。
+- 下半场：Yu 重发了沙漠、城市、专属道具三张图。沙漠和城市带子入库（城市的房子和石板画得大，带子按 0.55 缩小才和场景一个尺度，`renderer.ts` 的 `TERRAIN_BAND_SCALE`）；14 件专属道具抠出（`terrain.ts` 的 `TERRAIN_EXTRAS`、`EXTRA_HEIGHT`），路边小物里约五分之一换成所在地形的专属道具（平原干草卷和草垛、山地木桥和石堆、森林蘑菇和树桩、海岸灯塔和翻船、湖码头和芦苇、沙漠仙人掌和灌木、城市长椅和邮筒），地形切换时立刻换，循环回来时也按当前地形重新选。演示参数 `?terrain=desert` 强制画某种地形。路线图 3c 完成。
+- 下一步：路线图第 4 项，信箱与信件引擎 v0。
+- Yu 的作业：合并 PR；打开 https://yurbro.github.io/wanderling/?terrain=city 、`?terrain=desert`、`?terrain=coast` 看城市、沙漠、海岸和路边的专属道具。
 
 ## 停车场（MVP 之外的想法）
 
@@ -549,5 +550,5 @@
 1. 读 `CLAUDE.md`、`docs/design/decisions.md`、`docs/roadmap.md` 与本文件；`git fetch origin main` 看会话 23 的 PR 是否已合并；没合并就先提醒 Yu。
 2. `npm install`，`npm test`，确认 134 个测试通过。
 3. 先处理 Yu 对贴图版旅人和纸纹背景的反馈（纸纹强度在 `renderer.ts` 的 `PAPER_ALPHA`，铅笔线在 `sketchLine()`）。
-4. 本次目标：如果 Yu 重发了沙漠、城市带子图和专属道具图，补齐路线图 3c（流程见会话 25 和 `terrain-kit.md`）；否则做第 4 项信件引擎。
+4. 本次目标：路线图第 4 项，信箱与信件引擎 v0（decisions.md 第 8 节）。纯逻辑引擎加测试，文本放数据文件，红线检查脚本接进 `npm test`，HUD 加「信」按钮。
 5. 结束前：推送、开 PR；在 `docs/roadmap.md` 把第 4 项标为完成，更新本日志，回复里给出线上地址和「这次看哪里」。

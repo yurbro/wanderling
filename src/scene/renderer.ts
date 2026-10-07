@@ -9,7 +9,7 @@ import { SeaPainter } from './seaLayer';
 import { TransportPainter } from './transport';
 import { Wanderer } from './wanderer';
 import { WeatherPainter } from './weatherLayers';
-import { bandSetFor, loadBands, loadProps, type BandName, type BandSet, type TerrainProps } from './terrain';
+import { EXTRA_HEIGHT, TERRAIN_EXTRAS, bandSetFor, loadBands, loadProps, type BandName, type BandSet, type TerrainProps } from './terrain';
 import type { Terrain } from '../core/types';
 
 /** Fraction of the screen height where the sky meets the land. */
@@ -38,7 +38,7 @@ interface Star {
 
 /** A tuft of grass, a stone or a small flower that scrolls past on the ground. */
 interface Detail {
-  kind: 'tuft' | 'stone' | 'flower';
+  kind: 'tuft' | 'stone' | 'flower' | 'extra';
   x: number;
   y: number;
   /** 0 = at the horizon, 1 = at the bottom edge. Closer things move faster. */
@@ -68,6 +68,8 @@ interface HillLayer {
 /** Painted band heights as a fraction of the screen height, and where each band's bottom sits below its ridge base. */
 const BAND_HEIGHT: Record<BandName, number> = { far: 0.1, mid: 0.13, near: 0.15, ground: 0.07 };
 const BAND_DROP: Record<BandName, number> = { far: 0.05, mid: 0.075, near: 0.1, ground: 0 };
+/** Some sheets are drawn big: the city's houses and cobbles need to come down to the scene's scale. */
+const TERRAIN_BAND_SCALE: Partial<Record<Terrain, number>> = { city: 0.55 };
 
 /**
  * Draws the scene from a RenderState. All layout is proportional so the same
@@ -398,7 +400,7 @@ export class SceneRenderer {
     this.ground.rect(0, skyH, w, h - skyH).fill({ color: st.ground });
     if (this.groundBand && this.bands) {
       const tex = this.bands.ground;
-      const bandH = h * 0.07;
+      const bandH = h * 0.07 * (TERRAIN_BAND_SCALE[this.bandsFor ?? 'hills'] ?? 1);
       const k = bandH / tex.height;
       this.groundBand.tileScale.set(k);
       this.groundBand.width = w + 2;
@@ -514,20 +516,16 @@ export class SceneRenderer {
     this.details = [];
     const rng = seeded(23);
     const count = Math.round(14 + this.w / 40);
-    const ground = this.h - this.h * HORIZON;
     for (let i = 0; i < count; i++) {
       const r = rng();
-      const kind: Detail['kind'] = r < 0.6 ? 'tuft' : r < 0.85 ? 'stone' : 'flower';
+      // Every eighth or so is something that belongs to the terrain, when it has such things.
+      const kind: Detail['kind'] = r < 0.2 ? 'extra' : r < 0.65 ? 'tuft' : r < 0.86 ? 'stone' : 'flower';
       let g: Container;
       let base = 1;
       if (this.props) {
-        // A painted tuft, stone or flower, sized to the ground.
-        const pool = kind === 'tuft' ? this.props.grass : kind === 'stone' ? this.props.stones : this.props.flowers;
-        const tex = pool[Math.floor(rng() * pool.length)];
-        const sprite = new Sprite(tex);
+        const sprite = new Sprite();
         sprite.anchor.set(0.5, 1);
-        const height = ground * (kind === 'tuft' ? 0.055 : kind === 'stone' ? 0.03 : 0.05) * (0.8 + rng() * 0.4);
-        base = height / tex.height;
+        base = this.dressDetail(sprite, kind, rng);
         g = sprite;
       } else {
         const gr = new Graphics();
@@ -542,6 +540,31 @@ export class SceneRenderer {
     if (this.state) this.tintDetails(this.state);
   }
 
+  /**
+   * Give a painted detail its picture for the terrain being walked: a tuft,
+   * stone or flower from the shared pool, or one of the terrain's own things
+   * (hay bales on the plain, a lighthouse at the coast). Returns the base scale.
+   */
+  private dressDetail(sprite: Sprite, kind: Detail['kind'], rng: () => number): number {
+    const props = this.props!;
+    const ground = this.h - this.h * HORIZON;
+    const terrain = this.state?.land.terrain ?? 'hills';
+    if (kind === 'extra') {
+      const names = TERRAIN_EXTRAS[terrain];
+      if (names.length === 0) {
+        // Nothing special here: a stone instead.
+        return this.dressDetail(sprite, 'stone', rng);
+      }
+      const name = names[Math.floor(rng() * names.length)];
+      sprite.texture = props.extras[name];
+      return (ground * EXTRA_HEIGHT[name]) / sprite.texture.height;
+    }
+    const pool = kind === 'tuft' ? props.grass : kind === 'stone' ? props.stones : props.flowers;
+    sprite.texture = pool[Math.floor(rng() * pool.length)];
+    const height = ground * (kind === 'tuft' ? 0.055 : kind === 'stone' ? 0.03 : 0.05) * (0.8 + rng() * 0.4);
+    return height / sprite.texture.height;
+  }
+
   /** Pick a row for a detail on either side of the path and scale it by depth. */
   private dropDetail(d: Detail, r: number): void {
     const { h } = this;
@@ -549,7 +572,9 @@ export class SceneRenderer {
     const ground = h - skyH;
     const pathTop = skyH + ground * 0.42 - ground * 0.05;
     const pathBottom = skyH + ground * 0.42 + ground * 0.135;
-    // About a third of the details sit beyond the path, the rest in front.
+    // About a third of the details sit beyond the path, the rest in front; the
+    // terrain's own things (a lighthouse, a haystack) always stand beyond it.
+    if (d.kind === 'extra') r *= 0.35;
     d.y = r < 0.35 ? skyH + ground * 0.08 + (r / 0.35) * (pathTop - skyH - ground * 0.08) : pathBottom + ((r - 0.35) / 0.65) * (h - 12 - pathBottom);
     d.depth = (d.y - skyH) / ground;
     d.g.scale.set(d.base * (0.7 + d.depth * 0.9));
@@ -562,6 +587,8 @@ export class SceneRenderer {
       d.x -= groundSpeed * dt * (0.62 + d.depth * 0.8);
       if (d.x < -40) {
         d.x = this.w + 20 + Math.random() * 60;
+        // Coming round again: take the picture of the terrain being walked now.
+        if (this.props && d.g instanceof Sprite) d.base = this.dressDetail(d.g, d.kind, Math.random);
         this.dropDetail(d, Math.random());
       }
       d.g.x = d.x;
@@ -601,7 +628,7 @@ export class SceneRenderer {
       // The painted band: its ridge is the picture's own; the land below it is a flat fill.
       const tex = this.bands[name];
       // Mountains stand taller, plains flatter; but a painted band only stretches so far before it looks pulled.
-      const bandH = h * BAND_HEIGHT[name] * Math.min(1.4, Math.max(0.12, relief));
+      const bandH = h * BAND_HEIGHT[name] * Math.min(1.4, Math.max(0.12, relief)) * (TERRAIN_BAND_SCALE[this.bandsFor ?? 'hills'] ?? 1);
       const k = bandH / tex.height;
       const bottom = h * (spec.base + BAND_DROP[name] + sink);
       layer.band.tileScale.set(k);
@@ -679,7 +706,19 @@ export class SceneRenderer {
       this.groundBand.texture = set.ground;
     }
     this.groundBand.alpha = 0;
+    this.redressDetails();
     this.redraw();
+  }
+
+  /** The land has changed: the roadside things take the new terrain's pictures where they stand. */
+  private redressDetails(): void {
+    if (!this.props) return;
+    for (const d of this.details) {
+      if (d.g instanceof Sprite) {
+        d.base = this.dressDetail(d.g, d.kind, Math.random);
+        d.g.scale.set(d.base * (0.7 + d.depth * 0.9));
+      }
+    }
   }
 
   /** New bands ease in over a second or so instead of popping. */

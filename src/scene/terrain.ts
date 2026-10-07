@@ -17,12 +17,30 @@ export type BandName = (typeof BAND_NAMES)[number];
 export type BandSet = Record<BandName, Texture>;
 
 /** Terrains that have a painted band set so far; the rest borrow hills. */
-const PAINTED: ReadonlySet<Terrain> = new Set<Terrain>(['hills', 'lake', 'coast', 'forest', 'mountain', 'plain']);
+const PAINTED: ReadonlySet<Terrain> = new Set<Terrain>(['hills', 'lake', 'coast', 'forest', 'mountain', 'plain', 'desert', 'city']);
 
 /** The band set to paint a terrain with. */
 export function bandSetFor(terrain: Terrain): Terrain {
   return PAINTED.has(terrain) ? terrain : 'hills';
 }
+
+/** Props that belong to one terrain and stand by the path there (docs/design/art/terrain-kit.md). */
+export const TERRAIN_EXTRAS: Record<Terrain, string[]> = {
+  hills: [],
+  plain: ['hay-bale', 'haystack'],
+  mountain: ['bridge', 'stone-pile'],
+  forest: ['mushrooms', 'stump'],
+  coast: ['lighthouse', 'boat'],
+  lake: ['jetty', 'reeds'],
+  desert: ['cactus', 'shrub'],
+  city: ['bench', 'postbox'],
+};
+/** How tall each extra stands, as a fraction of the ground's height. */
+export const EXTRA_HEIGHT: Record<string, number> = {
+  'hay-bale': 0.11, haystack: 0.14, bridge: 0.12, 'stone-pile': 0.08, mushrooms: 0.07, stump: 0.09,
+  lighthouse: 0.26, boat: 0.09, jetty: 0.11, reeds: 0.12, cactus: 0.18, shrub: 0.09, bench: 0.1, postbox: 0.14,
+};
+const EXTRA_NAMES = Object.values(TERRAIN_EXTRAS).flat();
 
 const PROP_NAMES = [
   'grass-1', 'grass-2', 'grass-3', 'grass-4',
@@ -41,6 +59,8 @@ export interface TerrainProps {
   signpost: Texture;
   lamp: Texture;
   cottage: Texture;
+  /** The terrain extras by name. */
+  extras: Record<string, Texture>;
 }
 
 const base = (): string => `${import.meta.env.BASE_URL}art/terrain/`;
@@ -76,9 +96,12 @@ let propsPromise: Promise<TerrainProps> | null = null;
 /** Load the shared props once. */
 export function loadProps(): Promise<TerrainProps> {
   if (!propsPromise) {
-    propsPromise = Promise.all(PROP_NAMES.map((n) => Assets.load<Texture>(`${base()}${n}.png`))).then((all) => {
+    const names = [...PROP_NAMES, ...EXTRA_NAMES];
+    propsPromise = Promise.all(names.map((n) => Assets.load<Texture>(`${base()}${n}.png`))).then((all) => {
       const props = {} as Record<PropName, Texture>;
       PROP_NAMES.forEach((n, i) => (props[n] = prepare(all[i], false)));
+      const extras: Record<string, Texture> = {};
+      EXTRA_NAMES.forEach((n, i) => (extras[n] = prepare(all[PROP_NAMES.length + i], false)));
       return {
         grass: [props['grass-1'], props['grass-2'], props['grass-3'], props['grass-4']],
         stones: [props['stone-1'], props['stone-2'], props['stone-3']],
@@ -87,6 +110,7 @@ export function loadProps(): Promise<TerrainProps> {
         signpost: props.signpost,
         lamp: props.lamp,
         cottage: props.cottage,
+        extras,
       };
     });
   }
