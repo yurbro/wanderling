@@ -12,7 +12,7 @@ import { reverseGeocode, searchCity } from './data/geocode';
 import { loadJourney, saveJourney } from './data/journeyStore';
 import { clearPostcards, loadPostcards, savePostcards } from './data/postcardStore';
 import { DEFAULT_LOCATION, isDefaultLocation, loadLocation, requestLocation, saveLocation } from './data/location';
-import { ROUTES, TO_THE_SEA } from './data/routes';
+import { ROUTES, TO_THE_SEA, routeById } from './data/routes';
 import { WeatherService } from './data/weather';
 import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
@@ -29,6 +29,7 @@ import { createMap } from './ui/map';
  *   ?weather=rain      force a weather look (a condition name or a WMO code)
  *   ?temp=-3&wind=30   tweak the forced weather (Celsius, km/h)
  *   ?km=120            jump the journey to a kilometre mark (not saved)
+ *   ?route=jiangnan-v1 peek at another route from its start (not saved)
  *   ?journey=reset     start the journey again from the first place
  *   ?journey=next      jump to the next segment of the chain right away (not saved)
  *   ?postcards=demo    add three sample postcards to the album (not saved)
@@ -162,9 +163,15 @@ async function main(): Promise<void> {
   } else {
     ({ route, journey } = freshJourney(location));
   }
+  // A demo peek at another route: start it afresh, unsaved.
+  const demoRoute = params.get('route') ? routeById(params.get('route')!) : undefined;
+  if (demoRoute) {
+    route = demoRoute;
+    journey = { ...startJourney(route, Date.now()), home: null, from: null, walked: [] };
+  }
   const kmJump = Number(params.get('km'));
   const jumpNext = params.get('journey') === 'next';
-  const demoJourney = (params.has('km') && Number.isFinite(kmJump)) || jumpNext;
+  const demoJourney = (params.has('km') && Number.isFinite(kmJump)) || jumpNext || !!demoRoute;
   let departure: string | null = null;
   if (jumpNext) {
     // A demo peek at the chain: finish this segment and set off on the next.

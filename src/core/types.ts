@@ -302,6 +302,8 @@ export interface LeafState {
 
 /** How the land is shaped where the wanderer is. */
 export interface LandLayers {
+  /** The terrain to paint: the leg's own, or the place's when leaving or arriving. */
+  terrain: Terrain;
   /** Multiplier on hill height: flat plains below 1, mountains above. */
   relief: number;
   /** 0..1 how much of the far layer is water instead of hills. */

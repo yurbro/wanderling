@@ -50,7 +50,7 @@
 
 2026-10-07 Yu 决定：丘陵套件（会话 24）效果可以，把其余七种地形也换成手绘带子，排在信件引擎之前。清单、提示词和专属道具见 `docs/design/art/terrain-kit.md` 的「其余七种地形」。
 
-- [ ] Yu 按提示词生成七张带子图：`terrain-plain-layers.png`、`terrain-mountain-layers.png`、`terrain-forest-layers.png`、`terrain-coast-layers.png`、`terrain-lake-layers.png`、`terrain-desert-layers.png`、`terrain-city-layers.png`；专属道具合成一张 `terrain-extra-props.png`。
+- [x] Yu 按提示词生成七张带子图（2026-10-07 全部到齐）和专属道具图 `terrain-extra-props.png`。
 - [ ] Claude 抠图入库（去边框、泛洪、提亮、镜像接龙、底部渐隐），`terrain.ts` 按地形加载对应套件，`renderer.ts` 在地形切换时换带子（走到下一段时平滑过渡）。
 - [ ] 海岸和湖：远中两层仍由代码画水，只换近景带子；城市：远中两层是天际线剪影。
 - [ ] 每种地形的专属道具按地形出现在路边。

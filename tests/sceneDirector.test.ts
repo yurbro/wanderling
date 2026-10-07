@@ -308,6 +308,17 @@ describe('direct follows the journey', () => {
     expect(rs.marker?.cottage).toBe(true);
   });
 
+  it("names the terrain to paint: the place's at either end of a leg, the leg's between", () => {
+    const start = locate(route, startJourney(route, t0), t0);
+    expect(direct(buildWorldState(noon, LONDON, null, start)).land.terrain).toBe(route.places[0].terrain);
+    const legKm = route.legs[0].km;
+    const mid = advance(route, startJourney(route, t0), t0 + ((legKm * 0.5) / KM_PER_HOUR) * 3_600_000).state;
+    expect(direct(buildWorldState(noon, LONDON, null, locate(route, mid, t0 + ((legKm * 0.5) / KM_PER_HOUR) * 3_600_000))).land.terrain).toBe(route.legs[0].terrain);
+    const near = advance(route, startJourney(route, t0), t0 + ((legKm * 0.9) / KM_PER_HOUR) * 3_600_000).state;
+    expect(direct(buildWorldState(noon, LONDON, null, locate(route, near, t0 + ((legKm * 0.9) / KM_PER_HOUR) * 3_600_000))).land.terrain).toBe(route.places[1].terrain);
+    expect(direct(buildWorldState(noon, LONDON, null)).land.terrain).toBe('hills');
+  });
+
   it('stands still while resting, with the sea in view at the coast', () => {
     const t1 = t0 + (8 / KM_PER_HOUR + 1) * 3_600_000;
     const s = advance(route, startJourney(route, t0), t1).state;

@@ -1,16 +1,28 @@
 import { Assets, Texture } from 'pixi.js';
+import type { Terrain } from '../core/types';
 
 /**
  * The terrain kit: hand-drawn pictures the renderer hangs its layers on
- * (docs/design/art/terrain-kit.md). The bands are grey so the renderer can
- * tint them with the sky's colours; the props carry their own colours.
+ * (docs/design/art/terrain-kit.md). Each terrain has four grey bands (far,
+ * mid and near hills, and the ground's edge) that the renderer tints with
+ * the sky's colours; the props are shared and carry their own colours.
  *
- * Only the hills kit exists so far. Until it has loaded, the renderer draws
+ * Bands load per terrain, on first use, so a journey only fetches the
+ * landscapes it walks through. Until a set has loaded the renderer draws
  * its own flat shapes, so nothing waits on the network.
  */
 
 export const BAND_NAMES = ['far', 'mid', 'near', 'ground'] as const;
 export type BandName = (typeof BAND_NAMES)[number];
+export type BandSet = Record<BandName, Texture>;
+
+/** Terrains that have a painted band set so far; the rest borrow hills. */
+const PAINTED: ReadonlySet<Terrain> = new Set<Terrain>(['hills', 'lake', 'coast', 'forest', 'mountain', 'plain']);
+
+/** The band set to paint a terrain with. */
+export function bandSetFor(terrain: Terrain): Terrain {
+  return PAINTED.has(terrain) ? terrain : 'hills';
+}
 
 const PROP_NAMES = [
   'grass-1', 'grass-2', 'grass-3', 'grass-4',
@@ -21,8 +33,7 @@ const PROP_NAMES = [
 ] as const;
 type PropName = (typeof PROP_NAMES)[number];
 
-export interface TerrainKit {
-  bands: Record<BandName, Texture>;
+export interface TerrainProps {
   grass: Texture[];
   stones: Texture[];
   flowers: Texture[];
@@ -32,28 +43,43 @@ export interface TerrainKit {
   cottage: Texture;
 }
 
-let kitPromise: Promise<TerrainKit> | null = null;
+const base = (): string => `${import.meta.env.BASE_URL}art/terrain/`;
 
-/** Load the hills kit once; shared by everything that draws with it. */
-export function loadTerrainKit(): Promise<TerrainKit> {
-  if (!kitPromise) {
-    const base = `${import.meta.env.BASE_URL}art/terrain/`;
-    const bandUrls = BAND_NAMES.map((n) => `${base}hills-${n}.png`);
-    const propUrls = PROP_NAMES.map((n) => `${base}${n}.png`);
-    kitPromise = Promise.all([...bandUrls, ...propUrls].map((u) => Assets.load<Texture>(u))).then((all) => {
-      for (const tex of all) {
-        tex.source.autoGenerateMipmaps = true;
-        tex.source.scaleMode = 'linear';
-        tex.source.update();
-      }
-      const bands = {} as Record<BandName, Texture>;
-      BAND_NAMES.forEach((n, i) => (bands[n] = all[i]));
-      // The bands repeat sideways: they are drawn as a picture plus its mirror, so the seam is invisible.
-      for (const n of BAND_NAMES) bands[n].source.addressMode = 'repeat';
+function prepare(tex: Texture, repeat: boolean): Texture {
+  tex.source.autoGenerateMipmaps = true;
+  tex.source.scaleMode = 'linear';
+  // The bands repeat sideways: each is a picture plus its mirror, so the seam is invisible.
+  if (repeat) tex.source.addressMode = 'repeat';
+  tex.source.update();
+  return tex;
+}
+
+const bandPromises = new Map<Terrain, Promise<BandSet>>();
+
+/** Load a terrain's four bands once. */
+export function loadBands(terrain: Terrain): Promise<BandSet> {
+  const key = bandSetFor(terrain);
+  let p = bandPromises.get(key);
+  if (!p) {
+    p = Promise.all(BAND_NAMES.map((n) => Assets.load<Texture>(`${base()}${key}-${n}.png`))).then((all) => {
+      const set = {} as BandSet;
+      BAND_NAMES.forEach((n, i) => (set[n] = prepare(all[i], true)));
+      return set;
+    });
+    bandPromises.set(key, p);
+  }
+  return p;
+}
+
+let propsPromise: Promise<TerrainProps> | null = null;
+
+/** Load the shared props once. */
+export function loadProps(): Promise<TerrainProps> {
+  if (!propsPromise) {
+    propsPromise = Promise.all(PROP_NAMES.map((n) => Assets.load<Texture>(`${base()}${n}.png`))).then((all) => {
       const props = {} as Record<PropName, Texture>;
-      PROP_NAMES.forEach((n, i) => (props[n] = all[BAND_NAMES.length + i]));
+      PROP_NAMES.forEach((n, i) => (props[n] = prepare(all[i], false)));
       return {
-        bands,
         grass: [props['grass-1'], props['grass-2'], props['grass-3'], props['grass-4']],
         stones: [props['stone-1'], props['stone-2'], props['stone-3']],
         flowers: [props['flower-1'], props['flower-2'], props['flower-3']],
@@ -64,5 +90,5 @@ export function loadTerrainKit(): Promise<TerrainKit> {
       };
     });
   }
-  return kitPromise;
+  return propsPromise;
 }
