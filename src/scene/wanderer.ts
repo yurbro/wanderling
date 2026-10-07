@@ -176,6 +176,8 @@ export class Wanderer {
   /** The firefly that keeps watch while the wanderling sleeps; untinted, add above the figure. */
   readonly firefly = new Graphics();
   private asleep = false;
+  /** Sat down, looking up at the full moon: the gaze is held for as long as it lasts. */
+  private moonWatch = false;
   private mode: 'walk' | 'ride' | 'fly' = 'walk';
 
   private state: WandererState | null = null;
@@ -326,6 +328,10 @@ export class Wanderer {
     this.view.tint = w.tint;
     this.cold = w.cold;
     this.asleep = w.asleep;
+    const watching = rs.surprise.moonWatch && !w.asleep;
+    // The moon has come up full: look up at once, not after the next idle beat.
+    if (watching && !this.moonWatch && this.gesture === 'none') this.begin('gaze');
+    this.moonWatch = watching;
     this.leafEnv = w.leaf;
     if (this.leafRope) this.leafRope.tint = w.leaf.tint;
     this.leafUmbrella.tint = w.leaf.tint;
@@ -471,6 +477,12 @@ export class Wanderer {
     if (this.nextGesture > 0) return;
     const r = Math.random();
     if (this.asleep) return;
+    if (this.moonWatch) {
+      // Looking up at the moon, with the odd blink; the gaze is picked up again as soon as it ends.
+      this.begin('gaze');
+      this.nextGesture = 0.2;
+      return;
+    }
     if (st.pace <= 0) {
       // Aboard a train or plane: mostly watching the window go by. Resting: a doze, a stretch, or a look around.
       if (this.mode !== 'walk') this.begin(r < 0.6 ? 'window' : r < 0.8 ? 'doze' : 'lookaround');

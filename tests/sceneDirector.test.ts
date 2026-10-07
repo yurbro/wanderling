@@ -225,6 +225,21 @@ describe('direct decides what the wanderer carries', () => {
     expect(direct(buildWorldState(noon, LONDON, null)).wanderer.asleep).toBe(false);
   });
 
+  it('shows the surprises: a rainbow opposite the sun, a seat for the moon, a flurry for the snow globe', () => {
+    const plain = direct(buildWorldState(noon, LONDON, null));
+    expect(plain.surprise.rainbow).toBe(0);
+    expect(plain.surprise.snowGlobe).toBe(0);
+    const ws = { ...buildWorldState(noon, LONDON, null), surprises: { rainbow: 0.8, moonWatch: true, snowGlobe: 0.6 } };
+    const rs = direct(ws);
+    expect(rs.surprise.rainbow).toBeCloseTo(0.8);
+    expect(rs.surprise.rainbowX).toBeCloseTo(1 - rs.sun.x);
+    expect(rs.wanderer.pace).toBe(0);
+    expect(rs.weather.snow).toBeCloseTo(0.6);
+    // No rainbow at night.
+    const night = { ...buildWorldState(new Date(2026, 9, 6, 23, 0), LONDON, null), surprises: { rainbow: 1, moonWatch: false, snowGlobe: 0 } };
+    expect(direct(night).surprise.rainbow).toBe(0);
+  });
+
   it('lets the leaf answer rain, sun, cold and heat', () => {
     const dry = direct(buildWorldState(noon, LONDON, demoWeather('clear', noon))).wanderer.leaf;
     expect(dry.droop).toBeCloseTo(0, 5);

@@ -1,5 +1,6 @@
 import type { GeoPoint, WeatherState } from '../core/types';
-import { isFresh, parseForecast, weatherAt, type WeatherSnapshot, tomorrowOutlook, type Outlook } from '../core/weather';
+import { isFresh, parseForecast, weatherAt, type WeatherSnapshot, tomorrowOutlook,
+  rainHours, type Outlook } from '../core/weather';
 
 /**
  * Open-Meteo weather with a small cache and a quiet failure mode.
@@ -36,6 +37,8 @@ export function forecastUrl(p: GeoPoint): string {
       'wind_direction_10m',
     ].join(','),
     forecast_days: '2',
+    // Yesterday too, so a rainbow after this morning's rain can be told on opening.
+    past_days: '1',
     timeformat: 'unixtime',
     timezone: 'UTC',
   });
@@ -109,6 +112,11 @@ export class WeatherService {
   /** Tomorrow's rain, snow and wind where the person is, from the cached forecast; null when unknown. */
   outlook(now: Date): Outlook | null {
     return tomorrowOutlook(this.snapshot, now);
+  }
+
+  /** The hours we know and how hard it rained in each. */
+  rain(): { time: number; rain: number }[] {
+    return rainHours(this.snapshot);
   }
 
   /** True when the cached snapshot is young and for this place. */

@@ -9,6 +9,10 @@ import { deliveredCards, demoPostcards, makePostcard, missingArrivals } from './
 import { dayKey, deliver, fillSlots, markAllRead, momentTime, type Candidate, unreadCount, visibleLetters, weatherTime, bundled, type Letter } from './core/letters';
 import { momentsFor, skeletonById, weatherSkeletons } from './data/letterTexts';
 import { loadMail, saveMail } from './data/mailStore';
+import { EMPTY_LOG, begin as beginSurprise, intensity, missedLetters, offer as offerSurprise, rainEndedAgo, scanPast, type Facts, type SurpriseId, type SurpriseLog } from './core/surprises';
+import { weatherIntensities } from './core/weather';
+import { loadLastSeen, loadSurprises, saveLastSeen, saveSurprises } from './data/surpriseStore';
+import { enableShake } from './data/motion';
 import { createMailbox, type ShownLetter } from './ui/mailbox';
 import { CONDITIONS, conditionFromCode, demoWeather } from './core/weather';
 import { buildWorldState } from './core/world';
@@ -41,6 +45,8 @@ import { createMap } from './ui/map';
  *   ?postcards=demo    add three sample postcards to the album (not saved)
  *   ?postcards=now     hand over postcards the moment they are posted (slow post off)
  *   ?mail=demo         drop a few sample letters in the box (not saved)
+ *   ?surprise=rainbow  force a surprise now: rainbow, fullMoon, snowGlobe, wave, or
+ *                      missed (a rainbow and a full moon that went unseen, as letters) (not saved)
  */
 const LANG_KEY = 'wanderling.lang';
 
@@ -309,11 +315,13 @@ async function main(): Promise<void> {
       const kind = outlook.snow ? 'snow' : outlook.rain ? 'rain' : 'wind';
       candidates.push({ id: `weather:${today}`, kind: 'weather', wantAt: weatherAt, pool: weatherSkeletons(kind).map((s) => s.id) });
     }
+    syncSurprises(position, candidates);
     const next = deliver(mail, candidates, now);
     if (next !== mail) {
       mail = next;
       if (!demoJourney && !mailDemo) saveMail(mail);
     }
+    saveLog();
     const unread = unreadCount(mail, now);
     if (unread !== lastUnread) {
       if (lastUnread >= 0 && unread > lastUnread) hud.setNote(say('letterArrived'), 12_000);
@@ -334,6 +342,59 @@ async function main(): Promise<void> {
 
   const weatherFor = (t: Date): WeatherState | null =>
     forcedWeather ? demoWeather(forcedWeather, t, forcedTweaks) : weather.current(t);
+
+  // Surprises: data rules judged against the world (src/core/surprises.ts).
+  // On opening, the hours since the last visit are walked so a rainbow or a
+  // full moon that came and went still counts, and unseen ones become letters.
+  const surpriseParam = params.get('surprise');
+  const surpriseDemo = surpriseParam !== null;
+  let surprises: SurpriseLog = surpriseDemo ? EMPTY_LOG : loadSurprises();
+  const factsAt = (at: number, position: Position): Facts | null => {
+    const when = new Date(at);
+    const ws = buildWorldState(when, location, weatherFor(when), position);
+    const fx = weatherIntensities(ws.weather);
+    return {
+      at,
+      hour: when.getHours() + when.getMinutes() / 60,
+      sunAltitude: ws.sun.altitude,
+      moonAltitude: ws.moon.altitude,
+      moonFraction: ws.moon.fraction,
+      rain: fx.rain,
+      cloud: fx.cloud,
+      rainEndedAgo: fx.rain > 0.05 ? 0 : rainEndedAgo(weather.rain(), at),
+      walking: position.mode === 'walk' && !position.resting && !position.finished,
+    };
+  };
+  const saveLog = (): void => {
+    if (!surpriseDemo && !demoJourney) saveSurprises(surprises);
+  };
+  const showSurprises = (at: number) => ({
+    rainbow: intensity(surprises, 'rainbow', at),
+    moonWatch: intensity(surprises, 'fullMoon', at) > 0,
+    snowGlobe: intensity(surprises, 'snowGlobe', at),
+  });
+  /** Give the world its chance this tick, and turn what went unseen into letters. */
+  const syncSurprises = (position: Position, candidates: Candidate[]): void => {
+    const wall = Date.now();
+    const f = factsAt(wall, position);
+    if (f) surprises = offerSurprise(surprises, f, !document.hidden);
+    const missed = missedLetters(surprises, wall);
+    surprises = missed.log;
+    candidates.push(...missed.candidates);
+    if (!document.hidden) saveLastSeen(wall);
+  };
+  /** A few quick ticks, so a surprise's fade-in is seen rather than waiting for the 5 s clock. */
+  const quickTicks = (): void => {
+    for (const d of [150, 450, 900, 1500, 2400]) window.setTimeout(tick, d);
+  };
+  const startSurprise = (id: SurpriseId, force = false): void => {
+    const next = beginSurprise(surprises, id, Date.now(), force);
+    if (next === surprises) return;
+    surprises = next;
+    saveLog();
+    tick();
+    quickTicks();
+  };
 
   let world: WorldState;
   let render: RenderState;
@@ -406,7 +467,7 @@ async function main(): Promise<void> {
     syncDelivered(true);
     const position = locate(route, journey, wall);
     syncMail(position);
-    world = buildWorldState(t, location, weatherFor(t), position);
+    world = { ...buildWorldState(t, location, weatherFor(t), position), surprises: showSurprises(wall) };
     render = direct(world);
     if (forcedTerrain) render = { ...render, land: { ...render.land, terrain: forcedTerrain, relief: TERRAIN[forcedTerrain].relief, sea: TERRAIN[forcedTerrain].sea } };
     // Falling asleep: the firefly's one line, once.
@@ -422,9 +483,36 @@ async function main(): Promise<void> {
     rememberSky(skyCss);
   };
 
+  // The hours away, at most three days of them, judged in quarter hours.
+  {
+    const wall = Date.now();
+    const lastSeen = loadLastSeen();
+    const from = Math.max(lastSeen ?? wall, wall - 3 * 24 * 3_600_000);
+    const position = locate(route, journey, wall);
+    if (!surpriseDemo && lastSeen && from < wall) surprises = scanPast(surprises, (at) => factsAt(at, position), from, wall);
+    if (surpriseParam === 'missed') {
+      // Two that went by unseen, long enough ago that their letters are due.
+      surprises = beginSurprise(surprises, 'rainbow', wall - 20 * 3_600_000, true);
+      surprises = beginSurprise(surprises, 'fullMoon', wall - 40 * 3_600_000, true);
+      surprises = { events: surprises.events.map((e) => ({ ...e, witnessed: false })) };
+    } else if (surpriseParam === 'rainbow' || surpriseParam === 'fullMoon' || surpriseParam === 'snowGlobe' || surpriseParam === 'wave') {
+      surprises = beginSurprise(surprises, surpriseParam, wall, true);
+      quickTicks();
+    }
+  }
   // The first tick makes any cards owed and sets the button; cards delivered
   // while the app was closed pulse because the seen count is behind.
   tick();
+  if (surpriseParam === 'wave') renderer.wave();
+  // A long press is a wave, a shake is the snow globe. iOS asks for motion on the first tap.
+  renderer.onWave(() => startSurprise('wave'));
+  const armShake = (): void => {
+    void enableShake(() => {
+      startSurprise('snowGlobe');
+      renderer.shaken();
+    });
+  };
+  root.addEventListener('pointerdown', armShake, { once: true });
   if (departure) hud.setNote(departure, 15_000);
   // A read-only peek for debugging and screenshots: window.__wanderling.render
   Object.defineProperty(window, '__wanderling', {
