@@ -77,7 +77,9 @@ Muted colors: greens #7E9A8C and #587868, stone #A4A684, wood #8C7355, walls #E8
 
 生成后把原图上传到对话里，我负责抠图、镜像接龙、入库、接进 `renderer.ts`，并截正午、傍晚、夜晚、雨天四张图给 Yu 看。
 
-## 其余七种地形（路线图 3c）
+## 其余七种地形（路线图 3c，2026-10-07 已全部入库）
+
+八张图都在本目录（`terrain-<地形>-layers.png` 和 `terrain-extra-props.png`），抠好的带子和道具在 `public/art/terrain/`。城市的带子画得偏大，代码里按 0.55 缩小。
 
 每种只需要一张带子图（格式和丘陵的第一张完全一样：四条灰阶带子、白底、底边平直、两端等高）。道具图共用丘陵的，专属道具合成一张 `terrain-extra-props.png`。
 

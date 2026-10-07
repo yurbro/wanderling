@@ -1,10 +1,10 @@
 import './style.css';
 import { direct } from './core/sceneDirector';
-import type { GeoPoint, JourneyState, RenderState, Route, WeatherCondition, WeatherState, WorldState } from './core/types';
+import type { GeoPoint, JourneyState, RenderState, Route, WeatherCondition, WeatherState, WorldState, Terrain } from './core/types';
 import { buildSegmentRoute, chooseNext, departureNote, nextSegment, routeOptions } from './core/chain';
 import { homeFrom, nearestRoute, routeFromHome } from './core/geo';
 import { detectLang, placeName, placeNote, setLang, t } from './core/i18n';
-import { REST_MS, advance, describeJourney, lastArrival, locate, startJourney } from './core/journey';
+import { REST_MS, advance, describeJourney, lastArrival, locate, startJourney, TERRAIN } from './core/journey';
 import { deliveredCards, demoPostcards, makePostcard, missingArrivals } from './core/postcards';
 import { CONDITIONS, conditionFromCode, demoWeather } from './core/weather';
 import { buildWorldState } from './core/world';
@@ -12,7 +12,7 @@ import { reverseGeocode, searchCity } from './data/geocode';
 import { loadJourney, saveJourney } from './data/journeyStore';
 import { clearPostcards, loadPostcards, savePostcards } from './data/postcardStore';
 import { DEFAULT_LOCATION, isDefaultLocation, loadLocation, requestLocation, saveLocation } from './data/location';
-import { ROUTES, TO_THE_SEA } from './data/routes';
+import { ROUTES, TO_THE_SEA, routeById } from './data/routes';
 import { WeatherService } from './data/weather';
 import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
@@ -29,6 +29,8 @@ import { createMap } from './ui/map';
  *   ?weather=rain      force a weather look (a condition name or a WMO code)
  *   ?temp=-3&wind=30   tweak the forced weather (Celsius, km/h)
  *   ?km=120            jump the journey to a kilometre mark (not saved)
+ *   ?route=jiangnan-v1 peek at another route from its start (not saved)
+ *   ?terrain=desert    paint the land as that terrain, whatever the route says
  *   ?journey=reset     start the journey again from the first place
  *   ?journey=next      jump to the next segment of the chain right away (not saved)
  *   ?postcards=demo    add three sample postcards to the album (not saved)
@@ -62,6 +64,8 @@ async function main(): Promise<void> {
   }
 
   let minutesOverride: number | null = parseClock(params.get('t'));
+  const terrainParam = params.get('terrain');
+  const forcedTerrain = terrainParam && terrainParam in TERRAIN ? (terrainParam as Terrain) : null;
   let forcedWeather: WeatherCondition | null = parseWeather(params.get('weather'));
   const forcedTweaks: Partial<WeatherState> = {};
   if (params.has('temp') && Number.isFinite(Number(params.get('temp')))) {
@@ -162,9 +166,15 @@ async function main(): Promise<void> {
   } else {
     ({ route, journey } = freshJourney(location));
   }
+  // A demo peek at another route: start it afresh, unsaved.
+  const demoRoute = params.get('route') ? routeById(params.get('route')!) : undefined;
+  if (demoRoute) {
+    route = demoRoute;
+    journey = { ...startJourney(route, Date.now()), home: null, from: null, walked: [] };
+  }
   const kmJump = Number(params.get('km'));
   const jumpNext = params.get('journey') === 'next';
-  const demoJourney = (params.has('km') && Number.isFinite(kmJump)) || jumpNext;
+  const demoJourney = (params.has('km') && Number.isFinite(kmJump)) || jumpNext || !!demoRoute;
   let departure: string | null = null;
   if (jumpNext) {
     // A demo peek at the chain: finish this segment and set off on the next.
@@ -309,6 +319,7 @@ async function main(): Promise<void> {
     const position = locate(route, journey, wall);
     world = buildWorldState(t, location, weatherFor(t), position);
     render = direct(world);
+    if (forcedTerrain) render = { ...render, land: { ...render.land, terrain: forcedTerrain, relief: TERRAIN[forcedTerrain].relief, sea: TERRAIN[forcedTerrain].sea } };
     // Falling asleep: the firefly's one line, once.
     // A beat later, so it is not covered by the postcard line that may follow an arrival.
     if (render.wanderer.asleep && !wasAsleep) window.setTimeout(() => hud.setNote(say('hushAsleep'), 15_000), 80);

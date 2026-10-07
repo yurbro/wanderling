@@ -1,6 +1,6 @@
 import { clamp01, hexToRgb, mix, smoothstep } from './color';
 import { CELESTIAL, LAND, WEATHER_TONES, skyAt } from './palette';
-import type { CelestialPlacement, DayPhase, LeafState, LegMode, PlaceMarker, RenderState, Terrain, WorldState } from './types';
+import type { CelestialPlacement, DayPhase, LeafState, LegMode, PlaceMarker, Position, RenderState, Terrain, WorldState } from './types';
 import { TERRAIN, landAt } from './journey';
 import { NO_WEATHER, weatherIntensities } from './weather';
 
@@ -118,6 +118,7 @@ export function direct(ws: WorldState): RenderState {
   // The land: shaped by the terrain of the current leg, flat sea at the coast.
   const profile = journey ? landAt(journey.route, journey) : TERRAIN.hills;
   const landLayers = {
+    terrain: journey ? terrainAt(journey) : 'hills',
     relief: profile.relief,
     sea: profile.sea,
     seaColor: mix(mix(LAND.seaNight, LAND.seaDay, dayLight), horizon, 0.3),
@@ -231,6 +232,18 @@ export function leafSeasonTint(now: Date, lat: number): number {
   const paint = hexToRgb(LEAF_PAINT);
   const ch = (w: number, p: number): number => Math.round(Math.min(255, (w / p) * 255));
   return (ch(want.r, paint.r) << 16) | (ch(want.g, paint.g) << 8) | ch(want.b, paint.b);
+}
+
+/**
+ * Which terrain to paint: the place's own in the first tenth of a leg and the
+ * last fifth (so the picture changes where the land profile blends), the leg's
+ * in between. Aboard a train or plane the land is the leg's.
+ */
+export function terrainAt(pos: Position): Terrain {
+  if (pos.finished || pos.to === null) return pos.from.terrain;
+  if (pos.fraction < 0.1) return pos.from.terrain;
+  if (pos.fraction > 0.8) return pos.to.terrain;
+  return pos.route.legs[pos.legIndex].terrain;
 }
 
 /** The wanderling sleeps from 2:00 until 4:00 by the person's own clock. */
