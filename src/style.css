@@ -623,3 +623,66 @@ canvas.scene {
   font-size: 13px;
   opacity: 0.85;
 }
+
+/* The letter box: small sheets of paper, newest first */
+
+.letter-list {
+  gap: 14px;
+}
+
+.letter {
+  position: relative;
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 4px;
+  padding: 14px 16px 16px;
+  box-shadow: 0 8px 24px rgba(20, 24, 40, 0.3);
+  transform: rotate(-0.4deg);
+}
+
+.letter:nth-child(even) {
+  transform: rotate(0.35deg);
+}
+
+.letter-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin-bottom: 8px;
+}
+
+.letter-line {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.letter-line + .letter-line {
+  margin-top: 8px;
+}
+
+.letter-digest .letter-line {
+  padding-left: 14px;
+  text-indent: -14px;
+}
+
+.letter-digest .letter-line::before {
+  content: '·';
+  display: inline-block;
+  width: 14px;
+  text-indent: 0;
+}
+
+.letter-unread::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b86b5a;
+}

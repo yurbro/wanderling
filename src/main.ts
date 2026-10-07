@@ -1,16 +1,21 @@
 import './style.css';
-import { direct } from './core/sceneDirector';
-import type { GeoPoint, JourneyState, RenderState, Route, WeatherCondition, WeatherState, WorldState, Terrain } from './core/types';
+import { direct, terrainAt } from './core/sceneDirector';
+import type { GeoPoint, JourneyState, Position, RenderState, Route, WeatherCondition, WeatherState, WorldState, Terrain } from './core/types';
 import { buildSegmentRoute, chooseNext, departureNote, nextSegment, routeOptions } from './core/chain';
 import { homeFrom, nearestRoute, routeFromHome } from './core/geo';
 import { detectLang, placeName, placeNote, setLang, t } from './core/i18n';
 import { REST_MS, advance, describeJourney, lastArrival, locate, startJourney, TERRAIN } from './core/journey';
 import { deliveredCards, demoPostcards, makePostcard, missingArrivals } from './core/postcards';
+import { dayKey, deliver, fillSlots, markAllRead, momentTime, type Candidate, unreadCount, visibleLetters, weatherTime, bundled, type Letter } from './core/letters';
+import { momentsFor, skeletonById, weatherSkeletons } from './data/letterTexts';
+import { loadMail, saveMail } from './data/mailStore';
+import { createMailbox, type ShownLetter } from './ui/mailbox';
 import { CONDITIONS, conditionFromCode, demoWeather } from './core/weather';
 import { buildWorldState } from './core/world';
 import { reverseGeocode, searchCity } from './data/geocode';
 import { loadJourney, saveJourney } from './data/journeyStore';
 import { clearPostcards, loadPostcards, savePostcards } from './data/postcardStore';
+import { routeById as findRoute } from './data/routes';
 import { DEFAULT_LOCATION, isDefaultLocation, loadLocation, requestLocation, saveLocation } from './data/location';
 import { ROUTES, TO_THE_SEA, routeById } from './data/routes';
 import { WeatherService } from './data/weather';
@@ -35,6 +40,7 @@ import { createMap } from './ui/map';
  *   ?journey=next      jump to the next segment of the chain right away (not saved)
  *   ?postcards=demo    add three sample postcards to the album (not saved)
  *   ?postcards=now     hand over postcards the moment they are posted (slow post off)
+ *   ?mail=demo         drop a few sample letters in the box (not saved)
  */
 const LANG_KEY = 'wanderling.lang';
 
@@ -114,12 +120,22 @@ async function main(): Promise<void> {
       markPostcardsSeen();
       album.open();
     },
+    onMail: () => {
+      mailbox.setLetters(shownLetters());
+      mailbox.open();
+    },
     onMap: () => {
       map.update(route, locate(route, journey, Date.now()), visibleCards(), routeOptions(journey, route, ROUTES));
       map.open();
     },
   });
   const album = createAlbum(root, hud.unit);
+  const mailbox = createMailbox(root, () => {
+    // Opening the box reads everything that has arrived.
+    mail = markAllRead(mail, Date.now());
+    if (!demoJourney) saveMail(mail);
+    hud.setMail(0);
+  });
   const map = createMap(root, {
     onChoose: (id) => {
       journey = chooseNext(journey, id);
@@ -244,6 +260,78 @@ async function main(): Promise<void> {
     }
   };
 
+  // Letters: what he writes about the road, delivered by the engine's rules.
+  let mail = loadMail();
+  const mailDemo = params.get('mail') === 'demo';
+  /** A letter's text in the current language: a place's own line, a skeleton, or a digest's lines. */
+  const letterLines = (l: Letter): string[] => {
+    if (l.kind === 'digest') return bundled(mail, l).flatMap((x) => letterLines(x));
+    if (l.skeleton.startsWith('place:')) {
+      const [, routeId, placeId] = l.skeleton.split(':');
+      const r = routeId === route.id ? route : findRoute(routeId);
+      const p = r?.places.find((x) => x.id === placeId);
+      if (p?.note) return [placeNote(p)];
+    }
+    const sk = skeletonById(l.skeleton);
+    if (!sk) return [];
+    return [fillSlots(lang === 'zh' ? sk.zh : sk.en, l.vars)];
+  };
+  const shownLetters = (): ShownLetter[] =>
+    visibleLetters(mail, Date.now()).map((l) => ({ id: l.id, kind: l.kind, at: l.at, read: l.read, lines: letterLines(l) }));
+  let lastUnread = -1;
+  /** Offer today's candidates to the engine and keep the button in step. */
+  const syncMail = (position: Position): void => {
+    const now = Date.now();
+    const today = dayKey(now);
+    const candidates: Candidate[] = [];
+    // Each delivered postcard carries a line on its back.
+    for (const card of deliveredCards(postcards, now)) {
+      const place = route.places.find((p) => p.id === card.placeId);
+      candidates.push({
+        id: `postcard:${card.id}`,
+        kind: 'postcard',
+        wantAt: card.deliverAt ?? card.at,
+        skeleton: place?.note ? `place:${route.id}:${card.placeId}` : undefined,
+        pool: place?.note ? undefined : ['p.here', 'p.sky', 'p.sit'],
+        vars: { place: card.placeName },
+      });
+    }
+    // One small thing from the road a day, at its steady hour, from where he is.
+    const momentAt = momentTime(today);
+    if (now >= momentAt && position.mode === 'walk') {
+      const terrain = terrainAt(position);
+      candidates.push({ id: `moment:${today}`, kind: 'moment', wantAt: momentAt, pool: momentsFor(terrain).map((s) => s.id), vars: { place: placeName(position.from), terrain } });
+    }
+    // In the evening, a word about tomorrow where the person is.
+    const weatherAt = weatherTime(today);
+    const outlook = weather.outlook(new Date(now));
+    if (now >= weatherAt && outlook && (outlook.rain || outlook.snow || outlook.wind)) {
+      const kind = outlook.snow ? 'snow' : outlook.rain ? 'rain' : 'wind';
+      candidates.push({ id: `weather:${today}`, kind: 'weather', wantAt: weatherAt, pool: weatherSkeletons(kind).map((s) => s.id) });
+    }
+    const next = deliver(mail, candidates, now);
+    if (next !== mail) {
+      mail = next;
+      if (!demoJourney && !mailDemo) saveMail(mail);
+    }
+    const unread = unreadCount(mail, now);
+    if (unread !== lastUnread) {
+      if (lastUnread >= 0 && unread > lastUnread) hud.setNote(say('letterArrived'), 12_000);
+      lastUnread = unread;
+      hud.setMail(unread);
+      if (mailbox.isOpen) mailbox.setLetters(shownLetters());
+    }
+  };
+  if (mailDemo) {
+    const now = Date.now();
+    mail = deliver(mail, [
+      { id: 'demo:1', kind: 'moment', wantAt: now - 26 * 3_600_000, pool: ['m.dog'] },
+      { id: 'demo:2', kind: 'weather', wantAt: now - 20 * 3_600_000, pool: ['w.rain1'] },
+      { id: 'demo:3', kind: 'moment', wantAt: now - 3 * 3_600_000, pool: ['m.clouds'] },
+      { id: 'demo:4', kind: 'postcard', wantAt: now - 3_600_000, pool: ['p.sky'], vars: { place: 'Porto' } },
+    ], now);
+  }
+
   const weatherFor = (t: Date): WeatherState | null =>
     forcedWeather ? demoWeather(forcedWeather, t, forcedTweaks) : weather.current(t);
 
@@ -317,6 +405,7 @@ async function main(): Promise<void> {
     syncPostcards(step.arrived.length > 0);
     syncDelivered(true);
     const position = locate(route, journey, wall);
+    syncMail(position);
     world = buildWorldState(t, location, weatherFor(t), position);
     render = direct(world);
     if (forcedTerrain) render = { ...render, land: { ...render.land, terrain: forcedTerrain, relief: TERRAIN[forcedTerrain].relief, sea: TERRAIN[forcedTerrain].sea } };

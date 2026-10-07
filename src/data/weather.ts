@@ -1,5 +1,5 @@
 import type { GeoPoint, WeatherState } from '../core/types';
-import { isFresh, parseForecast, weatherAt, type WeatherSnapshot } from '../core/weather';
+import { isFresh, parseForecast, weatherAt, type WeatherSnapshot, tomorrowOutlook, type Outlook } from '../core/weather';
 
 /**
  * Open-Meteo weather with a small cache and a quiet failure mode.
@@ -104,6 +104,11 @@ export class WeatherService {
   /** Weather for a moment from whatever we have, or null. Never fetches. */
   current(now: Date): WeatherState | null {
     return this.snapshot ? weatherAt(this.snapshot, now) : null;
+  }
+
+  /** Tomorrow's rain, snow and wind where the person is, from the cached forecast; null when unknown. */
+  outlook(now: Date): Outlook | null {
+    return tomorrowOutlook(this.snapshot, now);
   }
 
   /** True when the cached snapshot is young and for this place. */

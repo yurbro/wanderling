@@ -331,6 +331,40 @@ export function weatherAt(snap: WeatherSnapshot, now: Date): WeatherState | null
   return null;
 }
 
+/** What tomorrow holds where the person is, for a word of warning in a letter. */
+export interface Outlook {
+  rain: boolean;
+  snow: boolean;
+  /** A wind of 30 km/h or more at some hour. */
+  wind: boolean;
+}
+
+/**
+ * Tomorrow by the local calendar, from the hourly forecast. Null when the
+ * forecast does not reach that far (or there is none).
+ */
+export function tomorrowOutlook(snap: WeatherSnapshot | null, now: Date): Outlook | null {
+  if (!snap) return null;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const key = `${tomorrow.getFullYear()}-${tomorrow.getMonth()}-${tomorrow.getDate()}`;
+  const hours = snap.hourly.filter((s) => {
+    const d = new Date(s.time);
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` === key;
+  });
+  if (hours.length < 6) return null;
+  let rain = false;
+  let snow = false;
+  let wind = false;
+  for (const h of hours) {
+    const c = conditionFromCode(h.code, h.cloudCover);
+    if (c === 'rain' || c === 'heavy-rain' || c === 'drizzle' || c === 'thunderstorm' || h.precipitation >= 0.5) rain = true;
+    if (c === 'snow' || c === 'heavy-snow') snow = true;
+    if (h.windSpeed >= 30) wind = true;
+  }
+  return { rain, snow, wind };
+}
+
 /** Fresh enough to skip a fetch: young, and for (roughly) the same place. */
 export function isFresh(snap: WeatherSnapshot, now: Date, lat: number, lon: number): boolean {
   const age = now.getTime() - snap.fetchedAt;

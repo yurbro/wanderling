@@ -9,6 +9,7 @@ export interface HudOptions {
   /** Demo only: null means "back to the real weather". */
   onWeather?: (condition: WeatherCondition | null) => void;
   onAlbum?: () => void;
+  onMail?: () => void;
   onMap?: () => void;
   /** Tapping the place name: choose a city by hand. */
   onPlace?: () => void;
@@ -23,6 +24,8 @@ export interface Hud {
   setJourney(text: string): void;
   /** Postcard count on the album button; `fresh` pulses it until opened. */
   setPostcards(count: number, fresh: boolean): void;
+  /** Unread letters on the letters button; it pulses while there are any. */
+  setMail(unread: number): void;
   hideLocate(): void;
   /** The temperature unit the HUD picked from the browser language. */
   readonly unit: 'C' | 'F';
@@ -56,6 +59,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       <div class="note" id="hud-note"></div>
       <div class="journey" id="hud-journey"></div>
       <div class="hud-buttons">
+        <button class="pill" id="hud-mail" type="button">${t('mail')}</button>
         <button class="pill" id="hud-album" type="button">${t('postcards')}</button>
         <button class="pill" id="hud-map" type="button">${t('map')}</button>
         <button class="pill" id="hud-locate" type="button">${t('useLocation')}</button>
@@ -88,6 +92,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let noteTimer: number | null = null;
   const locate = el.querySelector<HTMLButtonElement>('#hud-locate')!;
   const album = el.querySelector<HTMLButtonElement>('#hud-album')!;
+  const mail = el.querySelector<HTMLButtonElement>('#hud-mail')!;
   const map = el.querySelector<HTMLButtonElement>('#hud-map')!;
   const langBtn = el.querySelector<HTMLButtonElement>('#hud-lang')!;
   langBtn.addEventListener('click', () => opts.onLanguage?.());
@@ -114,6 +119,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     });
   }
 
+  mail.addEventListener('click', () => {
+    mail.classList.remove('has-new');
+    opts.onMail?.();
+  });
   album.addEventListener('click', () => {
     album.classList.remove('has-new');
     opts.onAlbum?.();
@@ -165,6 +174,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     },
     setJourney(text) {
       journey.textContent = text;
+    },
+    setMail(unread) {
+      mail.textContent = unread > 0 ? `${t('mail')} · ${unread}` : t('mail');
+      mail.classList.toggle('has-new', unread > 0);
     },
     setPostcards(count, fresh) {
       album.textContent = count > 0 ? `${t('postcards')} · ${count}` : t('postcards');
