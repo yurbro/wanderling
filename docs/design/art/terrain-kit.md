@@ -77,20 +77,47 @@ Muted colors: greens #7E9A8C and #587868, stone #A4A684, wood #8C7355, walls #E8
 
 生成后把原图上传到对话里，我负责抠图、镜像接龙、入库、接进 `renderer.ts`，并截正午、傍晚、夜晚、雨天四张图给 Yu 看。
 
-## 其余七种地形（之后再做）
+## 其余七种地形（路线图 3c）
 
-每种只需要重出第一张图，道具图可以共用，少数地形加一两样专属道具：
+每种只需要一张带子图（格式和丘陵的第一张完全一样：四条灰阶带子、白底、底边平直、两端等高）。道具图共用丘陵的，专属道具合成一张 `terrain-extra-props.png`。
 
-| 地形 | 带子的差别 | 专属道具 |
-| --- | --- | --- |
-| 平原 | 三条都很低平，近景是田埂 | 稻草垛或干草卷 |
-| 山地 | 远山是尖峰，中近山陡 | 木桥 |
-| 森林 | 中近两层是成片的树冠剪影 | 蘑菇、树桩 |
-| 海岸 | 远中两层由代码画海，只要近景的沙丘或礁石一条 | 灯塔、小船（海已有代码版） |
-| 湖 | 远山加一条平静的岸线 | 码头 |
-| 沙漠 | 三条沙丘，近景几丛灌木 | 仙人掌、骆驼刺 |
-| 城市 | 远中两层是天际线剪影，近景矮房 | 长椅、邮筒 |
+| 地形 | 文件名 | 带子的差别 | 专属道具 |
+| --- | --- | --- | --- |
+| 平原 | `terrain-plain-layers.png` | 三条都很低平，近景是田埂和几行作物的笔触 | 干草卷、稻草垛 |
+| 山地 | `terrain-mountain-layers.png` | 远山是尖峰群，中山陡峭，近景是碎石坡 | 木桥、路边小石堆 |
+| 森林 | `terrain-forest-layers.png` | 中近两层是成片的树冠剪影，近景有树干 | 蘑菇、树桩 |
+| 海岸 | `terrain-coast-layers.png` | 只画近景一条：沙丘加几丛海草（远中两层由代码画海） | 灯塔、翻过来的小船 |
+| 湖 | `terrain-lake-layers.png` | 远山加一条平静的岸线和芦苇，近景草坡 | 小码头、芦苇丛 |
+| 沙漠 | `terrain-desert-layers.png` | 三条沙丘，起伏圆滑，近景几丛干灌木 | 仙人掌、骆驼刺 |
+| 城市 | `terrain-city-layers.png` | 远中两层是低矮的天际线剪影（屋顶、烟囱、塔楼），近景矮房子的墙和篱笆 | 长椅、邮筒 |
 
-## 已完成（会话 24）
+带子图提示词（把方括号里的话换成对应地形那一行的描述）：
 
-丘陵套件已入库：`terrain-hills-layers.png`、`terrain-hills-props.png` 在本目录，抠好的带子和道具在 `public/art/terrain/`。接法见 `src/scene/terrain.ts` 和 `renderer.ts` 的 `dressTerrain()`。处理记录：带子去边框、泛洪去白底、`-level 0,80%` 提亮、镜像接龙、底部渐隐；道具收边一像素、缩到 60%。要做下一种地形，只需按「第一张图」的提示词改地形描述，道具图可共用。
+```
+A parts sheet of landscape layers for a paper-cut parallax scene, in grayscale for later tinting. Four separate horizontal bands stacked top to bottom on a plain pure white background, each band spanning the full width, with white gaps between them, nothing overlapping, no labels, no text, no sky, no sun, no shadows:
+1. [far layer];
+2. [middle layer];
+3. [near layer];
+4. [ground band].
+Each band is a solid filled shape with a flat bottom. Fill is near-white with faint grey watercolor texture; outlines are soft dark grey-brown pencil lines of slightly varying thickness. The left and right ends of each band are at the same height so it can repeat. hand-drawn illustration in the style of a quiet Japanese travel journal, soft pencil outlines, grayscale only, flat fills with slight watercolor texture, generous negative space, subtle paper texture, no gradients, no lens flare, no text, no watermark, minimal details, calm and cozy mood
+```
+
+四条带子每种地形怎么填：
+
+| 地形 | 1 远 | 2 中 | 3 近 | 4 地面 |
+| --- | --- | --- | --- | --- |
+| 平原 | a very low, almost flat line of distant land | a low line of fields with a few hedgerows | a near line of low field edges with rows of crops suggested by short strokes | a band of flat farmland ground with a slightly uneven top edge and a straight bottom edge |
+| 山地 | a line of distant sharp mountain peaks | a line of steep middle-distance mountains with ridges | a near line of rocky slopes with scattered boulders | a band of stony ground with a slightly uneven top edge and a straight bottom edge |
+| 森林 | a low line of distant forested hills | a dense line of middle-distance tree crowns in silhouette | a near line of tree crowns with a few trunks reaching down to the bottom | a band of forest floor with ferns and a slightly uneven top edge and a straight bottom edge |
+| 海岸 | a thin flat line of distant land on the horizon | a thin flat line of a far shore | a near line of low sand dunes with tufts of sea grass | a band of sandy ground with a slightly uneven top edge and a straight bottom edge |
+| 湖 | a line of distant gentle hills | a flat calm shoreline with a few reeds | a near grassy bank with clumps of reeds | a band of grassy ground with a slightly uneven top edge and a straight bottom edge |
+| 沙漠 | a low line of distant smooth dunes | a line of middle-distance rounded dunes | a near line of dunes with a few dry shrubs | a band of sandy ground with ripples and a slightly uneven top edge and a straight bottom edge |
+| 城市 | a low distant skyline of rooftops and a tower in silhouette | a middle-distance row of low houses with chimneys in silhouette | a near row of low house walls and a fence with the tops of doorways | a band of paved ground with a slightly uneven top edge and a straight bottom edge |
+
+专属道具图 `terrain-extra-props.png` 的提示词（有颜色，和丘陵道具图同一套色板）：
+
+```
+A parts sheet of small landscape props for a cozy walking scene, laid out in a loose grid on a plain pure white background, generous spacing, nothing overlapping, no labels, no text, no cast shadows, each prop with a clean flat bottom edge so it can stand on the ground:
+a round hay bale; a haystack; a small wooden footbridge; a small pile of stones; a cluster of three mushrooms; a tree stump; a small striped lighthouse; a small rowing boat turned upside down; a short wooden jetty; a clump of reeds; a tall cactus; a low dry desert shrub; a wooden park bench; a red pillar post box.
+Muted colors: greens #7E9A8C and #587868, stone #A4A684, wood #8C7355, walls #E8DEC3, roof #9E7A6A, brick red #B86B5A only on the post box and the lighthouse stripe. hand-drawn illustration in the style of a quiet Japanese travel journal, soft pencil outlines, muted warm palette, flat colors with slight watercolor texture, generous negative space, subtle paper texture, no gradients, no lens flare, no text, no watermark, minimal details, calm and cozy mood
+```

@@ -89,6 +89,8 @@ export function direct(ws: WorldState): RenderState {
   cloudColor = mix(cloudColor, sky.horizon, 0.18);
   cloudColor = mix(cloudColor, mix(WEATHER_TONES.cloudGreyNight, WEATHER_TONES.cloudGreyDay, dayLight), gloom * 0.7);
   cloudColor = mix(cloudColor, clearSky.horizon, warmth * (1 - gloom) * 0.35 * (alt > -6 ? 1 : 0));
+  // By night the clouds thin out so the sky and stars show through them; a storm keeps them solid.
+  const cloudAlpha = clamp01(0.5 + 0.45 * dayLight + storm * 0.3);
 
   const dropColor = mix(sky.mid, WEATHER_TONES.paper, 0.45);
 
@@ -150,6 +152,7 @@ export function direct(ws: WorldState): RenderState {
       wind: fx.wind,
       lightning: fx.lightning,
       cloudColor,
+      cloudAlpha,
       fogColor,
       dropColor,
     },

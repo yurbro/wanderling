@@ -108,6 +108,15 @@ describe('direct with weather', () => {
     expect(grey.sun.alpha).toBeLessThan(0.2);
   });
 
+  it('thins the clouds at night and keeps them solid by day and in a storm', () => {
+    const day = direct(buildWorldState(noon, LONDON, demoWeather('partly-cloudy', noon))).weather.cloudAlpha;
+    const night = direct(buildWorldState(midnight, LONDON, demoWeather('partly-cloudy', midnight))).weather.cloudAlpha;
+    const stormy = direct(buildWorldState(midnight, LONDON, demoWeather('thunderstorm', midnight))).weather.cloudAlpha;
+    expect(day).toBeGreaterThan(0.9);
+    expect(night).toBeLessThan(0.65);
+    expect(stormy).toBeGreaterThan(night);
+  });
+
   it('hides the stars and veils the moon under a cloudy night', () => {
     const clear = direct(buildWorldState(midnight, LONDON, null));
     const cloudy = direct(buildWorldState(midnight, LONDON, demoWeather('overcast', midnight)));

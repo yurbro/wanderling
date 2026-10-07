@@ -252,6 +252,8 @@ export interface WeatherLayers {
   /** 1 when lightning may flash, 0 otherwise. */
   lightning: number;
   cloudColor: number;
+  /** 0..1 how solid the clouds are: paper-opaque by day, thin and see-through at night. */
+  cloudAlpha: number;
   fogColor: number;
   /** Rain streak color; snow is always paper white. */
   dropColor: number;
