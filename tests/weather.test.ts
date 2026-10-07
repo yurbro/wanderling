@@ -208,3 +208,25 @@ describe('isFresh', () => {
     expect(isFresh(snap, new Date(T0 - 60_000), 51.51, -0.13)).toBe(false);
   });
 });
+
+describe('tomorrowOutlook', () => {
+  it('reads rain, snow and wind out of tomorrow’s forecast hours, and knows when it cannot', async () => {
+    const { tomorrowOutlook, CONDITION_CODES } = await import('../src/core/weather');
+    const now = new Date(2026, 9, 7, 15, 0, 0);
+    const tomorrow = new Date(2026, 9, 8, 0, 0, 0).getTime();
+    const hour = (h: number, code: number, windSpeed = 10, precipitation = 0) => ({
+      time: tomorrow + h * 3_600_000, code, cloudCover: 0.5, temperature: 10, windSpeed, windDirection: 200, precipitation,
+    });
+    const snap = { fetchedAt: now.getTime(), lat: 51.5, lon: -0.1, current: hour(-9, 0), hourly: [] as ReturnType<typeof hour>[] };
+    expect(tomorrowOutlook(null, now)).toBeNull();
+    expect(tomorrowOutlook(snap, now)).toBeNull();
+    const dry = { ...snap, hourly: Array.from({ length: 24 }, (_, h) => hour(h, CONDITION_CODES.clear)) };
+    expect(tomorrowOutlook(dry, now)).toEqual({ rain: false, snow: false, wind: false });
+    const wet = { ...snap, hourly: dry.hourly.map((s, i) => (i === 14 ? hour(14, CONDITION_CODES.rain) : s)) };
+    expect(tomorrowOutlook(wet, now)?.rain).toBe(true);
+    const gusty = { ...snap, hourly: dry.hourly.map((s, i) => (i === 9 ? hour(9, CONDITION_CODES.clear, 42) : s)) };
+    expect(tomorrowOutlook(gusty, now)?.wind).toBe(true);
+    const snowy = { ...snap, hourly: dry.hourly.map((s, i) => (i === 7 ? hour(7, CONDITION_CODES.snow) : s)) };
+    expect(tomorrowOutlook(snowy, now)).toEqual({ rain: false, snow: true, wind: false });
+  });
+});
