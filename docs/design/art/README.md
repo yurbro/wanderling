@@ -11,6 +11,7 @@
 | `character-wanderling-explore.png` | 体型探索稿：取最右边的身体、最左边的背包 |
 | `character-wanderling-direction.png` | 合成后的代码草图，侧面比例的简化版 |
 | `character-wanderling-parts.png` | 部件表：9 个部件各一张，抠图后放在 `public/art/`，场景里的旅人就是用这些贴图拼的 |
+| `terrain-kit.md` | 地形套件的做法、部件清单和提示词（背景改为手绘层，先做丘陵） |
 
 ## 比例（从三视图量的，近似值）
 
