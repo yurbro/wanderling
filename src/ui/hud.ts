@@ -54,10 +54,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       <div class="clock" id="hud-clock">--:--</div>
       <div class="place" id="hud-place"></div>
       <div class="weather" id="hud-weather" hidden></div>
+      <div class="journey" id="hud-journey"></div>
     </div>
     <div class="hud-bottom">
       <div class="note" id="hud-note"></div>
-      <div class="journey" id="hud-journey"></div>
       <div class="hud-buttons">
         <button class="pill" id="hud-mail" type="button">${t('mail')}</button>
         <button class="pill" id="hud-album" type="button">${t('postcards')}</button>

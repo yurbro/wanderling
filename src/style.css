@@ -111,7 +111,8 @@ canvas.scene {
   flex-direction: column;
   justify-content: space-between;
   pointer-events: none;
-  padding: calc(env(safe-area-inset-top, 0px) + 22px) 22px calc(env(safe-area-inset-bottom, 0px) + 26px);
+  /* The bottom block must stay below the wanderling's feet (80% of the height), so it hugs the edge. */
+  padding: calc(env(safe-area-inset-top, 0px) + 22px) 16px calc(env(safe-area-inset-bottom, 0px) + 12px);
   color: var(--text);
   font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
   text-shadow: 0 1px 2px rgba(20, 24, 40, 0.18);
@@ -134,7 +135,7 @@ canvas.scene {
 
 .hud-bottom {
   align-items: center;
-  gap: 12px;
+  gap: 6px;
 }
 
 .wordmark {
@@ -174,9 +175,14 @@ canvas.scene {
 
 .journey {
   font-size: 14px;
-  opacity: 0.85;
-  text-align: center;
+  opacity: 0.8;
+  margin-top: 6px;
   letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.journey:empty {
+  display: none;
 }
 
 .pill {
@@ -426,10 +432,22 @@ canvas.scene {
 
 .hud-buttons {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
+  max-width: 100%;
+}
+
+/* One row of small pills, so the whole block fits under the wanderling's feet. */
+.hud-buttons .pill {
+  font-size: 13px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.hud-buttons .pill-small {
+  padding: 8px 12px;
 }
 
 /* Footprint map */
