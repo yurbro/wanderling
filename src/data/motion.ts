@@ -1,8 +1,9 @@
 /**
  * A shake of the phone, for the snow globe. iOS only hands out motion events
  * after `DeviceMotionEvent.requestPermission()` is called from a tap, so the
- * first tap on the scene asks once; a refusal is remembered and never asked
- * again (design: refused means we simply do not do it).
+ * app asks lightly, once, on a snowy day or in leaf-fall and never on the
+ * first day (decisions section 9, ruling 7; src/core/motionAsk.ts). A refusal,
+ * the system's or ours, is remembered and never asked again.
  */
 
 const KEY = 'wanderling.motion';
@@ -31,6 +32,20 @@ function remembered(): Permission | null {
 function remember(p: Permission): void {
   try {
     localStorage.setItem(KEY, p);
+  } catch {
+    // Fine.
+  }
+}
+
+/** The person said no to our own question: remember it like the system's no. */
+export function declineMotion(): void {
+  remember('denied');
+}
+
+/** Demo: forget the answer so the question can come again (?motion=reset). */
+export function forgetMotion(): void {
+  try {
+    localStorage.removeItem(KEY);
   } catch {
     // Fine.
   }

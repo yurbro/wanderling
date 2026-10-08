@@ -12,7 +12,11 @@ import { loadMail, saveMail } from './data/mailStore';
 import { EMPTY_LOG, begin as beginSurprise, intensity, missedLetters, offer as offerSurprise, rainEndedAgo, scanPast, type Facts, type SurpriseId, type SurpriseLog } from './core/surprises';
 import { weatherIntensities } from './core/weather';
 import { loadLastSeen, loadSurprises, saveLastSeen, saveSurprises } from './data/surpriseStore';
-import { enableShake } from './data/motion';
+import { declineMotion, enableShake, forgetMotion, needsMotionPrompt } from './data/motion';
+import { shouldAskMotion } from './core/motionAsk';
+import { introWasStarted, loadName, loadStartedAt, markIntroStarted, saveName, saveStartedAt } from './data/nameStore';
+import { askLightly } from './ui/ask';
+import { runIntro } from './ui/intro';
 import { createMailbox, type ShownLetter } from './ui/mailbox';
 import { CONDITIONS, conditionFromCode, demoWeather } from './core/weather';
 import { buildWorldState } from './core/world';
@@ -45,6 +49,10 @@ import { createMap } from './ui/map';
  *   ?postcards=demo    add three sample postcards to the album (not saved)
  *   ?postcards=now     hand over postcards the moment they are posted (slow post off)
  *   ?mail=demo         drop a few sample letters in the box (not saved)
+ *   ?intro=reset       start over as a brand-new person: forget everything saved here
+ *                      (except the language) and play the first minute
+ *   ?intro=play        play the first minute again, changing nothing that is saved
+ *   ?motion=reset      forget the answer about the phone's motion and ask again now
  *   ?surprise=rainbow  force a surprise now: rainbow, fullMoon, snowGlobe, wave, or
  *                      missed (a rainbow and a full moon that went unseen, as letters) (not saved)
  */
@@ -56,6 +64,20 @@ const say = t;
 async function main(): Promise<void> {
   const root = document.getElementById('app')!;
   const params = new URLSearchParams(window.location.search);
+
+  // ?intro=reset: be a brand-new person. Everything the app saved goes, bar the
+  // language; the address is tidied so a refresh does not wipe the journey again.
+  if (params.get('intro') === 'reset') {
+    try {
+      for (const key of Object.keys(localStorage)) if (key.startsWith('wanderling.') && key !== LANG_KEY) localStorage.removeItem(key);
+    } catch {
+      // Fine.
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete('intro');
+    window.history.replaceState(null, '', url.toString());
+  }
+  if (params.get('motion') === 'reset') forgetMotion();
 
   // Language: ?lang=zh, else the saved choice, else the browser.
   let savedLang: string | null = null;
@@ -89,6 +111,24 @@ async function main(): Promise<void> {
 
   const renderer = new SceneRenderer();
   await renderer.init(root);
+
+  // The first minute. Someone with nothing saved gets all of it; someone who
+  // has a journey but no name yet gets only the naming. Demo and screenshot
+  // parameters skip it, and ?intro=play forces it.
+  const demoParams = ['t', 'km', 'route', 'terrain', 'weather', 'temp', 'wind', 'demo', 'journey', 'postcards', 'mail', 'surprise', 'lat', 'lon'].some((k) => params.has(k));
+  let myName = loadName();
+  const hadJourney = loadJourney() !== null;
+  const introPlay = params.get('intro') === 'play';
+  const introMode: 'full' | 'name' | null = introPlay
+    ? 'full'
+    : demoParams || myName
+      ? null
+      : !hadJourney || introWasStarted()
+        ? 'full'
+        : 'name';
+  if (introMode) root.classList.add('in-intro');
+  // He is not here until the backpack rolls in.
+  if (introMode === 'full') renderer.hold(true);
 
   const hud = createHud(root, {
     demo: params.get('demo') === '1',
@@ -135,14 +175,14 @@ async function main(): Promise<void> {
       map.open();
     },
   });
-  const album = createAlbum(root, hud.unit);
+  const album = createAlbum(root, hud.unit, () => myName);
   const mailbox = createMailbox(root, () => {
     // Opening the box reads everything that has arrived.
     mail = markAllRead(mail, Date.now());
     // Demo letters stay out of the saved box.
     if (!demoJourney && !mailDemo) saveMail(mail);
     hud.setMail(0);
-  });
+  }, () => myName);
   const map = createMap(root, {
     onChoose: (id) => {
       journey = chooseNext(journey, id);
@@ -332,6 +372,7 @@ async function main(): Promise<void> {
         wantAt: card.deliverAt ?? card.at,
         pool: storiesFor(card.terrain, !!card.departure).map((sk) => sk.id),
         vars: {
+          name: myName ?? 'Pip',
           place: card.placeName,
           ...skyVars({
             hisCond: card.there?.condition,
@@ -347,7 +388,7 @@ async function main(): Promise<void> {
     const momentAt = momentTime(today);
     if (now >= momentAt && position.mode === 'walk') {
       const terrain = terrainAt(position);
-      candidates.push({ id: `moment:${today}`, kind: 'moment', wantAt: momentAt, pool: momentsFor(terrain).map((s) => s.id), vars: { place: placeName(position.from), terrain } });
+      candidates.push({ id: `moment:${today}`, kind: 'moment', wantAt: momentAt, pool: momentsFor(terrain).map((s) => s.id), vars: { name: myName ?? 'Pip', place: placeName(position.from), terrain } });
     }
     // In the evening, a word about tomorrow where the person is.
     const weatherAt = weatherTime(today);
@@ -517,6 +558,7 @@ async function main(): Promise<void> {
     wasAsleep = render.wanderer.asleep;
     renderer.setState(render);
     hud.update(world, render);
+    root.querySelector('.intro')?.classList.toggle('dark-ink', render.darkInk);
     hud.setJourney(describeJourney(position));
     if (map.isOpen) map.update(route, position, visibleCards(), routeOptions(journey, route, ROUTES));
     const skyCss = '#' + render.sky.top.toString(16).padStart(6, '0');
@@ -545,15 +587,27 @@ async function main(): Promise<void> {
   // while the app was closed pulse because the seen count is behind.
   tick();
   if (surpriseParam === 'wave') renderer.wave();
-  // A long press is a wave, a shake is the snow globe. iOS asks for motion on the first tap.
+  // A long press is a wave, a shake is the snow globe. Phones that need no
+  // permission listen at once; iOS is asked lightly, later (see askMotion).
   renderer.onWave(() => startSurprise('wave'));
-  const armShake = (): void => {
-    void enableShake(() => {
+  const armShake = (): Promise<void> =>
+    enableShake(() => {
       startSurprise('snowGlobe');
       renderer.shaken();
+    }).then(() => undefined);
+  if (!needsMotionPrompt()) void armShake();
+  let asking = false;
+  /** Once the first day is over: on a snowy day or in leaf-fall, with the app open, one light question. */
+  const askMotion = (): void => {
+    if (asking || introMode || !needsMotionPrompt() || demoJourney) return;
+    const condition = weather.current(new Date())?.condition ?? null;
+    const ctx = { now: Date.now(), startedAt: loadStartedAt(), visible: !document.hidden, lat: location.lat, condition, settled: false };
+    if (!shouldAskMotion(ctx) && params.get('motion') !== 'reset') return;
+    asking = true;
+    void askLightly(root, say('askShake'), armShake).then((allowed) => {
+      if (!allowed) declineMotion();
     });
   };
-  root.addEventListener('pointerdown', armShake, { once: true });
   if (departure) hud.setNote(departure, 15_000);
   // A read-only peek for debugging and screenshots: window.__wanderling.render
   Object.defineProperty(window, '__wanderling', {
@@ -569,7 +623,10 @@ async function main(): Promise<void> {
 
   // The sun barely moves in a few seconds, but the journey engine needs to
   // notice arrivals promptly, and a redraw is cheap. Every 5 s.
-  window.setInterval(tick, 5_000);
+  window.setInterval(() => {
+    tick();
+    askMotion();
+  }, 5_000);
   // The weather cache lasts 45 minutes; checking every 5 is cheap and catches it.
   window.setInterval(() => void weather.refresh(location), 5 * 60_000);
 
@@ -586,7 +643,39 @@ async function main(): Promise<void> {
   // The canvas fades in once the first frame is drawn.
   requestAnimationFrame(() => root.classList.add('ready'));
 
-  setupInstallHint(root);
+  if (introMode) {
+    if (introMode === 'full' && !introPlay) markIntroStarted();
+    let matchFailed = false;
+    // A beat after the first frame, so the sky is seen on its own first.
+    window.setTimeout(() => {
+      void runIntro(root, introMode, {
+        matchSky: async () => {
+          try {
+            const found = await requestLocation();
+            hud.hideLocate();
+            await moveTo(found);
+          } catch {
+            matchFailed = true;
+          }
+        },
+        arrive: () => renderer.arrive(),
+        release: () => renderer.hold(false),
+      }).then((picked) => {
+        if (!introPlay) {
+          myName = picked;
+          saveName(picked);
+          // Someone who was already travelling counts as long settled in.
+          saveStartedAt(introMode === 'full' ? Date.now() : 1);
+        }
+        if (matchFailed) hud.setNote(t('noLocation'), 8000);
+        tick();
+        setupInstallHint(root);
+      });
+      tick();
+    }, 700);
+  } else {
+    setupInstallHint(root);
+  }
   registerServiceWorker();
 }
 

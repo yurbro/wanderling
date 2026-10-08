@@ -5,6 +5,8 @@ dist/
 
 # Local visual self-check output
 screenshots/
+# ...except the ones kept for review in the docs
+!docs/screenshots/
 
 # OS and editor noise
 .DS_Store

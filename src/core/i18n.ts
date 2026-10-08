@@ -76,6 +76,23 @@ const DICT: Dict = {
   afternoon: { en: 'afternoon', zh: '下午' },
   evening: { en: 'evening', zh: '傍晚' },
   night: { en: 'night', zh: '夜里' },
+  // The first minute (decisions D7; review 2 section 4)
+  introLook: { en: 'Look outside. Same sky?', zh: '看看窗外。是同一片天空吗？' },
+  introWhy: { en: 'Your place is only used to make this sky match yours.', zh: '位置只用来让这片天空和你的一样。' },
+  introMatch: { en: 'Match my sky', zh: '对一对天空' },
+  introNotNow: { en: 'Not now', zh: '先不了' },
+  introSkip: { en: 'Skip', zh: '跳过' },
+  introNoName: { en: 'He has no name yet.', zh: '他还没有名字。' },
+  introNameHint: { en: 'A name for him', zh: '给他起个名字' },
+  introNameOk: { en: 'That one', zh: '就这个' },
+  introYouChoose: { en: 'You choose', zh: '你来定' },
+  introSayName: { en: '{name}. I like it.', zh: '{name}。我喜欢。' },
+  introSaySky: { en: 'I am going to see the other side of the sky.', zh: '我要去看看天空的另一边。' },
+  introSayLetter: { en: 'I will write to you.', zh: '我会给你写信。' },
+  // The motion question (decisions section 9, ruling 7): asked once, lightly, never on the first day.
+  askShake: { en: 'Shake your phone and the sky becomes a snow globe. Allow motion?', zh: '摇一摇手机，天空就变成雪花球。要允许动作感应吗？' },
+  askYes: { en: 'Allow', zh: '允许' },
+  askNo: { en: 'No thanks', zh: '不用了' },
   // Map
   nextRoute: { en: 'Where next?', zh: '下一条去哪' },
   nextHint: { en: 'Tap a route. The wanderer sets off for it once this one is done. Untapped, the nearest one is next.', zh: '点一条路线，走完这条就去那里。不点的话，走完去最近的一条。' },

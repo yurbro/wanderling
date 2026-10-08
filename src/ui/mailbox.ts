@@ -1,5 +1,6 @@
 import { getLang, t } from '../core/i18n';
 import type { LetterKind } from '../core/letters';
+import { signoff } from './signoff';
 
 /** A letter as the box shows it: already in the right language. */
 export interface ShownLetter {
@@ -32,7 +33,7 @@ const KIND_KEY: Record<LetterKind, 'kindPostcard' | 'kindMoment' | 'kindWeather'
  * The letter box: a full-screen overlay like the album, the letters stacked
  * newest first as small sheets of paper. Opening it reads everything.
  */
-export function createMailbox(root: HTMLElement, onOpen?: () => void): Mailbox {
+export function createMailbox(root: HTMLElement, onOpen?: () => void, nameOf: () => string | null = () => null): Mailbox {
   const el = document.createElement('div');
   el.className = 'album mailbox';
   el.hidden = true;
@@ -71,7 +72,7 @@ export function createMailbox(root: HTMLElement, onOpen?: () => void): Mailbox {
       }, 350);
     },
     setLetters(letters) {
-      list.replaceChildren(...letters.map((l) => renderLetter(l, dateFmt)));
+      list.replaceChildren(...letters.map((l) => renderLetter(l, dateFmt, nameOf())));
       empty.hidden = letters.length > 0;
     },
     get isOpen() {
@@ -89,13 +90,14 @@ export function createMailbox(root: HTMLElement, onOpen?: () => void): Mailbox {
   return api;
 }
 
-function renderLetter(l: ShownLetter, dateFmt: Intl.DateTimeFormat): HTMLElement {
+function renderLetter(l: ShownLetter, dateFmt: Intl.DateTimeFormat, name: string | null): HTMLElement {
   const article = document.createElement('article');
   article.className = 'letter' + (l.read ? '' : ' letter-unread') + (l.kind === 'digest' ? ' letter-digest' : '');
   const body = l.lines.map((line) => `<p class="letter-line">${escapeHtml(line)}</p>`).join('');
   article.innerHTML = `
     <div class="letter-meta"><span>${t(KIND_KEY[l.kind])}</span><span>${dateFmt.format(new Date(l.at))}</span></div>
     ${body}
+    ${l.kind === 'postcard' ? signoff(name) : ''}
   `;
   return article;
 }
