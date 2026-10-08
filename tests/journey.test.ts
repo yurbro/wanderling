@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   KM_PER_HOUR,
+  NEVER_ASLEEP,
   REST_MS,
   addBonusKm,
   advance,
+  afterAwake,
+  almostThere,
+  approach,
+  awakeMs,
+  nightsAt,
   describeJourney,
   landAt,
   locate,
@@ -12,6 +18,7 @@ import {
   totalKm,
 } from '../src/core/journey';
 import type { Route } from '../src/core/types';
+import { ROUTES } from '../src/data/routes';
 
 const H = 3_600_000;
 const T0 = Date.UTC(2026, 9, 4, 8, 0, 0);
@@ -141,6 +148,107 @@ describe('advance', () => {
     const justBefore = T0 + ((8 - 0.5) / KM_PER_HOUR) * H;
     const near = locate(ROUTE, advance(ROUTE, s, justBefore).state, justBefore);
     expect(describeJourney(near)).toBe('Walking to Bravo · almost there');
+  });
+});
+
+describe('sleeping from 2:00 to 4:00 (review 3, ruling 1)', () => {
+  // Nights in UTC, so the tests do not depend on the machine's time zone.
+  const utc = nightsAt(0);
+  const at = (day: number, hour: number): number => Date.UTC(2026, 9, day, 0, 0, 0) + hour * H;
+
+  it('counts the hours awake, leaving the nights out', () => {
+    expect(awakeMs(at(5, 1), at(5, 5), utc)).toBe(2 * H);
+    expect(awakeMs(at(5, 2.5), at(5, 3.5), utc)).toBe(0);
+    expect(awakeMs(at(5, 8), at(5, 20), utc)).toBe(12 * H);
+    expect(awakeMs(at(5, 8), at(7, 8), utc)).toBe(44 * H);
+    expect(afterAwake(at(5, 1), 2 * H, utc)).toBe(at(5, 5));
+    expect(afterAwake(at(5, 3), 0.5 * H, utc)).toBe(at(5, 4.5));
+    expect(afterAwake(at(5, 8), 24 * H, utc)).toBe(at(6, 10));
+  });
+
+  it('a night at a fixed offset falls at 2:00 there', () => {
+    // UTC+2: local 2:00 is midnight UTC.
+    expect(awakeMs(at(5, 23), at(6, 3), nightsAt(120))).toBe(2 * H);
+  });
+
+  it('stands still at night and walks on at four', () => {
+    const s = startJourney(ROUTE, at(5, 1));
+    expect(advance(ROUTE, s, at(5, 2), utc).state.km).toBeCloseTo(KM_PER_HOUR, 6);
+    const night = advance(ROUTE, s, at(5, 3.5), utc).state;
+    expect(night.km).toBeCloseTo(KM_PER_HOUR, 6);
+    const morning = advance(ROUTE, night, at(5, 5), utc).state;
+    expect(morning.km).toBeCloseTo(2 * KM_PER_HOUR, 6);
+  });
+
+  it('arrives two hours later for every night on the way', () => {
+    const s = startJourney(ROUTE, at(5, 8));
+    const legH = 8 / KM_PER_HOUR; // about 8 h: from 8:00 into the evening, no night
+    const done = advance(ROUTE, s, at(6, 12), utc).state;
+    expect(done.arrivals[1].at).toBeCloseTo(at(5, 8 + legH), -1);
+    // Setting off at 22:00, the same leg takes the night's two hours on top.
+    const late = startJourney(ROUTE, at(5, 22));
+    const next = advance(ROUTE, late, at(6, 20), utc).state;
+    expect(next.arrivals[1].at).toBeCloseTo(at(5, 22 + legH + 2), -1);
+  });
+
+  it('carries a sleeping passenger on by train', () => {
+    const train: Route = { ...ROUTE, legs: [{ km: 120, terrain: 'plain', mode: 'ride' }, ROUTE.legs[1]] };
+    const s = startJourney(train, at(5, 2));
+    expect(advance(train, s, at(5, 3), utc).state.km).toBeCloseTo(60, 6);
+  });
+
+  it('carries on from the saved kilometre when sleep came in (migration)', () => {
+    // Saved by the build before review 3 (0.9 km/h, no sleep): 5.5 km along at 1:30.
+    const saved = { ...startJourney(ROUTE, at(5, 0)), km: 5.5, updatedAt: at(5, 1.5) };
+    // The same moment: exactly where it was saved.
+    expect(advance(ROUTE, saved, at(5, 1.5), utc).state.km).toBe(5.5);
+    // Half an hour on at the new pace, then the night, then on again: no jump, no rewind.
+    const before = advance(ROUTE, saved, at(5, 2), utc).state;
+    expect(before.km).toBeCloseTo(5.5 + 0.5 * KM_PER_HOUR, 6);
+    const asleep = advance(ROUTE, before, at(5, 3.9), utc).state;
+    expect(asleep.km).toBeCloseTo(before.km, 6);
+    const after = advance(ROUTE, asleep, at(5, 4.5), utc).state;
+    expect(after.km).toBeCloseTo(before.km + 0.5 * KM_PER_HOUR, 6);
+    // Ticking every few minutes ends up where one big step does.
+    let ticked = saved;
+    for (let t = at(5, 1.5); t <= at(5, 9); t += 5 * 60_000) ticked = advance(ROUTE, ticked, t, utc).state;
+    expect(ticked.km).toBeCloseTo(advance(ROUTE, saved, at(5, 9), utc).state.km, 6);
+  });
+
+  it('keeps the rhythm at about 2.5 days a stop over all seven routes', () => {
+    const gaps: number[] = [];
+    for (const route of ROUTES) {
+      const s = startJourney(route, at(1, 9));
+      const done = advance(route, s, at(1, 9) + 400 * 24 * H, utc).state;
+      for (let i = 1; i < done.arrivals.length; i++) gaps.push(done.arrivals[i].at - done.arrivals[i - 1].at);
+    }
+    // The first gap of a route has no rest before it; add one so every gap is a full stop.
+    const days = (gaps.reduce((a, b) => a + b, 0) + ROUTES.length * REST_MS) / gaps.length / (24 * H);
+    expect(days).toBeGreaterThan(2.4);
+    expect(days).toBeLessThan(2.6);
+  });
+
+  it('the pace arithmetic alone, without nights', () => {
+    const s = startJourney(ROUTE, at(5, 1));
+    expect(advance(ROUTE, s, at(5, 5), NEVER_ASLEEP).state.km).toBeCloseTo(4 * KM_PER_HOUR, 6);
+  });
+});
+
+describe('almost there', () => {
+  it('starts with the HUD line and rises to 1 on arrival', () => {
+    const s = startJourney(ROUTE, T0);
+    const far = locate(ROUTE, s, T0);
+    expect(almostThere(far)).toBe(false);
+    expect(approach(far)).toBe(0);
+    const t1 = T0 + ((8 - 0.75) / KM_PER_HOUR) * H;
+    const close = locate(ROUTE, advance(ROUTE, s, t1, NEVER_ASLEEP).state, t1);
+    expect(almostThere(close)).toBe(true);
+    expect(describeJourney(close)).toContain('almost there');
+    expect(approach(close)).toBeCloseTo(0.25, 3);
+    const t2 = T0 + ((8 - 0.05) / KM_PER_HOUR) * H;
+    expect(approach(locate(ROUTE, advance(ROUTE, s, t2, NEVER_ASLEEP).state, t2))).toBeCloseTo(0.95, 3);
+    const t3 = T0 + (8 / KM_PER_HOUR + 1) * H;
+    expect(approach(locate(ROUTE, advance(ROUTE, s, t3, NEVER_ASLEEP).state, t3))).toBe(0);
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { WeatherService, forecastUrl } from '../src/data/weather';
+import { WeatherService, fetchPlaceWeather, forecastUrl, placeWeatherUrl } from '../src/data/weather';
 import { parseForecast } from '../src/core/weather';
 
 const LONDON = { lat: 51.51, lon: -0.13, name: 'London' };
@@ -98,5 +98,23 @@ describe('WeatherService', () => {
     const svc = new WeatherService(() => {}, null, fetchImpl);
     await Promise.all([svc.refresh(LONDON, new Date(T0)), svc.refresh(LONDON, new Date(T0))]);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('his weather at a place (the two skies)', () => {
+  it('asks for the coarse spot and enough days back to reach the arrival', () => {
+    const u = new URL(placeWeatherUrl({ lat: 50.8229, lon: -0.1363 }, T0 - 2.5 * 86_400_000, T0));
+    expect(u.searchParams.get('latitude')).toBe('50.82');
+    expect(u.searchParams.get('past_days')).toBe('4');
+    expect(new URL(placeWeatherUrl({ lat: 1, lon: 2 }, T0 - 400 * 86_400_000, T0)).searchParams.get('past_days')).toBe('92');
+  });
+
+  it('picks the hour of arrival, and is quietly null offline', async () => {
+    const there = await fetchPlaceWeather({ lat: 50.82, lon: -0.14 }, Date.UTC(2026, 9, 4, 9, 10), okFetch(response(63)), T0);
+    expect(there).toEqual({ condition: 'rain', code: 63, temperature: 11 });
+    const failing = vi.fn(async () => {
+      throw new Error('offline');
+    }) as unknown as typeof fetch;
+    expect(await fetchPlaceWeather({ lat: 50.82, lon: -0.14 }, T0, failing, T0)).toBeNull();
   });
 });

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { hexToRgb } from '../src/core/color';
 import { skyAt } from '../src/core/palette';
-import { direct, isSleepingHour, leafSeasonTint, windLean } from '../src/core/sceneDirector';
+import { LEAF_PAINT, LEAF_SEASONS, direct, isSleepingHour, leafSeasonColor, leafSeasonTint, windLean } from '../src/core/sceneDirector';
 import { routeFromHome } from '../src/core/geo';
-import { KM_PER_HOUR, advance, locate, startJourney } from '../src/core/journey';
+import { KM_PER_HOUR, NEVER_ASLEEP, advance, locate, startJourney } from '../src/core/journey';
 import { TO_THE_SEA } from '../src/data/routes';
 import { demoWeather } from '../src/core/weather';
 import { buildWorldState } from '../src/core/world';
@@ -267,10 +267,11 @@ describe('direct decides what the wanderer carries', () => {
     const white = 0xffffff;
     // Mid-July in the north: the painted summer green, so no tint.
     expect(leafSeasonTint(new Date(Date.UTC(2026, 6, 20)), 51)).toBe(white);
-    // Mid-October in the north: yellower, so the blue channel is held back.
+    // Mid-October in the north: a greyed ochre, so red is held back least and blue most.
     const autumn = hexToRgb(leafSeasonTint(new Date(Date.UTC(2026, 9, 20)), 51));
-    expect(autumn.r).toBe(255);
-    expect(autumn.b).toBeLessThan(200);
+    expect(autumn.r).toBeGreaterThan(autumn.g);
+    expect(autumn.g).toBeGreaterThan(autumn.b);
+    expect(autumn.b).toBeLessThan(230);
     // The same date in the south is spring: fresher green, blue a little back, red a little back.
     const spring = hexToRgb(leafSeasonTint(new Date(Date.UTC(2026, 9, 20)), -33));
     expect(spring.g).toBe(255);
@@ -279,6 +280,36 @@ describe('direct decides what the wanderer carries', () => {
     const a = hexToRgb(leafSeasonTint(new Date(Date.UTC(2026, 8, 1)), 51));
     const b = hexToRgb(leafSeasonTint(new Date(Date.UTC(2026, 8, 2)), 51));
     expect(Math.abs(a.b - b.b)).toBeLessThan(4);
+  });
+
+  it('never lets a season out-colour the grey-green leaf (review 3, ruling 2)', () => {
+    // HSV saturation, 0..1.
+    const sat = (c: number): number => {
+      const { r, g, b } = hexToRgb(c);
+      const max = Math.max(r, g, b);
+      return max === 0 ? 0 : (max - Math.min(r, g, b)) / max;
+    };
+    const hex = (h: string): number => parseInt(h.slice(1), 16);
+    const ceiling = Math.max(sat(hex(LEAF_SEASONS.spring)), sat(hex(LEAF_SEASONS.summer)));
+    // Every few days of the year, both hemispheres.
+    for (let d = 0; d < 365; d += 3) {
+      const when = new Date(Date.UTC(2026, 0, 1 + d));
+      for (const lat of [51, -33]) expect(sat(leafSeasonColor(when, lat)), `${when.toISOString()} ${lat}`).toBeLessThanOrEqual(ceiling + 0.005);
+    }
+    // Autumn is an ochre, greyed: red over green over blue, and well under the ceiling.
+    const autumnColor = leafSeasonColor(new Date(Date.UTC(2026, 9, 20)), 51);
+    const autumn = hexToRgb(autumnColor);
+    expect(autumn.r).toBeGreaterThan(autumn.g);
+    expect(autumn.g).toBeGreaterThan(autumn.b);
+    expect(sat(autumnColor)).toBeLessThan(ceiling * 0.7);
+    // Winter is greyer than summer.
+    expect(sat(leafSeasonColor(new Date(Date.UTC(2026, 0, 20)), 51))).toBeLessThan(sat(hex(LEAF_SEASONS.summer)));
+    // The tint never asks a channel to be brighter than the paint.
+    for (const c of Object.values(LEAF_SEASONS)) {
+      const want = hexToRgb(hex(c));
+      const paint = hexToRgb(hex(LEAF_PAINT));
+      expect(want.r <= paint.r && want.g <= paint.g && want.b <= paint.b, c).toBe(true);
+    }
   });
 
   it('tints the figure darker at night', () => {
@@ -353,6 +384,62 @@ describe('direct follows the journey', () => {
     const rs = direct(buildWorldState(noon, LONDON, null, locate(hilly, s, t0 + (6 / KM_PER_HOUR) * 3_600_000)));
     expect(rs.marker?.offsetKm).toBeCloseTo(2, 6);
     expect(rs.marker?.cottage).toBe(false);
+  });
+});
+
+describe('the next place on the horizon (review 3, ruling 4)', () => {
+  const noon = new Date(Date.UTC(2026, 5, 21, 12, 0, 0));
+  const t0 = noon.getTime();
+  const route = {
+    id: 'r',
+    name: 'R',
+    places: [
+      { id: 'a', name: 'A', terrain: 'plain' as const },
+      { id: 'b', name: 'B', terrain: 'city' as const },
+      { id: 'c', name: 'C', terrain: 'coast' as const },
+    ],
+    legs: [
+      { km: 8, terrain: 'plain' as const },
+      { km: 10, terrain: 'hills' as const },
+    ],
+  };
+  const at = (kmWalked: number) => {
+    const t = t0 + (kmWalked / KM_PER_HOUR) * 3_600_000;
+    return direct(buildWorldState(noon, LONDON, null, locate(route, advance(route, startJourney(route, t0), t, NEVER_ASLEEP).state, t)));
+  };
+
+  it('is hidden while the HUD still counts kilometres', () => {
+    const rs = at(6.5);
+    expect(rs.landmark.alpha).toBe(0);
+    expect(rs.landmark.closeness).toBe(0);
+  });
+
+  it('rises with "almost there" and grows as he gets closer', () => {
+    const first = at(7.1);
+    const half = at(7.5);
+    const close = at(7.95);
+    expect(first.landmark.terrain).toBe('city');
+    expect(first.landmark.alpha).toBeGreaterThan(0.9);
+    expect(first.landmark.closeness).toBeCloseTo(0.1, 3);
+    expect(half.landmark.closeness).toBeCloseTo(0.5, 3);
+    expect(close.landmark.closeness).toBeGreaterThan(half.landmark.closeness);
+    // Before the signpost: the marker is still well ahead while the silhouette is already up.
+    expect(first.marker?.offsetKm).toBeGreaterThan(0.8);
+  });
+
+  it('fades where it stands once he has arrived', () => {
+    const rs = at(8 + KM_PER_HOUR * 0.5);
+    expect(rs.landmark.closeness).toBe(1);
+    expect(rs.landmark.alpha).toBe(0);
+    expect(rs.landmark.terrain).toBe('city');
+  });
+
+  it('is not shown from a train', () => {
+    const train = routeFromHome(TO_THE_SEA, { name: 'Berlin', lat: 52.52, lon: 13.4 });
+    const near = t0 + ((train.legs[0].km - 5) / 60) * 3_600_000;
+    const pos = locate(train, advance(train, startJourney(train, t0), near).state, near);
+    expect(pos.mode).toBe('ride');
+    expect(direct(buildWorldState(noon, LONDON, null, pos)).landmark.alpha).toBe(0);
   });
 });
 

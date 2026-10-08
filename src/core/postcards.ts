@@ -60,6 +60,18 @@ export interface PostcardOptions {
   home?: Home | null;
   /** Demo: hand the card over at once. */
   deliverNow?: boolean;
+  /** The place he set out from: no slow post, it is home's own card (distance 0). */
+  departure?: boolean;
+}
+
+/**
+ * Is this arrival the journey's setting-out place? Its card is handed over as
+ * the journey begins, so the album is never empty on the first day (review 3,
+ * ruling 5). A chained segment starts without such an arrival, so only the
+ * very first place of a fresh journey counts.
+ */
+export function isDeparture(route: Route, journey: JourneyState, arrival: Arrival): boolean {
+  return arrival.placeId === route.places[0]?.id && arrival.at === journey.startedAt;
 }
 
 /**
@@ -80,7 +92,7 @@ export function makePostcard(
   const at = new Date(arrival.at);
   const rs = direct(buildWorldState(at, location, weather, null));
   const seaAmount = place.terrain === 'coast' ? 1 : place.terrain === 'lake' ? 0.7 : 0;
-  const deliverAt = opts.deliverNow ? arrival.at : arrival.at + deliveryDelayMs(postingDistanceKm(place, opts.home));
+  const deliverAt = opts.deliverNow || opts.departure ? arrival.at : arrival.at + deliveryDelayMs(postingDistanceKm(place, opts.home));
   return {
     id: postcardId(route.id, arrival),
     routeId: route.id,
@@ -94,6 +106,7 @@ export function makePostcard(
     weather: weather
       ? { condition: weather.condition, code: weather.code, temperature: weather.temperature }
       : null,
+    ...(opts.departure ? { departure: true } : {}),
     colors: {
       skyTop: rs.sky.top,
       skyHorizon: rs.sky.horizon,

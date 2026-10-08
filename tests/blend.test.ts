@@ -27,6 +27,14 @@ describe('blendRenderState', () => {
     expect(half.light).toBeCloseTo((clear.light + rain.light) / 2, 6);
   });
 
+  it('slides the far landmark as a number, not as a colour', () => {
+    const a = { ...clear, landmark: { ...clear.landmark, closeness: 0.8, alpha: 1 } };
+    const b = { ...rain, landmark: { ...rain.landmark, closeness: 0.8, alpha: 1 } };
+    const half = blendRenderState(a, b, 0.5);
+    expect(half.landmark.closeness).toBeCloseTo(0.8, 6);
+    expect(half.landmark.alpha).toBeCloseTo(1, 6);
+  });
+
   it('switches names, flags and modes at once and keeps the structure', () => {
     const half = blendRenderState(clear, rain, 0.3);
     expect(half.weather.condition).toBe('heavy-rain');

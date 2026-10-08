@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SKELETONS } from '../src/data/letterTexts';
+import { SKELETONS, skyLine, skyVars, storiesFor } from '../src/data/letterTexts';
+import { setLang, t } from '../src/core/i18n';
 import { ROUTES } from '../src/data/routes';
 
 /**
@@ -28,7 +29,17 @@ interface Line {
   reminderAllowed: boolean;
 }
 
+/** What the wanderling (or the firefly beside him) says in the HUD, in both languages. */
+const HUD_VOICE = ['hushAsleep', 'postcardPosted', 'postcardArrived', 'letterArrived', 'homeAgain', 'noMail', 'noPostcards'] as const;
+const said = (key: (typeof HUD_VOICE)[number]): { en: string; zh: string } => {
+  setLang('zh');
+  const zh = t(key);
+  setLang('en');
+  return { en: t(key), zh };
+};
+
 const lines: Line[] = [
+  ...HUD_VOICE.map((k) => ({ where: `hud ${k}`, ...said(k), reminderAllowed: false })),
   ...SKELETONS.map((s) => ({ where: `skeleton ${s.id}`, en: s.en, zh: s.zh, reminderAllowed: s.kind === 'weather' })),
   ...ROUTES.flatMap((r) =>
     r.places
@@ -69,5 +80,51 @@ describe('every line the wanderling says', () => {
       expect(l.en, l.where).not.toMatch(/\b(minutes?|hours?) (you|since)/i);
       expect(l.en, l.where).not.toMatch(/\bopen(ed)? the app\b/i);
     }
+  });
+});
+
+describe('the firefly (review 3, ruling 6)', () => {
+  it('says only that he is asleep, and tells the person nothing', () => {
+    expect(said('hushAsleep')).toEqual({ en: 'Shh. He is asleep.', zh: '嘘，他睡着了。' });
+  });
+});
+
+describe('postcard letters (review 3, ruling 9)', () => {
+  it('have a story of two or three sentences for every terrain', () => {
+    for (const terrain of ['city', 'plain', 'hills', 'mountain', 'forest', 'coast', 'lake', 'desert'] as const) {
+      const own = storiesFor(terrain).filter((s) => s.terrains);
+      expect(own.length, terrain).toBeGreaterThanOrEqual(2);
+    }
+    for (const s of [...storiesFor('city'), ...storiesFor('city', true)]) {
+      const n = s.en.split(/[.!?]+/).map((x) => x.trim()).filter(Boolean).length;
+      expect(n, s.id).toBeGreaterThanOrEqual(2);
+      expect(n, s.id).toBeLessThanOrEqual(3);
+      expect(s.en).toContain('{place}');
+      expect(s.zh).toContain('{place}');
+    }
+    expect(storiesFor('coast', true).every((s) => s.story === 'departure')).toBe(true);
+  });
+
+  it('close with the two skies, apart or alike, in either language', () => {
+    const apart = skyVars({ hisCond: 'rain', hisTemp: 11.4, yourCond: 'clear', yourTemp: 18 });
+    const en = skyLine(apart, 'en', 'C', 'postcard:x')!;
+    expect(en).toMatch(/rain/);
+    expect(en).toMatch(/sunshine/);
+    expect(en).toContain('11°');
+    expect(en).toContain('18°');
+    const zh = skyLine(apart, 'zh', 'C', 'postcard:x')!;
+    expect(zh).toMatch(/雨天/);
+    expect(zh).toMatch(/晴天/);
+    expect(zh).not.toContain('{');
+    const alike = skyLine(skyVars({ hisCond: 'drizzle', hisTemp: 9, yourCond: 'rain', yourTemp: 12 }), 'en', 'C', 'a')!;
+    expect(alike).toMatch(/too|as well/);
+    expect(skyLine(apart, 'en', 'F', 'postcard:x')).toContain('52°');
+  });
+
+  it('say "the same sky" for the place he set out from, and keep quiet when nothing is known', () => {
+    expect(skyLine(skyVars({ yourCond: 'overcast', yourTemp: 9, together: true }), 'en', 'C', 'p')).toMatch(/same sky.*grey skies/);
+    expect(skyLine(skyVars({ hisCond: 'snow', hisTemp: -2 }), 'en', 'C', 'p')).toBe('Here I had snow, -2°.');
+    expect(skyLine(skyVars({ yourCond: 'clear', yourTemp: 20 }), 'en', 'C', 'p')).toBeNull();
+    expect(skyLine({}, 'zh', 'C', 'p')).toBeNull();
   });
 });
