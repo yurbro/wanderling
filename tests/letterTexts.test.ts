@@ -30,7 +30,8 @@ interface Line {
 }
 
 /** What the wanderling (or the firefly beside him) says in the HUD, in both languages. */
-const HUD_VOICE = ['hushAsleep', 'postcardPosted', 'postcardArrived', 'letterArrived', 'homeAgain', 'noMail', 'noPostcards'] as const;
+const HUD_VOICE = ['hushAsleep', 'postcardPosted', 'postcardArrived', 'letterArrived', 'homeAgain', 'noMail', 'noPostcards',
+  'introLook', 'introWhy', 'introNoName', 'introSayName', 'introSaySky', 'introSayLetter', 'askShake'] as const;
 const said = (key: (typeof HUD_VOICE)[number]): { en: string; zh: string } => {
   setLang('zh');
   const zh = t(key);

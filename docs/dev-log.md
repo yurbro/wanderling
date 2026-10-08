@@ -104,6 +104,32 @@
 - 下一步：路线图第 7 项，起名与第一分钟（D7，均衡档）。
 - Yu 的作业：合并 PR；在 iPhone 上打开 https://yurbro.github.io/wanderling/ ，看叶子是不是灰灰的赭色；打开 `?route=tokyo-hot-springs-v1&km=92.5` 看右边地平线上小田原的楼群剪影，把 92.5 改成 92.1、92.95 看它由远到近；`?mail=demo&lang=zh` 点「信」看新的明信片信；`?t=02:30` 看萤火虫那句。
 
+## 2026-10-08 会话 30：邮筒小修，起名与第一分钟（路线图第 7 项）
+
+- 前提：会话 29 的 PR 已合并，Cowork 验收了第 6 项。
+- Cowork 的三条结论：
+  1. 两个「需要评审」都采纳：decisions.md 第 9 节表里加了第 11、12 条，停车场对应条目标为已裁决。
+  2. 邮筒：贴图的饱和度压到 0.22（围巾约 0.51 的一半以下），同屏最多 1 个（`renderer.ts` 的 `dressDetail`，已有一个就换成长椅）。写进 decisions.md 第 9 节第 13 条。截图 `docs/screenshots/town-day.png`、`town-postbox.png`。
+  3. 第 7 项，见下。
+- 做了什么（第 7 项）：
+  - `src/ui/intro.ts`：第一分钟。HUD 先藏起来，只有天空和「Look outside. Same sky?」；两秒后出现一句解释和「对一对天空」「先不了」两个按钮（点前者才弹系统定位授权，15 秒没点当作「先不了」）；`renderer.arrive()` 让大背包滚进来、轻轻晃一下，他从里面钻出来（先露叶子）；起名面板（输入框用手写体）、「就这个」「你来定」，30 秒没动静就替他选；三句话：「{name}. I like it.」「I am going to see the other side of the sky.」「I will write to you.」；然后 HUD 淡入，他上路。右上角「跳过」随时可点，跳过就用已输入的名字或随机一个。
+  - 已有存档但没名字的用户：只出起名面板和一句 `{name}. I like it.`，不重演背包。中途关掉 App 的新用户下次重演完整版（`wanderling.introStarted`）。演示参数（`?t=`、`?km=` 等）不触发，截图工具照常用。
+  - `src/core/name.ts`：名字清洗（去标记和控制字符、最多 12 个字、折叠空格）、四个候选。`src/data/nameStore.ts` 存名字、首次打开时间。
+  - 落款：`src/ui/signoff.ts`，小脚印加手写体名字（Caveat，OFL，`src/fonts/`，许可证文件同目录；中文名回退到手机自带楷体），出现在明信片卡片和明信片信上。`{name}` 变量接进信件，新增小事 `m.name`（「Someone asked my name today. I said {name}, very clearly.」）。
+  - 动作权限：去掉「第一次点屏幕就问」。`src/core/motionAsk.ts`：过了第一天、用户那边下雪或落叶季（北半球 10、11 月，南半球 4、5 月）、应用开着，才问一次，底部一句话加「允许」「不用了」（`src/ui/ask.ts`）；点「允许」才弹 iOS 授权；点「不用了」记下不再问。不需要授权的手机直接监听。
+  - 渲染：`Wanderer.still`、`setEntrance()`；`renderer.hold()` 让他和世界先停住，`arrive()` 播背包动画。
+  - 其他：`.gitignore` 放行 `docs/screenshots/`（之前整个 screenshots 目录都被忽略，截图从没进过仓库）。
+  - 测试 194 个（新增 9 个：名字规则、问不问动作权限；红线检查多扫了第一分钟的七句话）。
+- 产出：PR；`docs/screenshots/first-minute-storyboard.png` 是整段流程的分镜，`first-minute-1` 到 `10` 是关键帧，`name-only-zh.png` 是老用户补起名（中文），`motion-ask.png` 是动作权限那句话。
+- 怎么在手机上从头体验：打开 `https://yurbro.github.io/wanderling/?intro=reset`。它会清掉这个浏览器里 Wanderling 存的一切（旅程、明信片、信、名字，只留语言）再从头开始，并把网址里的参数去掉，之后刷新不会再清。想只看一遍动画、不动存档：`?intro=play`。想再看动作权限那句话（iOS）：`?motion=reset`。
+- 注意：
+  - 里斯本这样最近路线第一段是火车的地方，新用户第一分钟就坐在火车上（背包在车厢地板上滚）。这是现有「选最近路线」的行为，和前 7 天剧本（第 3 天才上火车）冲突，需要评审。
+  - decisions.md 第 9 节第 7 条说「设置里可以再打开」动作权限，目前没有设置页。拒绝后没有办法再开，需要评审要不要加一个设置入口。
+  - 名字没有改名入口。
+  - 沙箱里连不上天气和反查地名，截图里地名是「Your sky」，线上不会。
+- 下一步：路线图第 8 项，前 7 天剧本。
+- Yu 的作业：合并 PR；用上面的 `?intro=reset` 从头走一遍；看看背包滚入和钻出的节奏、起名面板的字、明信片落款（等到第一张明信片在相册里就能看到，出发地那张立刻就有）。
+
 ## 停车场（MVP 之外的想法）
 
 - Service Worker：添加到主屏幕后断网也能打开页面。
@@ -619,11 +645,13 @@
 - 已裁决（decisions.md 第 9 节第 11 条）：坐车时只停走路，他在车上睡，车照常开。
 - 已裁决（decisions.md 第 9 节第 12 条）：叶子饱和度以春天那片为上限。
 - 已裁决（decisions.md 第 9 节第 13 条，会话 30 已做）：城镇邮筒改灰调砖色，同屏最多 1 个。
+- 需要评审：最近路线第一段是火车的地方（如里斯本），新用户第一分钟就在火车上，和前 7 天剧本冲突。
+- 需要评审：动作权限拒绝后「设置里可以再打开」，但现在没有设置页；要不要加入口，顺便放改名。
 
-## 下次会话开场清单（会话 30 的第一件事）
+## 下次会话开场清单（会话 31 的第一件事）
 
-1. 读 `CLAUDE.md`、`docs/design/decisions.md`、`docs/roadmap.md` 与本文件；`git fetch origin main` 看会话 29 的 PR 是否已合并；没合并就先提醒 Yu。
-2. `npm install`，`npm test`，确认 185 个测试通过。
-3. 先问 Yu 对会话 29 的反馈：远景剪影的大小和位置、秋天叶子的颜色、新的明信片信。
-4. 本次目标：路线图第 7 项，起名与第一分钟（D7，推荐均衡档）。
+1. 读 `CLAUDE.md`、`docs/design/decisions.md`、`docs/roadmap.md` 与本文件；`git fetch origin main` 看会话 30 的 PR 是否已合并；没合并就先提醒 Yu。
+2. `npm install`，`npm test`，确认 194 个测试通过。
+3. 先问 Yu 对会话 30 的反馈：背包滚入和钻出的节奏、起名面板、落款手写体、火车起点的问题怎么定。
+4. 本次目标：路线图第 8 项，前 7 天剧本（D8）。
 5. 结束前：推送、开 PR；更新 `docs/roadmap.md` 和本日志，回复里给出线上地址和「这次看哪里」。

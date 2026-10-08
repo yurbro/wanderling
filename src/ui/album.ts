@@ -2,6 +2,7 @@ import { getLang, t } from '../core/i18n';
 import { describeArrival, stampGlyph } from '../core/postcards';
 import type { Postcard } from '../core/types';
 import { renderPostcardScene } from './postcardScene';
+import { signoff } from './signoff';
 
 export interface Album {
   open(): void;
@@ -15,7 +16,7 @@ export interface Album {
  * first. Each card is plain DOM, its little landscape painted with the
  * colors captured at arrival.
  */
-export function createAlbum(root: HTMLElement, unit: 'C' | 'F'): Album {
+export function createAlbum(root: HTMLElement, unit: 'C' | 'F', nameOf: () => string | null = () => null): Album {
   const el = document.createElement('div');
   el.className = 'album';
   el.hidden = true;
@@ -53,7 +54,7 @@ export function createAlbum(root: HTMLElement, unit: 'C' | 'F'): Album {
       }, 350);
     },
     setCards(cards) {
-      list.replaceChildren(...[...cards].reverse().map((c) => renderCard(c, unit, dateFmt)));
+      list.replaceChildren(...[...cards].reverse().map((c) => renderCard(c, unit, dateFmt, nameOf())));
       empty.hidden = cards.length > 0;
     },
     get isOpen() {
@@ -72,7 +73,7 @@ export function createAlbum(root: HTMLElement, unit: 'C' | 'F'): Album {
   return api;
 }
 
-function renderCard(card: Postcard, unit: 'C' | 'F', dateFmt: Intl.DateTimeFormat): HTMLElement {
+function renderCard(card: Postcard, unit: 'C' | 'F', dateFmt: Intl.DateTimeFormat, name: string | null): HTMLElement {
   const article = document.createElement('article');
   article.className = 'card' + (card.darkInk ? ' card-dark-ink' : '');
   article.innerHTML = `
@@ -85,6 +86,7 @@ function renderCard(card: Postcard, unit: 'C' | 'F', dateFmt: Intl.DateTimeForma
     <div class="card-back">
       <div class="card-date">${dateFmt.format(new Date(card.at))} · ${describeArrival(card, unit)}</div>
       <div class="card-note">${escapeHtml(card.note)}</div>
+      ${signoff(name)}
     </div>
   `;
   return article;

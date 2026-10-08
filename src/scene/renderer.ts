@@ -7,7 +7,7 @@ import { KM_PER_HOUR } from '../core/journey';
 import { PROPS, WANDERER } from '../core/palette';
 import { SeaPainter } from './seaLayer';
 import { TransportPainter } from './transport';
-import { Wanderer } from './wanderer';
+import { Wanderer, loadParts } from './wanderer';
 import { WeatherPainter } from './weatherLayers';
 import { EXTRA_HEIGHT, TERRAIN_EXTRAS, bandSetFor, loadBands, loadProps, type BandName, type BandSet, type TerrainProps } from './terrain';
 import type { Terrain } from '../core/types';
@@ -119,6 +119,10 @@ export class SceneRenderer {
   private detailLayer = new Container();
   private details: Detail[] = [];
   private wanderer = new Wanderer();
+  /** First minute: the big backpack that rolls in with him inside. */
+  private pack = new Sprite({ visible: false });
+  private held = false;
+  private arrival: { t: number; done: () => void } | null = null;
   /** The place marker: signpost, and in towns a lamp and a cottage. */
   private marker = new Container();
   private signpost = new Graphics();
@@ -191,6 +195,7 @@ export class SceneRenderer {
       this.wanderer.glow,
       this.wanderer.view,
       this.wanderer.firefly,
+      this.pack,
       this.weather.fogNear,
       this.weather.precip,
       this.transport.front,
@@ -278,6 +283,95 @@ export class SceneRenderer {
   onWave(fn: () => void): void {
     this.waveListener = fn;
   }
+
+  /** The first minute: he is not here yet, and nothing moves, until `hold(false)`. */
+  hold(on: boolean): void {
+    this.held = on;
+    this.wanderer.still = on;
+    if (on) {
+      this.pack.visible = false;
+      this.wanderer.setEntrance(0);
+    }
+    if (!on) {
+      // Let go mid-arrival (a skip): he is simply here.
+      const a = this.arrival;
+      this.arrival = null;
+      this.popped = false;
+      this.pack.visible = false;
+      this.rise = 0;
+      this.wanderer.setEntrance(1);
+      a?.done();
+    }
+  }
+
+  /** How far below his stance he still is while climbing out of the backpack, in px. */
+  private rise = 0;
+
+  /** The big backpack rolls in and the wanderling climbs out of it; resolves once he stands. */
+  async arrive(): Promise<void> {
+    const parts = await loadParts();
+    this.pack.texture = parts.backpack;
+    this.pack.anchor.set(0.5);
+    this.pack.alpha = 1;
+    this.pack.visible = true;
+    this.pack.tint = this.state?.wanderer.tint ?? 0xffffff;
+    await new Promise<void>((done) => {
+      this.arrival = { t: 0, done };
+    });
+  }
+
+  /** Roll in, rock once, then he climbs out and the backpack lets go. */
+  private stepArrival(dt: number, f: { x: number; feetY: number; height: number }): void {
+    const a = this.arrival;
+    if (!a) return;
+    a.t += dt;
+    const ROLL = 1.7;
+    const BEAT = 0.55;
+    const POP = 0.75;
+    const FADE = 0.6;
+    const size = this.h * WANDERLING_HEIGHT * 0.95;
+    const tex = this.pack.texture;
+    const k = size / tex.height;
+    const baseY = f.feetY - size * 0.45;
+    const sx = (c: number): number => k * c;
+    if (a.t < ROLL) {
+      const u = a.t / ROLL;
+      const e = 1 - (1 - u) ** 3;
+      this.pack.position.set(-size + (f.x + size * 0.1 + size) * e, baseY - Math.abs(Math.sin(u * Math.PI * 3)) * size * 0.13 * (1 - u));
+      this.pack.rotation = e * Math.PI * 4;
+      this.pack.scale.set(sx(1));
+    } else if (a.t < ROLL + BEAT) {
+      // A little settling rock, as if it were deciding whether to open.
+      const u = (a.t - ROLL) / BEAT;
+      this.pack.position.set(f.x + size * 0.1, baseY);
+      this.pack.rotation = Math.sin(u * Math.PI * 4) * 0.09 * (1 - u * 0.5);
+      this.pack.scale.set(sx(1 + 0.05 * Math.sin(u * Math.PI * 4)), sx(1 - 0.05 * Math.sin(u * Math.PI * 4)));
+    } else {
+      const u = Math.min(1, (a.t - ROLL - BEAT) / POP);
+      if (!this.popped) {
+        this.popped = true;
+        this.wanderer.begin('hop');
+      }
+      // Out of the top: up from behind the pack, a touch smaller and growing to size.
+      const e = 1 + 2.2 * (u - 1) ** 3 + 1.2 * (u - 1) ** 2; // ease out with a little overshoot
+      this.wanderer.setEntrance(0.55 + 0.45 * Math.min(1.04, e));
+      this.rise = (1 - Math.min(1, e)) * size * 0.7;
+      this.pack.position.set(f.x + size * 0.1, baseY);
+      this.pack.rotation = 0;
+      this.pack.scale.set(sx(1));
+      const fade = Math.max(0, Math.min(1, (a.t - ROLL - BEAT - POP * 0.6) / FADE));
+      this.pack.alpha = 1 - fade;
+      if (a.t >= ROLL + BEAT + POP * 0.6 + FADE) {
+        this.wanderer.setEntrance(1);
+        this.rise = 0;
+        this.pack.visible = false;
+        this.popped = false;
+        this.arrival = null;
+        a.done();
+      }
+    }
+  }
+  private popped = false;
 
   /** Make the wanderling turn and wave (the demo). */
   wave(): void {
@@ -473,12 +567,15 @@ export class SceneRenderer {
     this.wanderer.frame(dt);
     // Aboard a vehicle the wanderer sits and sways with it.
     const f = this.figure();
-    this.wanderer.view.y = f.feetY + this.transport.sway;
-    const pace = st.wanderer.pace;
+    this.stepArrival(dt, f);
+    this.wanderer.view.y = f.feetY + this.transport.sway + this.rise;
+    const pace = this.held ? 0 : st.wanderer.pace;
     const riding = st.travel.mode === 'ride';
     const scrollPace = riding ? 5 : pace;
     const groundSpeed = GROUND_SPEED * scrollPace;
     this.transport.frame(dt, this.elapsed, groundSpeed);
+    // Held still for the introduction the land still has to follow a change of place.
+    if (this.held) this.drawHills();
     if (scrollPace <= 0 || this.wanderer.paused) return;
     // The next place's signpost slides in with the ground. When it reaches
     // the wanderer's side we have arrived: hold everything there until the

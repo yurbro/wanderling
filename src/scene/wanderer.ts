@@ -254,6 +254,19 @@ export class Wanderer {
     void loadParts().then((parts) => this.dress(parts)).catch((err) => console.warn('[wanderling] parts not loaded', err));
   }
 
+  /** The introduction holds him still on the spot until he is ready to set off. */
+  still = false;
+  /** 0 keeps him out of sight, 1 is full size: the pop out of the big backpack. */
+  private entrance = 1;
+
+  setEntrance(k: number): void {
+    this.entrance = k;
+    this.view.visible = k > 0;
+    this.glow.alpha = k >= 1 ? 1 : 0;
+    this.firefly.alpha = k >= 1 ? 1 : 0;
+    this.view.scale.set(this.scale * Math.max(0.001, k));
+  }
+
   /** True while the wanderling has stopped walking for a gesture. */
   get paused(): boolean {
     return STOPPING.has(this.gesture);
@@ -314,7 +327,7 @@ export class Wanderer {
     this.feet = { x, y: groundY };
     this.scale = height / U;
     this.view.position.set(x, groundY);
-    this.view.scale.set(this.scale);
+    this.view.scale.set(this.scale * Math.max(0.001, this.entrance));
     this.glow.scale.set(this.scale);
     this.pose();
   }
@@ -353,7 +366,7 @@ export class Wanderer {
     this.shiver(dt);
     this.fly(dt);
     // A dawdling 1.1 steps a second.
-    const pace = this.paused ? 0 : this.state.pace;
+    const pace = this.paused || this.still ? 0 : this.state.pace;
     this.phase += dt * Math.PI * 2 * 1.1 * pace;
     this.pose();
   }

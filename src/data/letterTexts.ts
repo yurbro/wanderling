@@ -38,6 +38,7 @@ export const SKELETONS: Skeleton[] = [
   { id: 'm.puddle', kind: 'moment', en: 'There was a puddle shaped like a boot. I stepped around it. It seemed polite.', zh: '有个水洼长得像靴子。我绕过去了。这样比较有礼貌。' },
   { id: 'm.stones', kind: 'moment', en: 'Someone left a stone on a stone. I added a third. Now it is a tower.', zh: '有人把一块石头放在另一块上。我加了第三块。现在它是一座塔了。', terrains: ['mountain', 'hills', 'coast'] },
   { id: 'm.bread', kind: 'moment', en: 'The wind smelled of bread for a whole minute. I walked slower.', zh: '风里有面包味，整整一分钟。我走得慢了些。', terrains: ['city', 'plain'] },
+  { id: 'm.name', kind: 'moment', en: 'Someone asked my name today. I said {name}, very clearly.', zh: '今天有人问我叫什么。我很清楚地说了：{name}。' },
   { id: 'm.leaf', kind: 'moment', en: 'My leaf keeps pointing at the sun. I let it. It knows things I do not.', zh: '我的叶子总朝着太阳。我由它去。它知道一些我不知道的事。' },
   { id: 'm.gate', kind: 'moment', en: 'I passed a gate with no fence. I went through it anyway. It felt right.', zh: '路过一扇没有围栏的门。我还是从门里走过去了。这样才对。', terrains: ['plain', 'hills'] },
   { id: 'm.trees', kind: 'moment', en: 'The trees here are very tall. They did not mind me walking under them.', zh: '这里的树很高。我从底下走过，它们不介意。', terrains: ['forest'] },

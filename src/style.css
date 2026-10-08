@@ -7,6 +7,25 @@
   color-scheme: dark;
 }
 
+/* His handwriting for the signature (Caveat, SIL OFL: src/fonts/Caveat-OFL.txt). */
+@font-face {
+  font-family: 'Caveat';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/caveat-latin-ext-500-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Caveat';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/caveat-latin-500-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -116,10 +135,11 @@ canvas.scene {
   color: var(--text);
   font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
   text-shadow: 0 1px 2px rgba(20, 24, 40, 0.18);
-  transition: color 1.2s ease;
+  transition: color 1.2s ease, opacity 1.4s ease;
 }
 
-.hud.dark-ink {
+.hud.dark-ink,
+.intro.dark-ink {
   --text: var(--ink);
   --pill-bg: rgba(52, 58, 77, 0.1);
   --pill-border: rgba(52, 58, 77, 0.32);
@@ -703,4 +723,185 @@ canvas.scene {
   height: 7px;
   border-radius: 50%;
   background: #b86b5a;
+}
+
+/* ------------------------------------------------------------------ the first minute */
+
+/* While the introduction runs the sky stands alone; the buttons come back when he sets off. */
+.in-intro .hud,
+.in-intro .hud * {
+  opacity: 0;
+  pointer-events: none !important;
+}
+
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  color: var(--text);
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  text-shadow: 0 1px 2px rgba(20, 24, 40, 0.18);
+  text-align: center;
+  transition: opacity 0.8s ease, color 1.2s ease;
+}
+
+.intro.leaving {
+  opacity: 0;
+}
+
+.intro.dark-ink {
+  text-shadow: none;
+}
+
+.intro [hidden] {
+  display: none !important;
+}
+
+.intro-sky,
+.intro-name,
+.intro-speech {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding: 0 28px;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+
+.intro-sky,
+.intro-name {
+  top: calc(env(safe-area-inset-top, 0px) + 20%);
+}
+
+.intro-speech {
+  top: calc(env(safe-area-inset-top, 0px) + 36%);
+  font-size: 21px;
+  font-style: italic;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.intro .shown {
+  opacity: 1;
+}
+
+.intro-look {
+  margin: 0;
+  font-size: 27px;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+}
+
+.intro-why {
+  margin: 14px auto 0;
+  max-width: 300px;
+  font-size: 14px;
+  line-height: 1.45;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+
+.intro-why.shown {
+  opacity: 0.85;
+}
+
+.intro-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.intro-sky .intro-actions {
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+
+.intro-sky .intro-actions.shown {
+  opacity: 1;
+}
+
+.intro .pill {
+  pointer-events: auto;
+}
+
+.intro-sky,
+.intro-name {
+  pointer-events: none;
+}
+
+.intro-skip {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  right: 16px;
+  pointer-events: auto;
+  appearance: none;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.intro-input {
+  pointer-events: auto;
+  display: block;
+  margin: 18px auto 0;
+  width: 230px;
+  appearance: none;
+  border: 0;
+  border-bottom: 1.5px solid currentColor;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-family: 'Caveat', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Segoe Script', cursive;
+  font-size: 30px;
+  text-align: center;
+  padding: 4px 6px;
+  outline: none;
+}
+
+.intro-input::placeholder {
+  color: inherit;
+  opacity: 0.45;
+  font-family: 'Iowan Old Style', Georgia, serif;
+  font-size: 16px;
+}
+
+/* His signature: a footprint and his name in handwriting. */
+.signoff {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 10px;
+  opacity: 0.8;
+}
+
+.signoff .footprint {
+  fill: currentColor;
+  opacity: 0.55;
+  transform: rotate(14deg);
+}
+
+.signoff-name {
+  font-family: 'Caveat', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Segoe Script', cursive;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.ask {
+  align-items: center;
+}
+
+.ask-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
 }
