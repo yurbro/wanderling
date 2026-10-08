@@ -387,14 +387,18 @@ canvas.scene {
 }
 
 .card-place {
-  font-size: 26px;
+  font-size: 24px;
+  font-weight: 300;
+  letter-spacing: 0.02em;
   line-height: 1.1;
-  text-shadow: 0 1px 6px rgba(244, 239, 228, 0.7), 0 0 2px rgba(244, 239, 228, 0.9);
+  padding-right: 52px;
+  /* Light letters get a soft dark halo, dark ink a soft light one: thin strokes stay readable without turning heavy. */
+  text-shadow: 0 1px 5px rgba(20, 24, 40, 0.45);
 }
 
 .card-dark-ink .card-place,
 .card-dark-ink .card-region {
-  text-shadow: 0 1px 6px rgba(20, 24, 40, 0.7), 0 0 2px rgba(20, 24, 40, 0.9);
+  text-shadow: 0 1px 5px rgba(244, 239, 228, 0.6);
 }
 
 .card-region {
@@ -405,7 +409,7 @@ canvas.scene {
   margin-top: 4px;
 }
 
-.card-stamp {
+.card-scene > .card-stamp {
   position: absolute;
   top: 12px;
   right: 12px;
@@ -985,4 +989,46 @@ canvas.scene {
   letter-spacing: 0.06em;
   opacity: 0.6;
   margin-top: 3px;
+}
+
+/* Settings sheet */
+
+.settings-row {
+  margin-bottom: 26px;
+}
+
+.settings-label {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin-bottom: 8px;
+}
+
+.settings-value {
+  font-size: 19px;
+  margin-bottom: 10px;
+}
+
+.settings-line {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.settings-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  opacity: 0.75;
+  min-height: 1em;
+}
+
+.settings .pill.is-on {
+  --pill-bg: rgba(244, 239, 228, 0.9);
+  color: #2a2f45;
+}
+
+.settings-row[hidden] {
+  display: none;
 }

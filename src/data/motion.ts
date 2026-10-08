@@ -57,6 +57,35 @@ export function needsMotionPrompt(): boolean {
   return !!ctor?.requestPermission && remembered() === null;
 }
 
+/** Whether this phone has motion sensors at all (the settings row is hidden when not). */
+export function motionSupported(): boolean {
+  return !!(globalThis as { DeviceMotionEvent?: MotionEventCtor }).DeviceMotionEvent;
+}
+
+/** The settings switch: on when shaking works or needs no question, off after a no or before a yes. */
+export function motionIsOn(): boolean {
+  const ctor = (globalThis as { DeviceMotionEvent?: MotionEventCtor }).DeviceMotionEvent;
+  if (!ctor) return false;
+  const r = remembered();
+  if (r === 'denied') return false;
+  return ctor.requestPermission ? r === 'granted' : true;
+}
+
+/**
+ * The settings switch. Turning off is remembered and silences the shake at
+ * once; turning on asks the system again if it must (call from a tap).
+ * Resolves to whether shaking is on afterwards.
+ */
+export async function setMotion(on: boolean, onShake: () => void): Promise<boolean> {
+  if (!on) {
+    declineMotion();
+    return false;
+  }
+  // The system remembers its own no for the page; ours we can lift.
+  if (remembered() === 'denied') forgetMotion();
+  return (await enableShake(onShake)) === 'granted';
+}
+
 /** Start listening for a shake; call from a user gesture the first time. */
 export async function enableShake(onShake: () => void): Promise<Permission> {
   const ctor = (globalThis as { DeviceMotionEvent?: MotionEventCtor }).DeviceMotionEvent;
@@ -74,7 +103,11 @@ export async function enableShake(onShake: () => void): Promise<Permission> {
   }
   if (!listening) {
     listening = true;
-    window.addEventListener('devicemotion', shakeDetector(onShake));
+    const detect = shakeDetector(() => {
+      // Switched off in settings: the listener stays, the shake is ignored.
+      if (remembered() !== 'denied') onShake();
+    });
+    window.addEventListener('devicemotion', detect);
   }
   return 'granted';
 }

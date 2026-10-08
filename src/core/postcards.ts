@@ -16,7 +16,8 @@ export function postcardId(routeId: string, arrival: Arrival): string {
 /** Arrivals in the journey that have no postcard yet, in order. */
 export function missingArrivals(route: Route, journey: JourneyState, cards: Postcard[]): Arrival[] {
   const have = new Set(cards.map((c) => c.id));
-  return journey.arrivals.filter((a) => !have.has(postcardId(route.id, a)));
+  const transit = new Set(route.places.filter((p) => p.transit).map((p) => p.id));
+  return journey.arrivals.filter((a) => !transit.has(a.placeId) && !have.has(postcardId(route.id, a)));
 }
 
 const HOUR_MS = 3_600_000;

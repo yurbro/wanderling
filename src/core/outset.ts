@@ -30,6 +30,8 @@ export const TRAIN_ARRIVAL_HOUR = 6;
 export const NIGHT_TRAIN_MIN_KM = 250;
 /** Farther than this there is no train: a plane, at its own speed. */
 export const NIGHT_TRAIN_MAX_KM = 3000;
+/** The seaside city is this far from the little station, towards the route. */
+export const HUB_KM = 900;
 /** Roads wind: the station is this fraction of the walk away as the crow flies. */
 const ROAD_WIND = 0.8;
 
@@ -45,6 +47,11 @@ export interface Outset {
   walkKm: number;
   /** How long the night train takes, in hours (it runs to a timetable, not a speed). */
   trainHours: number;
+  /**
+   * Only for someone far from every route (ruling 20): the big seaside city
+   * the night train goes to, where he changes to a plane at dawn on day 5.
+   */
+  hub?: { lat: number; lon: number };
 }
 
 /** The little station's name and the line on its postcard. */
@@ -52,6 +59,13 @@ export const STATION_PLACE = {
   id: 'station',
   en: { name: 'Little Station', note: 'One bench, one clock, one train a night.' },
   zh: { name: '小站', note: '一张长椅，一座钟，每晚一班火车。' },
+};
+
+/** The seaside city made up for someone far from every route (ruling 20). It is only a place to change, so it sends no postcard. */
+export const HUB_PLACE = {
+  id: 'hub',
+  en: { name: 'Harbour City', note: 'Salt air, tall cranes, and a plane at dawn.' },
+  zh: { name: '海边大城', note: '海风，吊车，清晨还有一班飞机。' },
 };
 
 /** The local time `days` calendar days after `from`, at `hour`:00. */
@@ -101,12 +115,20 @@ export function planOutset(origin: Home, dest: { lat: number; lon: number } | nu
   const atStation = dayAt(startAt, STATION_DAY, STATION_HOUR);
   const walkKm = Math.round((awakeMs(startAt, atStation, sleep) / HOUR_MS) * KM_PER_HOUR * 100) / 100;
   const leaves = atStation + REST_MS;
-  const arrives = dayAt(startAt, TRAIN_ARRIVAL_DAY, TRAIN_ARRIVAL_HOUR);
-  const trainHours = Math.max(1, (arrives - leaves) / HOUR_MS);
+  const dawn = dayAt(startAt, TRAIN_ARRIVAL_DAY, TRAIN_ARRIVAL_HOUR);
   // Towards the train's destination when it is well beyond the walk; otherwise a
   // direction of its own, the same every time for the same home.
   const bearing = dest && haversineKm(origin, dest) > walkKm * 1.5 ? bearingTo(origin, dest) : seededBearing(origin);
   const station = travel(origin, bearing, walkKm * ROAD_WIND);
+  if (dest && haversineKm(station, dest) > NIGHT_TRAIN_MAX_KM) {
+    // Too far for one train. The train still leaves on the evening of day 3 and
+    // gets him to the seaside city in time for his night's rest there, so the
+    // plane goes at dawn on day 5, where the train would have come in.
+    const hub = travel(station, bearingTo(station, dest), HUB_KM);
+    const trainHours = Math.max(1, (dawn - REST_MS - leaves) / HOUR_MS);
+    return { origin, station, walkKm, trainHours, hub };
+  }
+  const trainHours = Math.max(1, (dawn - leaves) / HOUR_MS);
   return { origin, station, walkKm, trainHours };
 }
 
@@ -147,6 +169,26 @@ export function withOutset(base: Route, outset: Outset): Route {
   const walk: Leg = { km: outset.walkKm, terrain: 'plain', mode: 'walk' };
   const first = base.places[0];
   const trainKm = first && typeof first.lat === 'number' && typeof first.lon === 'number' ? Math.max(1, Math.round(haversineKm(station, { lat: first.lat, lon: first.lon }))) : 1;
+  if (outset.hub) {
+    const hubPlace: Place = {
+      id: HUB_PLACE.id,
+      name: HUB_PLACE.en.name,
+      region: origin.name,
+      terrain: 'coast',
+      lat: outset.hub.lat,
+      lon: outset.hub.lon,
+      note: HUB_PLACE.en.note,
+      zh: { name: HUB_PLACE.zh.name, region: origin.name, note: HUB_PLACE.zh.note },
+      transit: true,
+    };
+    const toHub = Math.max(1, Math.round(haversineKm(station, outset.hub)));
+    const toRoute = first && typeof first.lat === 'number' && typeof first.lon === 'number' ? Math.max(1, Math.round(haversineKm(outset.hub, { lat: first.lat, lon: first.lon }))) : 1;
+    return {
+      ...base,
+      places: [home, stationPlace, hubPlace, ...base.places],
+      legs: [walk, { km: toHub, terrain: 'plain', mode: 'ride', hours: outset.trainHours }, { km: toRoute, terrain: 'plain', mode: 'fly' }, ...base.legs],
+    };
+  }
   const train: Leg =
     trainKm > NIGHT_TRAIN_MAX_KM
       ? { km: trainKm, terrain: 'plain', mode: 'fly' }

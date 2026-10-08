@@ -98,6 +98,7 @@ export function createMailbox(root: HTMLElement, opts: MailboxOptions = {}): Mai
     },
     setLetters(letters) {
       list.replaceChildren(...letters.map((l) => renderLetter(l, dateFmt, nameOf())));
+      empty.textContent = t('noMail', { name: nameOf() ?? 'Pip' });
       empty.hidden = letters.length > 0;
     },
     setPack(text) {

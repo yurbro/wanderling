@@ -35,7 +35,7 @@ function isOutset(v: unknown): boolean {
   if (!v || typeof v !== 'object') return false;
   const o = v as Record<string, unknown>;
   const st = o.station as Record<string, unknown> | undefined;
-  return isHome(o.origin) && !!o.origin && !!st && num(st.lat) && num(st.lon) && num(o.walkKm) && o.walkKm > 0 && num(o.trainHours) && o.trainHours > 0;
+  return isHome(o.origin) && !!o.origin && !!st && num(st.lat) && num(st.lon) && num(o.walkKm) && o.walkKm > 0 && num(o.trainHours) && o.trainHours > 0 && (o.hub === undefined || (!!o.hub && typeof o.hub === 'object' && num((o.hub as Record<string, unknown>).lat) && num((o.hub as Record<string, unknown>).lon)));
 }
 
 export function isJourneyState(v: unknown): v is JourneyState {

@@ -146,6 +146,19 @@ describe('missed letters', () => {
     expect(two.candidates).toHaveLength(0);
   });
 
+  it('keeps the sleep letter out of the first week, then writes it once (ruling 21)', () => {
+    const night = (d: number): number => new Date(2026, 9, 7 + d, 2, 0, 0).getTime();
+    const weekEnds = new Date(2026, 9, 14, 0, 0, 0).getTime();
+    const quiet = { id: 'asleep' as const, before: weekEnds };
+    const asleep = (at: number): Facts => ({ ...calm, at, hour: 2.5, sunAltitude: -40 });
+    let log: SurpriseLog = offer(EMPTY_LOG, asleep(night(0)), false);
+    const first = missedLetters(log, night(0) + 5 * H, quiet);
+    expect(first.candidates).toHaveLength(0);
+    log = offer(first.log, asleep(night(8)), false);
+    const later = missedLetters(log, night(8) + 5 * H, quiet);
+    expect(later.candidates).toHaveLength(1);
+  });
+
   it('finds a full moon that came and went while the app was closed', () => {
     const start = new Date(2026, 9, 7, 18, 0, 0).getTime();
     const factsAt = (at: number): Facts => {

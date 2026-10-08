@@ -13,6 +13,7 @@ import {
   withOutset,
 } from '../src/core/outset';
 import type { Home, JourneyState } from '../src/core/types';
+import { missingArrivals } from '../src/core/postcards';
 import { isJourneyState } from '../src/data/journeyStore';
 import { ROUTES } from '../src/data/routes';
 
@@ -129,5 +130,48 @@ describe('the going-out stretch (ruling 14)', () => {
     expect(p.lat).toBeCloseTo(0, 1);
     expect(p.lon).toBeCloseTo(1, 1);
     expect(travel({ lat: 10, lon: 179.9 }, 90, 50).lon).toBeLessThan(-179);
+  });
+});
+
+describe('someone far from every route (ruling 20)', () => {
+  const SAO_PAULO: Home = { name: 'São Paulo', region: 'Brazil', lat: -23.55, lon: -46.63 };
+
+  it('takes the night train to a seaside city, then a plane at dawn on day 5', () => {
+    const start = new Date(2026, 9, 8, 9, 0).getTime();
+    const { base, route, journey, outset } = fresh(SAO_PAULO, start);
+    expect(haversineKm(SAO_PAULO, { lat: base.places[0].lat!, lon: base.places[0].lon! })).toBeGreaterThan(NIGHT_TRAIN_MAX_KM);
+    expect(outset.hub).toBeDefined();
+    expect(route.places.map((p) => p.id).slice(0, 3)).toEqual(['home', 'station', 'hub']);
+    expect(route.places[2].transit).toBe(true);
+    // Day 4's question is still asked aboard the train.
+    expect(at(route, journey, dayAt(start, 4, 11)).pos.mode).toBe('ride');
+    expect(at(route, journey, dayAt(start, 4, 11)).pos.to!.id).toBe('hub');
+    // At dawn on day 5 the plane leaves from there.
+    expect(at(route, journey, dayAt(start, 5, 5)).pos.resting).toBe(true);
+    const dawn = at(route, journey, dayAt(start, 5, 7));
+    expect(dawn.pos.mode).toBe('fly');
+    expect(dawn.pos.from.id).toBe('hub');
+  });
+
+  it('sends no postcard from the seaside city, and the saved journey rebuilds the same route', () => {
+    const start = new Date(2026, 9, 8, 9, 0).getTime();
+    const { base, route, journey, outset } = fresh(SAO_PAULO, start);
+    const state = advance(route, journey, dayAt(start, 6, 12)).state;
+    expect(state.arrivals.map((a) => a.placeId)).toContain('hub');
+    expect(missingArrivals(route, state, []).map((a) => a.placeId)).not.toContain('hub');
+    expect(isJourneyState(JSON.parse(JSON.stringify(state)))).toBe(true);
+    expect(buildSegmentRoute(state, ROUTES)!.places.map((p) => p.id)).toEqual(route.places.map((p) => p.id));
+    expect(outset.hub).toEqual(JSON.parse(JSON.stringify(outset)).hub);
+    expect(base.places[0].id).toBe(route.places[3].id);
+  });
+});
+
+describe('the train to the seaside city', () => {
+  it('says it gets in this evening, not at dawn', () => {
+    const SAO_PAULO: Home = { name: 'São Paulo', region: 'Brazil', lat: -23.55, lon: -46.63 };
+    const start = new Date(2026, 9, 8, 9, 0).getTime();
+    const { route, journey } = fresh(SAO_PAULO, start);
+    const day4 = at(route, journey, dayAt(start, 4, 11));
+    expect(describeJourney(day4.pos, dayAt(start, 4, 11))).toBe('On the night train to Harbour City · in this evening');
   });
 });

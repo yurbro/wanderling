@@ -32,7 +32,7 @@ import { loadMail, saveMail } from './data/mailStore';
 import { EMPTY_LOG, begin as beginSurprise, intensity, missedLetters, offer as offerSurprise, rainEndedAgo, scanPast, type Facts, type SurpriseId, type SurpriseLog } from './core/surprises';
 import { weatherIntensities } from './core/weather';
 import { loadLastSeen, loadSurprises, saveLastSeen, saveSurprises } from './data/surpriseStore';
-import { declineMotion, enableShake, forgetMotion, needsMotionPrompt } from './data/motion';
+import { declineMotion, enableShake, forgetMotion, motionIsOn, motionSupported, needsMotionPrompt, setMotion } from './data/motion';
 import { shouldAskMotion } from './core/motionAsk';
 import { introWasStarted, loadName, loadStartedAt, markIntroStarted, saveName, saveStartedAt } from './data/nameStore';
 import { askLightly } from './ui/ask';
@@ -51,6 +51,7 @@ import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
 import { createCityChooser } from './ui/city';
 import { createHud } from './ui/hud';
+import { createSettings } from './ui/settings';
 import { setupInstallHint } from './ui/install';
 import { createMap } from './ui/map';
 
@@ -176,27 +177,8 @@ async function main(): Promise<void> {
 
   const hud = createHud(root, {
     demo: params.get('demo') === '1',
-    onLocate: async () => {
-      try {
-        const found = await requestLocation();
-        hud.setNote('');
-        hud.hideLocate();
-        await moveTo(found);
-      } catch {
-        hud.setNote(t('noLocation'), 8000);
-      }
-    },
     onPlace: () => city.open(),
-    onLanguage: () => {
-      try {
-        localStorage.setItem(LANG_KEY, lang === 'zh' ? 'en' : 'zh');
-      } catch {
-        // Fine.
-      }
-      const url = new URL(window.location.href);
-      url.searchParams.delete('lang');
-      window.location.href = url.toString();
-    },
+    onSettings: () => settings.open(),
     onScrub: (m) => {
       minutesOverride = m;
       tick();
@@ -254,12 +236,41 @@ async function main(): Promise<void> {
       map.update(route, locate(route, journey, clock()), visibleCards(), routeOptions(journey, route, ROUTES));
     },
   });
+  const switchLanguage = (): void => {
+    try {
+      localStorage.setItem(LANG_KEY, lang === 'zh' ? 'en' : 'zh');
+    } catch {
+      // Fine.
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete('lang');
+    window.location.href = url.toString();
+  };
+  const settings = createSettings(root, {
+    getName: () => myName,
+    onRename: (name) => {
+      myName = name;
+      saveName(name);
+      mailbox.setLetters(shownLetters());
+      mailbox.setPack(packLine());
+      tick();
+    },
+    getPlace: () => (!world.location.name || world.location.name === 'Your sky' ? t('yourSky') : world.location.name),
+    onLocate: async () => {
+      try {
+        await moveTo(await requestLocation());
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    onPickCity: () => city.open(),
+    onLanguage: switchLanguage,
+    motion: motionSupported() ? { isOn: motionIsOn, set: (on) => setMotion(on, onShake) } : null,
+  });
   const city = createCityChooser(root, searchCity, (picked) => {
-    hud.hideLocate();
     void moveTo({ lat: picked.lat, lon: picked.lon, name: picked.name, region: picked.region });
   });
-
-  if (loadLocation()) hud.hideLocate();
 
   const now = (): Date => {
     const d = new Date(clock());
@@ -414,7 +425,7 @@ async function main(): Promise<void> {
     // "In the post": after the arrival line if there was one just now, else right away.
     if (!deliverNow && deliveredCards(postcards, clock()).length < postcards.length) {
       if (postedTimer !== null) window.clearTimeout(postedTimer);
-      postedTimer = window.setTimeout(() => hud.setNote(t('postcardPosted'), 12_000), arrivedNow ? 20_000 : 0);
+      postedTimer = window.setTimeout(() => hud.setNote(t('postcardPosted', { name: nameNow() }), 12_000), arrivedNow ? 20_000 : 0);
     }
   };
 
@@ -638,6 +649,10 @@ async function main(): Promise<void> {
   const saveLog = (): void => {
     if (!surpriseDemo && !demoJourney) saveSurprises(surprises);
   };
+  const onShake = (): void => {
+    startSurprise('snowGlobe');
+    renderer.shaken();
+  };
   const showSurprises = (at: number) => ({
     rainbow: intensity(surprises, 'rainbow', at),
     moonWatch: intensity(surprises, 'fullMoon', at) > 0,
@@ -649,7 +664,7 @@ async function main(): Promise<void> {
     const wall = clock();
     const f = factsAt(wall, position);
     if (f) surprises = offerSurprise(surprises, f, !document.hidden);
-    const missed = missedLetters(surprises, wall);
+    const missed = missedLetters(surprises, wall, script.start !== null ? { id: 'asleep', before: dayAt(script.start, 7, 0) } : null);
     surprises = missed.log;
     candidates.push(...missed.candidates);
     if (!document.hidden && demoDay === null) saveLastSeen(wall);
@@ -767,7 +782,7 @@ async function main(): Promise<void> {
     if (forcedTerrain) render = { ...render, land: { ...render.land, terrain: forcedTerrain, relief: TERRAIN[forcedTerrain].relief, sea: TERRAIN[forcedTerrain].sea } };
     // Falling asleep: the firefly's one line, once.
     // A beat later, so it is not covered by the postcard line that may follow an arrival.
-    if (render.wanderer.asleep && !wasAsleep) window.setTimeout(() => hud.setNote(say('hushAsleep'), 15_000), 80);
+    if (render.wanderer.asleep && !wasAsleep) window.setTimeout(() => hud.setNote(say('hushAsleep', { name: nameNow() }), 15_000), 80);
     wasAsleep = render.wanderer.asleep;
     // The day-2 cat: a word when it falls in behind him.
     const cat = (render.surprise.cat ?? 0) > 0;
@@ -830,11 +845,7 @@ async function main(): Promise<void> {
   // A long press is a wave, a shake is the snow globe. Phones that need no
   // permission listen at once; iOS is asked lightly, later (see askMotion).
   renderer.onWave(() => startSurprise('wave'));
-  const armShake = (): Promise<void> =>
-    enableShake(() => {
-      startSurprise('snowGlobe');
-      renderer.shaken();
-    }).then(() => undefined);
+  const armShake = (): Promise<void> => enableShake(onShake).then(() => undefined);
   if (!needsMotionPrompt()) void armShake();
   let asking = false;
   /** Once the first day is over: on a snowy day or in leaf-fall, with the app open, one light question. */
@@ -892,7 +903,6 @@ async function main(): Promise<void> {
         matchSky: async () => {
           try {
             const found = await requestLocation();
-            hud.hideLocate();
             await moveTo(found);
           } catch {
             matchFailed = true;
