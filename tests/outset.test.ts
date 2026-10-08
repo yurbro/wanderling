@@ -69,10 +69,10 @@ describe('the going-out stretch (ruling 14)', () => {
     expect(at(route, journey, dayAt(start, 3, 19)).pos.resting).toBe(true);
     const evening = at(route, journey, dayAt(start, 3, 21));
     expect(evening.pos.mode).toBe('ride');
-    expect(describeJourney(evening.pos, dayAt(start, 3, 21))).toBe(`On the night train to ${base.places[0].name} · arrives at dawn the day after tomorrow`);
+    expect(describeJourney(evening.pos, dayAt(start, 3, 21))).toBe(`On the night train to ${base.places[0].name} · in two dawns`);
     const day4 = at(route, journey, dayAt(start, 4, 14));
     expect(day4.pos.mode).toBe('ride');
-    expect(describeJourney(day4.pos, dayAt(start, 4, 14))).toMatch(/arrives tomorrow at dawn$/);
+    expect(describeJourney(day4.pos, dayAt(start, 4, 14))).toMatch(/in at dawn tomorrow$/);
     expect(at(route, journey, dayAt(start, 5, 6) - 2 * MIN).state.arrivals).toHaveLength(2);
     const dawn = at(route, journey, dayAt(start, 5, 6) + 2 * MIN);
     expect(dawn.state.arrivals.map((a) => a.placeId)).toEqual(['home', 'station', base.places[0].id]);

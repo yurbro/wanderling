@@ -127,6 +127,34 @@ export async function fetchPlaceWeather(
   }
 }
 
+/**
+ * The weather at several past moments in one place, in one request (the week
+ * of sky's missing days). Null for any moment that cannot be had; never throws.
+ */
+export async function fetchHistory(
+  p: { lat: number; lon: number },
+  times: number[],
+  fetchImpl: typeof fetch = (...args) => fetch(...args),
+  now: number = Date.now(),
+): Promise<({ condition: WeatherState['condition']; code: number; temperature: number } | null)[]> {
+  if (times.length === 0) return [];
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), TIMEOUT_MS) : null;
+  try {
+    const res = await fetchImpl(placeWeatherUrl(p, Math.min(...times), now), { signal: ctrl?.signal });
+    if (!res.ok) return times.map(() => null);
+    const snap = parseForecast(await res.json(), now, p.lat, p.lon);
+    return times.map((t) => {
+      const w = snap ? weatherAt(snap, new Date(t)) : null;
+      return w ? { condition: w.condition, code: w.code, temperature: w.temperature } : null;
+    });
+  } catch {
+    return times.map(() => null);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export type WeatherStatus = 'idle' | 'loading' | 'ok' | 'offline';
 
 /**

@@ -67,6 +67,10 @@ Useful URL parameters for demos and screenshots:
 | `?journey=next` | jumps to the next segment of the chain (not saved) |
 | `?lang=zh` | Chinese interface for this visit (the bottom button switches and remembers) |
 | `?postcards=demo` | adds three sample postcards to the album (not saved) |
+| `?day=3` | the first week as a new traveller on day 3 (0 to 7), earlier days replayed (not saved) |
+| `?day=3&hour=21` | the same, at 21:00 that day |
+| `?day=reset` | forgets the answers tapped in `?day=` runs |
+| `?surprise=cat` | the day-2 cat now (also `rainbow`, `fullMoon`, `snowGlobe`, `wave`, `missed`) |
 
 ## Development
 
