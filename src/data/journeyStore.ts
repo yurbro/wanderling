@@ -30,12 +30,21 @@ function isHome(v: unknown): boolean {
   return typeof h.name === 'string' && num(h.lat) && num(h.lon);
 }
 
+function isOutset(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  const st = o.station as Record<string, unknown> | undefined;
+  return isHome(o.origin) && !!o.origin && !!st && num(st.lat) && num(st.lon) && num(o.walkKm) && o.walkKm > 0 && num(o.trainHours) && o.trainHours > 0;
+}
+
 export function isJourneyState(v: unknown): v is JourneyState {
   if (!v || typeof v !== 'object') return false;
   const j = v as Record<string, unknown>;
   return (
     isHome(j.home) &&
     isHome(j.from) &&
+    isOutset(j.outset) &&
     (j.walked === undefined || (Array.isArray(j.walked) && j.walked.every((w) => typeof w === 'string'))) &&
     (j.next === undefined || j.next === null || typeof j.next === 'string') &&
     typeof j.routeId === 'string' &&

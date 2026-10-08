@@ -170,7 +170,13 @@ export function direct(ws: WorldState): RenderState {
     landmark,
     darkInk: luminance(sky.top) > 0.55,
     // A rainbow stands opposite the sun; it needs the sun up and the walk outdoors.
-    surprise: { ...show, rainbow: sun.visible && travelMode === 'walk' ? show.rainbow : 0, rainbowX: 1 - sun.x },
+    surprise: {
+      ...show,
+      rainbow: sun.visible && travelMode === 'walk' ? show.rainbow : 0,
+      rainbowX: 1 - sun.x,
+      // The cat walks the road with him; it does not board trains.
+      cat: travelMode === 'walk' ? (show.cat ?? 0) : 0,
+    },
   };
 }
 
@@ -209,7 +215,7 @@ function placeSeed(id: string): number {
   return h % 1000;
 }
 
-const NO_SURPRISES: SurpriseShow = { rainbow: 0, moonWatch: false, snowGlobe: 0 };
+const NO_SURPRISES: SurpriseShow = { rainbow: 0, moonWatch: false, snowGlobe: 0, cat: 0 };
 
 /**
  * The leaf answers the weather, the sun and the season (design: the leaf is

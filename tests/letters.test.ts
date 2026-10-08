@@ -107,3 +107,29 @@ describe('the texts', () => {
     for (const o of ['rain', 'snow', 'wind'] as const) expect(weatherSkeletons(o).length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('the first week\'s additions to the rules', () => {
+  it('drops a same-day-only letter (tomorrow\'s weather) rather than pushing it to a morning when it is stale', () => {
+    const weather: Candidate = { id: 'w', kind: 'weather', wantAt: T0 + 3 * H, pool: ['w.rain1'], sameDayOnly: true };
+    const full = deliver(EMPTY_MAIL, [moment('m1', T0), moment('m2', T0 + H)], T0 + H);
+    expect(deliver(full, [weather], T0 + 3 * H).letters.map((l) => l.id)).toEqual(['m1', 'm2']);
+    expect(deliver(EMPTY_MAIL, [weather], T0 + 3 * H).letters.map((l) => l.id)).toEqual(['w']);
+  });
+
+  it('never folds a question or the week of sky into a digest', () => {
+    const q: Candidate = { id: 'q', kind: 'question', wantAt: T0, skeleton: 'q.hat' };
+    const wk: Candidate = { id: 'wk', kind: 'week', wantAt: T0 + 49 * H, skeleton: 'k.week' };
+    let mail = deliver(EMPTY_MAIL, [q, wk], T0 + 50 * H);
+    for (let i = 0; i < 5; i++) mail = deliver(mail, [moment(`m${i}`, T0 + (i + 1) * 24 * H)], T0 + 6 * 24 * H);
+    const shown = visibleLetters(mail, T0 + 6 * 24 * H).map((l) => l.id);
+    expect(shown).toContain('q');
+    expect(shown).toContain('wk');
+    expect(shown.some((id) => id.startsWith('digest'))).toBe(true);
+  });
+
+  it('remembers when a letter was first seen', () => {
+    const mail = markAllRead(deliver(EMPTY_MAIL, [moment('m1', T0)], T0), T0 + H);
+    expect(mail.letters[0].readAt).toBe(T0 + H);
+    expect(markAllRead(mail, T0 + 5 * H).letters[0].readAt).toBe(T0 + H);
+  });
+});

@@ -1,5 +1,6 @@
 import { nearestRoute, transferMode, withTransfer } from './geo';
 import { startJourney } from './journey';
+import { withOutset } from './outset';
 import type { Home, JourneyState, LegMode, Place, Route } from './types';
 import { haversineKm } from './geo';
 import { t } from './i18n';
@@ -52,6 +53,7 @@ export function buildSegmentRoute(state: JourneyState, routes: Route[]): Route |
   }
   const base = routes.find((r) => r.id === state.routeId);
   if (!base) return null;
+  if (state.outset) return withOutset(base, state.outset);
   if (state.from) return withTransfer(base, state.from, 'from', leavingNote(state.from.name));
   return withTransfer(base, state.home, 'home');
 }

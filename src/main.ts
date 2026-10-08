@@ -1,13 +1,33 @@
 import './style.css';
 import { direct, terrainAt } from './core/sceneDirector';
-import type { GeoPoint, JourneyState, Position, RenderState, Route, WeatherCondition, WeatherState, WorldState, Terrain } from './core/types';
+import type { GeoPoint, Home, JourneyState, Position, RenderState, Route, WeatherCondition, WeatherState, WorldState, Terrain } from './core/types';
 import { buildSegmentRoute, chooseNext, departureNote, nextSegment, routeOptions } from './core/chain';
-import { homeFrom, nearestRoute, routeFromHome } from './core/geo';
+import { homeFrom } from './core/geo';
+import { dayAt, outsetDestination, planOutset, withOutset } from './core/outset';
+import {
+  WEEK_HOUR,
+  answer as answerQuestion,
+  dayIndex,
+  decodePanels,
+  encodePanels,
+  firstWeekLetters,
+  isSettled,
+  momentAllowed,
+  packItem,
+  questionLetters,
+  replyLetters,
+  scriptDay,
+  weekPanels,
+  type ScriptState,
+} from './core/script';
+import { eveningOf, fullMoonEvenings, skyLetters } from './core/skyCalendar';
 import { detectLang, placeName, placeNote, setLang, t } from './core/i18n';
 import { REST_MS, advance, describeJourney, lastArrival, locate, startJourney, TERRAIN } from './core/journey';
 import { deliveredCards, demoPostcards, isDeparture, makePostcard, missingArrivals, pendingCards } from './core/postcards';
-import { dayKey, deliver, fillSlots, markAllRead, momentTime, type Candidate, unreadCount, visibleLetters, weatherTime, bundled, type Letter } from './core/letters';
-import { momentsFor, skeletonById, skyLine, skyVars, storiesFor, weatherSkeletons } from './data/letterTexts';
+import { EMPTY_MAIL, dayKey, deliver, fillSlots, markAllRead, momentTime, type Candidate, unreadCount, visibleLetters, weatherTime, bundled, type Letter } from './core/letters';
+import { BAG_DEFAULT, BAG_ITEMS, GENERAL_QUESTIONS, momentsFor, skeletonById, skyLetterPool, skyLine, skyVars, storiesFor, weatherSkeletons } from './data/letterTexts';
+import { clearDemoAnswers, loadDemoAnswers, loadScript, saveDemoAnswers, saveScript } from './data/scriptStore';
+import { loadDiary, saveDiary } from './data/skyDiary';
 import { loadMail, saveMail } from './data/mailStore';
 import { EMPTY_LOG, begin as beginSurprise, intensity, missedLetters, offer as offerSurprise, rainEndedAgo, scanPast, type Facts, type SurpriseId, type SurpriseLog } from './core/surprises';
 import { weatherIntensities } from './core/weather';
@@ -25,8 +45,8 @@ import { loadJourney, saveJourney } from './data/journeyStore';
 import { clearPostcards, loadPostcards, savePostcards } from './data/postcardStore';
 import { routeById as findRoute } from './data/routes';
 import { DEFAULT_LOCATION, isDefaultLocation, loadLocation, requestLocation, saveLocation } from './data/location';
-import { ROUTES, TO_THE_SEA, routeById } from './data/routes';
-import { WeatherService, fetchPlaceWeather } from './data/weather';
+import { ROUTES, routeById } from './data/routes';
+import { WeatherService, fetchHistory, fetchPlaceWeather } from './data/weather';
 import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
 import { createCityChooser } from './ui/city';
@@ -53,8 +73,14 @@ import { createMap } from './ui/map';
  *                      (except the language) and play the first minute
  *   ?intro=play        play the first minute again, changing nothing that is saved
  *   ?motion=reset      forget the answer about the phone's motion and ask again now
- *   ?surprise=rainbow  force a surprise now: rainbow, fullMoon, snowGlobe, wave, or
+ *   ?surprise=rainbow  force a surprise now: rainbow, fullMoon, snowGlobe, wave, cat, or
  *                      missed (a rainbow and a full moon that went unseen, as letters) (not saved)
+ *   ?day=3             the first week as a brand-new traveller on day 3 (0 to 7): the journey
+ *                      began three days ago, and every earlier day is replayed as if the app
+ *                      had been opened three times a day (not saved; answers to his questions
+ *                      are kept apart, so ?day=5 remembers what was tapped on ?day=4)
+ *   ?day=3&hour=21     the same, at 21:00 on that day (the clock then runs on from there)
+ *   ?day=reset         forget the answers given in ?day= runs
  */
 const LANG_KEY = 'wanderling.lang';
 
@@ -64,6 +90,24 @@ const say = t;
 async function main(): Promise<void> {
   const root = document.getElementById('app')!;
   const params = new URLSearchParams(window.location.search);
+
+  // ?day=N: try the first week. The journey began N days ago and the days
+  // before today are replayed; ?hour= moves the clock to that hour of today.
+  // `clock()` is the app's one notion of now, so the replay can set it.
+  const DAY_MS = 24 * 3_600_000;
+  if (params.get('day') === 'reset') clearDemoAnswers();
+  const dayParam = Number(params.get('day'));
+  const demoDay = params.has('day') && params.get('day') !== '' && Number.isFinite(dayParam) ? Math.max(0, Math.min(30, Math.floor(dayParam))) : null;
+  let clockOffset = 0;
+  const hourParam = Number(params.get('hour'));
+  if (demoDay !== null && params.has('hour') && Number.isFinite(hourParam)) {
+    const d = new Date();
+    const h = Math.max(0, Math.min(23.99, hourParam));
+    clockOffset = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(h), Math.round((h % 1) * 60)).getTime() - Date.now();
+  }
+  /** Set while the days before a ?day= run are replayed. */
+  let replayAt: number | null = null;
+  const clock = (): number => replayAt ?? Date.now() + clockOffset;
 
   // ?intro=reset: be a brand-new person. Everything the app saved goes, bar the
   // language; the address is tidied so a refresh does not wipe the journey again.
@@ -115,7 +159,7 @@ async function main(): Promise<void> {
   // The first minute. Someone with nothing saved gets all of it; someone who
   // has a journey but no name yet gets only the naming. Demo and screenshot
   // parameters skip it, and ?intro=play forces it.
-  const demoParams = ['t', 'km', 'route', 'terrain', 'weather', 'temp', 'wind', 'demo', 'journey', 'postcards', 'mail', 'surprise', 'lat', 'lon'].some((k) => params.has(k));
+  const demoParams = ['t', 'km', 'route', 'terrain', 'weather', 'temp', 'wind', 'demo', 'journey', 'postcards', 'mail', 'surprise', 'lat', 'lon', 'day', 'hour'].some((k) => params.has(k));
   let myName = loadName();
   const hadJourney = loadJourney() !== null;
   const introPlay = params.get('intro') === 'play';
@@ -171,23 +215,43 @@ async function main(): Promise<void> {
       mailbox.open();
     },
     onMap: () => {
-      map.update(route, locate(route, journey, Date.now()), visibleCards(), routeOptions(journey, route, ROUTES));
+      map.update(route, locate(route, journey, clock()), visibleCards(), routeOptions(journey, route, ROUTES));
       map.open();
     },
   });
+  // Notes are for the present: a replayed day says nothing.
+  const showNote = hud.setNote.bind(hud);
+  hud.setNote = (text: string, lingerMs?: number): void => {
+    if (replayAt === null) showNote(text, lingerMs);
+  };
   const album = createAlbum(root, hud.unit, () => myName);
-  const mailbox = createMailbox(root, () => {
-    // Opening the box reads everything that has arrived.
-    mail = markAllRead(mail, Date.now());
-    // Demo letters stay out of the saved box.
-    if (!demoJourney && !mailDemo) saveMail(mail);
-    hud.setMail(0);
-  }, () => myName);
+  const mailbox = createMailbox(root, {
+    onOpen: () => {
+      // Opening the box reads everything that has arrived.
+      mail = markAllRead(mail, clock());
+      // Demo letters stay out of the saved box.
+      if (!demoJourney && !mailDemo) saveMail(mail);
+      hud.setMail(0);
+      mailbox.setPack(packLine());
+    },
+    nameOf: () => myName,
+    onAnswer: (id, option) => {
+      const next = answerQuestion(script, mail, id, option, clock());
+      if (next === script) return;
+      script = next;
+      if (demoDay !== null) saveDemoAnswers({ ...loadDemoAnswers(), [id]: option });
+      else if (!demoJourney) saveScript(script);
+      hud.setNote(say('answerKept', { name: nameNow() }), 6000);
+      mailbox.setLetters(shownLetters());
+      mailbox.setPack(packLine());
+      tick();
+    },
+  });
   const map = createMap(root, {
     onChoose: (id) => {
       journey = chooseNext(journey, id);
       if (!demoJourney) saveJourney(journey);
-      map.update(route, locate(route, journey, Date.now()), visibleCards(), routeOptions(journey, route, ROUTES));
+      map.update(route, locate(route, journey, clock()), visibleCards(), routeOptions(journey, route, ROUTES));
     },
   });
   const city = createCityChooser(root, searchCity, (picked) => {
@@ -198,7 +262,7 @@ async function main(): Promise<void> {
   if (loadLocation()) hud.hideLocate();
 
   const now = (): Date => {
-    const d = new Date();
+    const d = new Date(clock());
     if (minutesOverride !== null) {
       d.setHours(0, 0, 0, 0);
       d.setMinutes(minutesOverride);
@@ -214,16 +278,27 @@ async function main(): Promise<void> {
   const resetJourney = params.get('journey') === 'reset';
   if (resetJourney) clearPostcards();
   const saved = resetJourney ? null : loadJourney();
-  const freshJourney = (from: GeoPoint): { route: Route; journey: JourneyState } => {
+  /**
+   * A new journey: out of the front door on foot to a little station, a night
+   * train, then the route (ruling 14). Without a shared location he still sets
+   * out, from the sky's own place, called home.
+   */
+  const freshJourney = (from: GeoPoint, at = clock()): { route: Route; journey: JourneyState } => {
     const home = homeFrom(from, isDefaultLocation(from));
-    const base = home ? nearestRoute(ROUTES, home).route : TO_THE_SEA;
-    const route = routeFromHome(base, home);
-    return { route, journey: { ...startJourney(route, Date.now()), home, from: null, walked: [] } };
+    const origin: Home = home ?? { name: t('home'), lat: from.lat, lon: from.lon };
+    const base = outsetDestination(ROUTES, origin);
+    const first = base.places[0];
+    const toward = first && typeof first.lat === 'number' && typeof first.lon === 'number' ? { lat: first.lat, lon: first.lon } : null;
+    const outset = planOutset(origin, toward, at);
+    const route = withOutset(base, outset);
+    return { route, journey: { ...startJourney(route, at), home, from: null, walked: [], outset } };
   };
   let route: Route;
   let journey: JourneyState;
   const savedRoute = saved ? buildSegmentRoute(saved, ROUTES) : null;
-  if (saved && savedRoute) {
+  if (demoDay !== null) {
+    ({ route, journey } = freshJourney(location, clock() - demoDay * DAY_MS));
+  } else if (saved && savedRoute) {
     route = savedRoute;
     journey = saved;
   } else {
@@ -233,25 +308,40 @@ async function main(): Promise<void> {
   const demoRoute = params.get('route') ? routeById(params.get('route')!) : undefined;
   if (demoRoute) {
     route = demoRoute;
-    journey = { ...startJourney(route, Date.now()), home: null, from: null, walked: [] };
+    journey = { ...startJourney(route, clock()), home: null, from: null, walked: [] };
   }
   const kmJump = Number(params.get('km'));
   const jumpNext = params.get('journey') === 'next';
-  const demoJourney = (params.has('km') && Number.isFinite(kmJump)) || jumpNext || !!demoRoute;
+  const demoJourney = (params.has('km') && Number.isFinite(kmJump)) || jumpNext || !!demoRoute || demoDay !== null;
   let departure: string | null = null;
   if (jumpNext) {
     // A demo peek at the chain: finish this segment and set off on the next.
-    const done = advance(route, { ...journey, km: 1e9, restingUntil: null, updatedAt: Date.now() - 1 }, Date.now());
-    ({ route, journey } = nextSegment(done.state, route, ROUTES, Date.now()));
+    const done = advance(route, { ...journey, km: 1e9, restingUntil: null, updatedAt: clock() - 1 }, clock());
+    ({ route, journey } = nextSegment(done.state, route, ROUTES, clock()));
     departure = departureNote(route.legs[0]?.mode ?? 'walk', route.places[1] ? placeName(route.places[1]) : route.name);
   }
-  if (demoJourney) {
+  if (demoJourney && demoDay === null) {
     // A demo peek: walk to that kilometre and rest there for a moment.
-    journey = { ...journey, km: Math.max(0, kmJump), restingUntil: null, updatedAt: Date.now() };
+    journey = { ...journey, km: Math.max(0, kmJump), restingUntil: null, updatedAt: clock() };
   }
-  const first = advance(route, journey, Date.now());
+  // A ?day= run walks its days in the replay below, not in one stride here.
+  const first = demoDay !== null ? { state: journey, arrived: [] } : advance(route, journey, clock());
   journey = first.state;
   if (!demoJourney) saveJourney(journey);
+
+  // The first week's script (decisions D8). A new traveller's week begins with
+  // the journey; someone who was already on the road has no first week, and
+  // his questions count their days from today.
+  const savedScript = demoDay !== null || resetJourney ? null : loadScript();
+  const newScript = (): ScriptState => ({ start: journey.startedAt, anchor: journey.startedAt, answers: {} });
+  let script: ScriptState = savedScript ?? (saved && savedRoute && !resetJourney && demoDay === null ? { start: null, anchor: clock(), answers: {} } : newScript());
+  if (!savedScript && !demoJourney) saveScript(script);
+  const nameNow = (): string => myName ?? 'Pip';
+  const bagNow = (): string | null => packItem(mail, script, BAG_DEFAULT);
+  const packLine = (): string | null => {
+    const bag = bagNow();
+    return bag && BAG_ITEMS[bag] ? say('packHolds', { name: nameNow(), item: lang === 'zh' ? BAG_ITEMS[bag].zh : BAG_ITEMS[bag].en }) : null;
+  };
 
   // Postcards: one per arrival, posted on arrival and delivered hours to days
   // later by distance (slow post). Any arrival without a card gets one on the
@@ -259,8 +349,8 @@ async function main(): Promise<void> {
   // cards show; the album button pulses until the person has looked at them.
   let postcards = loadPostcards();
   const deliverNow = params.get('postcards') === 'now';
-  const sampleCards = params.get('postcards') === 'demo' ? demoPostcards(route, location, Date.now()) : [];
-  const visibleCards = () => [...sampleCards, ...deliveredCards(postcards, deliverNow ? Infinity : Date.now())];
+  const sampleCards = params.get('postcards') === 'demo' ? demoPostcards(route, location, clock()) : [];
+  const visibleCards = () => [...sampleCards, ...deliveredCards(postcards, deliverNow ? Infinity : clock())];
   const SEEN_KEY = 'wanderling.postcardsSeen';
   let seenCount = 0;
   try {
@@ -292,7 +382,7 @@ async function main(): Promise<void> {
   /** His side of the two skies: the weather at the place, asked once per card while it is in the post. */
   const askedThere = new Set<string>();
   const fetchThere = (): void => {
-    for (const card of pendingCards(postcards, Date.now())) {
+    for (const card of pendingCards(postcards, clock())) {
       if (card.there !== undefined || card.departure || askedThere.has(card.id)) continue;
       const r = card.routeId === route.id ? route : findRoute(card.routeId);
       const place = r?.places.find((p) => p.id === card.placeId);
@@ -322,7 +412,7 @@ async function main(): Promise<void> {
     fetchThere();
     if (!demoJourney) savePostcards(postcards);
     // "In the post": after the arrival line if there was one just now, else right away.
-    if (!deliverNow && deliveredCards(postcards, Date.now()).length < postcards.length) {
+    if (!deliverNow && deliveredCards(postcards, clock()).length < postcards.length) {
       if (postedTimer !== null) window.clearTimeout(postedTimer);
       postedTimer = window.setTimeout(() => hud.setNote(t('postcardPosted'), 12_000), arrivedNow ? 20_000 : 0);
     }
@@ -348,14 +438,33 @@ async function main(): Promise<void> {
     }
     const sk = skeletonById(l.skeleton);
     if (!sk) return [];
-    return [fillSlots(lang === 'zh' ? sk.zh : sk.en, l.vars)];
+    // The pack's thing is named in the reader's language when the letter is shown.
+    const bag = l.vars.bag && BAG_ITEMS[l.vars.bag] ? BAG_ITEMS[l.vars.bag].short[lang] : '';
+    return [fillSlots(lang === 'zh' ? sk.zh : sk.en, { ...l.vars, bagItem: bag })];
   };
+  const weekdays = new Intl.DateTimeFormat(lang === 'zh' ? 'zh-CN' : undefined, { weekday: 'narrow' });
   const shownLetters = (): ShownLetter[] =>
-    visibleLetters(mail, Date.now()).map((l) => ({ id: l.id, kind: l.kind, at: l.at, read: l.read, lines: letterLines(l) }));
+    visibleLetters(mail, clock()).map((l): ShownLetter => {
+      const shown: ShownLetter = { id: l.id, kind: l.kind, at: l.at, read: l.read, lines: letterLines(l) };
+      const sk = skeletonById(l.skeleton);
+      if (l.kind === 'question' && sk?.options) {
+        return {
+          ...shown,
+          options: sk.options.map((o) => ({ id: o.id, label: lang === 'zh' ? o.zh : o.en })),
+          chosen: script.answers[l.id]?.option,
+          settled: isSettled(mail, l.id),
+        };
+      }
+      if (l.kind === 'week') {
+        const start = script.start ?? l.at - 7 * DAY_MS;
+        return { ...shown, panels: decodePanels(l.vars.panels ?? ''), panelDays: Array.from({ length: 7 }, (_, d) => weekdays.format(new Date(dayAt(start, d, 12)))) };
+      }
+      return shown;
+    });
   let lastUnread = -1;
   /** Offer today's candidates to the engine and keep the button in step. */
   const syncMail = (position: Position): void => {
-    const now = Date.now();
+    const now = clock();
     const today = dayKey(now);
     const candidates: Candidate[] = [];
     // Each delivered postcard comes with a letter: a few lines on how the stop
@@ -370,7 +479,7 @@ async function main(): Promise<void> {
         id: `postcard:${card.id}`,
         kind: 'postcard',
         wantAt: card.deliverAt ?? card.at,
-        pool: storiesFor(card.terrain, !!card.departure).map((sk) => sk.id),
+        pool: storiesFor(card.terrain, card.departure ? true : card.placeId === 'station' && card.routeId === journey.routeId && !!journey.outset ? 'station' : false).map((sk) => sk.id),
         vars: {
           name: myName ?? 'Pip',
           place: card.placeName,
@@ -384,19 +493,32 @@ async function main(): Promise<void> {
         },
       });
     }
-    // One small thing from the road a day, at its steady hour, from where he is.
+    // One small thing from the road a day, at its steady hour, from where he
+    // is; in the first week, only on the days without a letter of their own.
     const momentAt = momentTime(today);
-    if (now >= momentAt && position.mode === 'walk') {
+    if (now >= momentAt && position.mode === 'walk' && momentAllowed(script, now)) {
       const terrain = terrainAt(position);
-      candidates.push({ id: `moment:${today}`, kind: 'moment', wantAt: momentAt, pool: momentsFor(terrain).map((s) => s.id), vars: { name: myName ?? 'Pip', place: placeName(position.from), terrain } });
+      const bag = bagNow();
+      candidates.push({
+        id: `moment:${today}`,
+        kind: 'moment',
+        wantAt: momentAt,
+        pool: momentsFor(terrain, !!bag).map((s) => s.id),
+        vars: { name: nameNow(), place: placeName(position.from), terrain, ...(bag ? { bag } : {}) },
+      });
     }
-    // In the evening, a word about tomorrow where the person is.
+    // In the evening, a word about tomorrow where the person is; worth sending only today.
     const weatherAt = weatherTime(today);
     const outlook = weather.outlook(new Date(now));
     if (now >= weatherAt && outlook && (outlook.rain || outlook.snow || outlook.wind)) {
       const kind = outlook.snow ? 'snow' : outlook.rain ? 'rain' : 'wind';
-      candidates.push({ id: `weather:${today}`, kind: 'weather', wantAt: weatherAt, pool: weatherSkeletons(kind).map((s) => s.id) });
+      candidates.push({ id: `weather:${today}`, kind: 'weather', wantAt: weatherAt, pool: weatherSkeletons(kind).map((s) => s.id), sameDayOnly: true });
     }
+    // The first week's own letters, his questions and the replies that remember the answers.
+    const scriptCtx = { nightTrain: !!journey.outset && route.legs[1]?.mode === 'ride', questions: GENERAL_QUESTIONS, week: weekOf };
+    candidates.push(...firstWeekLetters(script, now, scriptCtx), ...questionLetters(script, now, scriptCtx), ...replyLetters(mail, script, now));
+    // The sky: full moons, falling stars, the turning days (the calendar is the one source).
+    candidates.push(...skyLetters(surprises, now, script.start ?? script.anchor, location.lat, SKY_POOLS));
     syncSurprises(position, candidates);
     const next = deliver(mail, candidates, now);
     if (next !== mail) {
@@ -406,14 +528,71 @@ async function main(): Promise<void> {
     saveLog();
     const unread = unreadCount(mail, now);
     if (unread !== lastUnread) {
-      if (lastUnread >= 0 && unread > lastUnread) hud.setNote(say('letterArrived'), 12_000);
+      if (lastUnread >= 0 && unread > lastUnread) {
+        const newest = visibleLetters(mail, now)[0];
+        hud.setNote(newest?.kind === 'question' && !newest.read ? say('questionArrived', { name: nameNow() }) : say('letterArrived'), 12_000);
+      }
       lastUnread = unread;
       hud.setMail(unread);
       if (mailbox.isOpen) mailbox.setLetters(shownLetters());
     }
   };
+  const SKY_POOLS = {
+    moonSeen: skyLetterPool('moonSeen'),
+    moonHidden: skyLetterPool('moonHidden'),
+    meteors: skyLetterPool('meteors'),
+    longest: skyLetterPool('longest'),
+    shortest: skyLetterPool('shortest'),
+    equinox: skyLetterPool('equinox'),
+  };
+
+  // The person's sky, a sample a day, for the week of sky. Days the app was
+  // closed are asked of the weather history once; what stays unknown is clear.
+  let diary = loadDiary();
+  const recordDiary = (): void => {
+    if (forcedWeather || replayAt !== null) return;
+    for (const back of [0, 1]) {
+      const at = dayAt(clock(), -back, WEEK_HOUR);
+      if (at > clock() || diary[dayKey(at)]) continue;
+      const w = weather.current(new Date(at));
+      if (!w || w.source === 'demo') continue;
+      diary = { ...diary, [dayKey(at)]: { condition: w.condition, code: w.code, temperature: w.temperature } };
+      saveDiary(diary);
+    }
+  };
+  let historyAsked = false;
+  let historyPending = false;
+  const weekOf = (): string | null => {
+    if (script.start === null) return null;
+    const start = script.start;
+    const days = Array.from({ length: 7 }, (_, d) => dayAt(start, d, WEEK_HOUR));
+    const missing = days.filter((at) => !diary[dayKey(at)]);
+    if (missing.length > 0 && !historyAsked && navigator.onLine !== false && replayAt === null) {
+      historyAsked = true;
+      historyPending = true;
+      void fetchHistory(location, missing, undefined, clock())
+        .then((found) => {
+          found.forEach((w, i) => {
+            if (w) diary = { ...diary, [dayKey(missing[i])]: w };
+          });
+          saveDiary(diary);
+        })
+        .finally(() => {
+          historyPending = false;
+          tick();
+        });
+      return null;
+    }
+    if (historyPending) return null;
+    const panels = weekPanels(start, location, (at) => {
+      const e = diary[dayKey(at)];
+      return e ? demoWeather(e.condition, new Date(at), { temperature: e.temperature, code: e.code }) : null;
+    });
+    return encodePanels(panels);
+  };
+
   if (mailDemo) {
-    const now = Date.now();
+    const now = clock();
     mail = deliver(mail, [
       { id: 'demo:1', kind: 'moment', wantAt: now - 26 * 3_600_000, pool: ['m.dog'] },
       { id: 'demo:2', kind: 'weather', wantAt: now - 20 * 3_600_000, pool: ['w.rain1'] },
@@ -430,7 +609,14 @@ async function main(): Promise<void> {
   // full moon that came and went still counts, and unseen ones become letters.
   const surpriseParam = params.get('surprise');
   const surpriseDemo = surpriseParam !== null;
-  let surprises: SurpriseLog = surpriseDemo ? EMPTY_LOG : loadSurprises();
+  let surprises: SurpriseLog = surpriseDemo || demoDay !== null ? EMPTY_LOG : loadSurprises();
+  // The calendar's full-moon evenings, worked out once a day.
+  let moonNights = { day: '', evenings: new Set<string>() };
+  const fullMoonNight = (at: number): boolean => {
+    const day = dayKey(at);
+    if (moonNights.day !== day) moonNights = { day, evenings: fullMoonEvenings(at) };
+    return moonNights.evenings.has(eveningOf(at));
+  };
   const factsAt = (at: number, position: Position): Facts | null => {
     const when = new Date(at);
     const ws = buildWorldState(when, location, weatherFor(when), position);
@@ -445,6 +631,8 @@ async function main(): Promise<void> {
       cloud: fx.cloud,
       rainEndedAgo: fx.rain > 0.05 ? 0 : rainEndedAgo(weather.rain(), at),
       walking: position.mode === 'walk' && !position.resting && !position.finished,
+      fullMoonNight: fullMoonNight(at),
+      scriptDay: scriptDay(script, at),
     };
   };
   const saveLog = (): void => {
@@ -454,23 +642,24 @@ async function main(): Promise<void> {
     rainbow: intensity(surprises, 'rainbow', at),
     moonWatch: intensity(surprises, 'fullMoon', at) > 0,
     snowGlobe: intensity(surprises, 'snowGlobe', at),
+    cat: intensity(surprises, 'cat', at),
   });
   /** Give the world its chance this tick, and turn what went unseen into letters. */
   const syncSurprises = (position: Position, candidates: Candidate[]): void => {
-    const wall = Date.now();
+    const wall = clock();
     const f = factsAt(wall, position);
     if (f) surprises = offerSurprise(surprises, f, !document.hidden);
     const missed = missedLetters(surprises, wall);
     surprises = missed.log;
     candidates.push(...missed.candidates);
-    if (!document.hidden) saveLastSeen(wall);
+    if (!document.hidden && demoDay === null) saveLastSeen(wall);
   };
   /** A few quick ticks, so a surprise's fade-in is seen rather than waiting for the 5 s clock. */
   const quickTicks = (): void => {
     for (const d of [150, 450, 900, 1500, 2400]) window.setTimeout(tick, d);
   };
   const startSurprise = (id: SurpriseId, force = false): void => {
-    const next = beginSurprise(surprises, id, Date.now(), force);
+    const next = beginSurprise(surprises, id, clock(), force);
     if (next === surprises) return;
     surprises = next;
     saveLog();
@@ -481,6 +670,22 @@ async function main(): Promise<void> {
   let world: WorldState;
   let render: RenderState;
   let wasAsleep = false;
+  let hadCat = false;
+  let lastLeg = -1;
+
+  /**
+   * A journey restarted from a new home in its first moments: the week starts
+   * again with it, and the box forgets the letter from the place left behind.
+   */
+  const restartWeek = (): void => {
+    if (script.start !== null) {
+      script = newScript();
+      saveScript(script);
+    }
+    mail = EMPTY_MAIL;
+    saveMail(mail);
+    lastUnread = -1;
+  };
 
   /** A journey that has barely begun restarts from the new home; an old one carries on. */
   const barelyStarted = (): boolean => journey.km < 2 && journey.arrivals.length <= 1 && !demoJourney;
@@ -499,6 +704,7 @@ async function main(): Promise<void> {
     }
     if (barelyStarted()) {
       ({ route, journey } = freshJourney(location));
+      restartWeek();
       postcards = [];
       clearPostcards();
       saveJourney(journey);
@@ -516,6 +722,7 @@ async function main(): Promise<void> {
       saveLocation(location);
       if (journey.home && journey.home.name === 'Home' && barelyStarted()) {
         ({ route, journey } = freshJourney(location));
+        restartWeek();
         postcards = [];
         clearPostcards();
         saveJourney(journey);
@@ -526,7 +733,7 @@ async function main(): Promise<void> {
 
   const tick = (): void => {
     const t = now();
-    const wall = Date.now();
+    const wall = clock();
     const step = advance(route, journey, wall);
     journey = step.state;
     if (step.arrived.length > 0) {
@@ -547,7 +754,13 @@ async function main(): Promise<void> {
     }
     syncPostcards(step.arrived.length > 0);
     syncDelivered(true);
+    recordDiary();
     const position = locate(route, journey, wall);
+    // Off the platform and onto the night train: say so, once.
+    if (journey.outset && position.legIndex !== lastLeg) {
+      if (lastLeg === 0 && position.legIndex === 1 && position.mode === 'ride') hud.setNote(say('boardedNight', { name: nameNow() }), 15_000);
+      lastLeg = position.legIndex;
+    }
     syncMail(position);
     world = { ...buildWorldState(t, location, weatherFor(t), position), surprises: showSurprises(wall) };
     render = direct(world);
@@ -556,10 +769,14 @@ async function main(): Promise<void> {
     // A beat later, so it is not covered by the postcard line that may follow an arrival.
     if (render.wanderer.asleep && !wasAsleep) window.setTimeout(() => hud.setNote(say('hushAsleep'), 15_000), 80);
     wasAsleep = render.wanderer.asleep;
+    // The day-2 cat: a word when it falls in behind him.
+    const cat = (render.surprise.cat ?? 0) > 0;
+    if (cat && !hadCat) hud.setNote(say('catFollows', { name: nameNow() }), 15_000);
+    hadCat = cat;
     renderer.setState(render);
     hud.update(world, render);
     root.querySelector('.intro')?.classList.toggle('dark-ink', render.darkInk);
-    hud.setJourney(describeJourney(position));
+    hud.setJourney(describeJourney(position, wall));
     if (map.isOpen) map.update(route, position, visibleCards(), routeOptions(journey, route, ROUTES));
     const skyCss = '#' + render.sky.top.toString(16).padStart(6, '0');
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', skyCss);
@@ -568,20 +785,43 @@ async function main(): Promise<void> {
 
   // The hours away, at most three days of them, judged in quarter hours.
   {
-    const wall = Date.now();
+    const wall = clock();
     const lastSeen = loadLastSeen();
     const from = Math.max(lastSeen ?? wall, wall - 3 * 24 * 3_600_000);
     const position = locate(route, journey, wall);
-    if (!surpriseDemo && lastSeen && from < wall) surprises = scanPast(surprises, (at) => factsAt(at, position), from, wall);
+    if (!surpriseDemo && demoDay === null && lastSeen && from < wall) surprises = scanPast(surprises, (at) => factsAt(at, position), from, wall);
     if (surpriseParam === 'missed') {
       // Two that went by unseen, long enough ago that their letters are due.
       surprises = beginSurprise(surprises, 'rainbow', wall - 20 * 3_600_000, true);
       surprises = beginSurprise(surprises, 'fullMoon', wall - 40 * 3_600_000, true);
       surprises = { events: surprises.events.map((e) => ({ ...e, witnessed: false })) };
-    } else if (surpriseParam === 'rainbow' || surpriseParam === 'fullMoon' || surpriseParam === 'snowGlobe' || surpriseParam === 'wave') {
+    } else if (surpriseParam === 'rainbow' || surpriseParam === 'fullMoon' || surpriseParam === 'snowGlobe' || surpriseParam === 'wave' || surpriseParam === 'cat') {
       surprises = beginSurprise(surprises, surpriseParam, wall, true);
       quickTicks();
     }
+  }
+  // ?day=N: live the days before today as someone who opens the app three
+  // times a day (half past nine, one, half past nine at night) and reads
+  // the letters each time. Today itself is left unread and runs live.
+  if (demoDay !== null) {
+    const demoAnswers = loadDemoAnswers();
+    const now = clock();
+    const visits = [journey.startedAt + 60_000];
+    for (let d = 0; d < demoDay; d++) for (const h of [9.5, 13, 21.5]) visits.push(dayAt(journey.startedAt, d, 0) + h * 3_600_000);
+    let last = journey.startedAt;
+    for (const v of visits.filter((x) => x > journey.startedAt && x < now).sort((a, b) => a - b)) {
+      surprises = scanPast(surprises, (at) => factsAt(at, locate(route, journey, at)), last, v);
+      replayAt = v;
+      tick();
+      // The answers tapped in earlier runs, given as each question came.
+      for (const [id, option] of Object.entries(demoAnswers)) script = answerQuestion(script, mail, id, option, v);
+      if (dayIndex(journey.startedAt, v) < demoDay) mail = markAllRead(mail, v);
+      replayAt = null;
+      last = v;
+    }
+    surprises = scanPast(surprises, (at) => factsAt(at, locate(route, journey, at)), last, now);
+    for (const [id, option] of Object.entries(demoAnswers)) script = answerQuestion(script, mail, id, option, now);
+    lastUnread = -1;
   }
   // The first tick makes any cards owed and sets the button; cards delivered
   // while the app was closed pulse because the seen count is behind.
@@ -601,7 +841,7 @@ async function main(): Promise<void> {
   const askMotion = (): void => {
     if (asking || introMode || !needsMotionPrompt() || demoJourney) return;
     const condition = weather.current(new Date())?.condition ?? null;
-    const ctx = { now: Date.now(), startedAt: loadStartedAt(), visible: !document.hidden, lat: location.lat, condition, settled: false };
+    const ctx = { now: clock(), startedAt: loadStartedAt(), visible: !document.hidden, lat: location.lat, condition, settled: false };
     if (!shouldAskMotion(ctx) && params.get('motion') !== 'reset') return;
     asking = true;
     void askLightly(root, say('askShake'), armShake).then((allowed) => {
@@ -611,7 +851,7 @@ async function main(): Promise<void> {
   if (departure) hud.setNote(departure, 15_000);
   // A read-only peek for debugging and screenshots: window.__wanderling.render
   Object.defineProperty(window, '__wanderling', {
-    value: { get world() { return world; }, get render() { return render; }, get journey() { return journey; }, get postcards() { return visibleCards(); }, get allPostcards() { return postcards; }, renderer, album, map },
+    value: { get world() { return world; }, get render() { return render; }, get journey() { return journey; }, get postcards() { return visibleCards(); }, get allPostcards() { return postcards; }, get mail() { return mail; }, get script() { return script; }, renderer, album, map, mailbox },
     configurable: true,
   });
   if (first.arrived.length > 0) {
@@ -665,7 +905,7 @@ async function main(): Promise<void> {
           myName = picked;
           saveName(picked);
           // Someone who was already travelling counts as long settled in.
-          saveStartedAt(introMode === 'full' ? Date.now() : 1);
+          saveStartedAt(introMode === 'full' ? clock() : 1);
         }
         if (matchFailed) hud.setNote(t('noLocation'), 8000);
         tick();

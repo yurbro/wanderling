@@ -7,6 +7,7 @@ import { KM_PER_HOUR } from '../core/journey';
 import { PROPS, WANDERER } from '../core/palette';
 import { SeaPainter } from './seaLayer';
 import { TransportPainter } from './transport';
+import { CatPainter } from './cat';
 import { Wanderer, loadParts } from './wanderer';
 import { WeatherPainter } from './weatherLayers';
 import { EXTRA_HEIGHT, TERRAIN_EXTRAS, bandSetFor, loadBands, loadProps, type BandName, type BandSet, type TerrainProps } from './terrain';
@@ -119,6 +120,8 @@ export class SceneRenderer {
   private detailLayer = new Container();
   private details: Detail[] = [];
   private wanderer = new Wanderer();
+  /** The first week's day-2 cat, walking a little way behind him. */
+  private cat = new CatPainter();
   /** First minute: the big backpack that rolls in with him inside. */
   private pack = new Sprite({ visible: false });
   private held = false;
@@ -192,6 +195,7 @@ export class SceneRenderer {
       this.marker,
       this.markerLights,
       this.transport.behind,
+      this.cat.view,
       this.wanderer.glow,
       this.wanderer.view,
       this.wanderer.firefly,
@@ -570,6 +574,16 @@ export class SceneRenderer {
     this.stepArrival(dt, f);
     this.wanderer.view.y = f.feetY + this.transport.sway + this.rise;
     const pace = this.held ? 0 : st.wanderer.pace;
+    const height = this.h * WANDERLING_HEIGHT;
+    this.cat.frame(dt, {
+      x: f.x - height * 1.12,
+      feetY: f.feetY,
+      size: height * 0.6,
+      strength: st.surprise.cat ?? 0,
+      walking: pace > 0 && !this.wanderer.paused,
+      tint: st.wanderer.tint,
+      width: this.w,
+    });
     const riding = st.travel.mode === 'ride';
     const scrollPace = riding ? 5 : pace;
     const groundSpeed = GROUND_SPEED * scrollPace;

@@ -905,3 +905,84 @@ canvas.scene {
   gap: 6px;
   flex: none;
 }
+
+/* ------------------------------------------------------------------ the first week */
+
+/* His pack's one pocket, at the top of the letter box. */
+.pack-line {
+  margin: -6px 0 16px;
+  font-size: 14px;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.pack-line[hidden] {
+  display: none;
+}
+
+/* A question's answers: small paper tabs under the letter. */
+.answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.answer {
+  appearance: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid rgba(52, 58, 77, 0.35);
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background 0.3s ease, opacity 0.3s ease;
+}
+
+.answer.chosen {
+  background: rgba(52, 58, 77, 0.1);
+  border-color: rgba(52, 58, 77, 0.6);
+}
+
+.answer:disabled {
+  cursor: default;
+}
+
+.answers.answered .answer:not(.chosen),
+.answers.settled .answer:not(.chosen) {
+  opacity: 0.55;
+}
+
+/* The week of sky: seven squares in a row. */
+.week-sky {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.week-day {
+  margin: 0;
+  text-align: center;
+}
+
+.week-square {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 2px;
+  font-size: 11px;
+  color: rgba(244, 239, 228, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(52, 58, 77, 0.12);
+}
+
+.week-day figcaption {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+  margin-top: 3px;
+}

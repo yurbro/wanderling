@@ -42,7 +42,7 @@ function luckyHour(id: string, from: number, chance: number): number {
 
 describe('the rules', () => {
   it('cover the first batch, and every world surprise that can be missed has letter text', () => {
-    expect(RULES.map((r) => r.id).sort()).toEqual(['asleep', 'fullMoon', 'rainbow', 'snowGlobe', 'wave']);
+    expect(RULES.map((r) => r.id).sort()).toEqual(['asleep', 'cat', 'fullMoon', 'rainbow', 'snowGlobe', 'wave']);
     const ids = new Set(missedSkeletons().map((s) => s.id));
     for (const r of RULES) {
       if (r.source === 'person') expect(r.missed).toBeNull();
@@ -198,5 +198,44 @@ describe('shakeDetector', () => {
     now = 5000; on(g(20));
     now = 6000; on(g(0));
     expect(shakes).toBe(1);
+  });
+});
+
+describe('the first week\'s day 2 (review v2: a small surprise for sure)', () => {
+  const day2 = (hour: number, extra: Partial<Facts> = {}): Facts => ({ ...calm, at: new Date(2026, 9, 10, hour, 0).getTime(), hour, scriptDay: 2, ...extra });
+
+  it('brings a cat as soon as the person is there, on foot, by day', () => {
+    const log = offer(EMPTY_LOG, day2(11), true);
+    expect(log.events.map((e) => [e.id, e.witnessed])).toEqual([['cat', true]]);
+    expect(intensity(log, 'cat', day2(11).at + 10 * MIN)).toBe(1);
+    // Not on other days, not at night, not aboard a train, not twice.
+    expect(offer(EMPTY_LOG, { ...day2(11), scriptDay: 3 }, true).events).toEqual([]);
+    expect(offer(EMPTY_LOG, { ...day2(11), scriptDay: null }, true).events).toEqual([]);
+    expect(offer(EMPTY_LOG, day2(22), true).events).toEqual([]);
+    expect(offer(EMPTY_LOG, day2(11, { walking: false }), true).events).toEqual([]);
+    expect(offer(log, day2(18), true).events).toHaveLength(1);
+  });
+
+  it('comes unseen at four if nobody is there, and is written about', () => {
+    expect(offer(EMPTY_LOG, day2(15), false).events).toEqual([]);
+    const log = offer(EMPTY_LOG, day2(16), false);
+    expect(log.events[0]).toMatchObject({ id: 'cat', witnessed: false });
+    const { candidates } = missedLetters(log, day2(18).at);
+    expect(candidates).toEqual([expect.objectContaining({ kind: 'missed', pool: ['x.cat1'] })]);
+  });
+
+  it('stays away on a day that already had a rainbow: that was the surprise', () => {
+    const rainbow = begin(EMPTY_LOG, 'rainbow', day2(9).at, true);
+    expect(offer(rainbow, day2(11), true).events.map((e) => e.id)).toEqual(['rainbow']);
+  });
+});
+
+describe('the full moon follows the calendar (review 3, ruling 8)', () => {
+  it('rises for the calendar\'s full-moon night, and not for a merely round moon', () => {
+    const moon = ruleById('fullMoon').trigger!;
+    const night = { ...calm, hour: 22, sunAltitude: -30, moonAltitude: 30, moonFraction: 0.98 };
+    expect(moon({ ...night, fullMoonNight: true })).toBe(true);
+    expect(moon({ ...night, fullMoonNight: false })).toBe(false);
+    expect(moon({ ...night, fullMoonNight: true, moonAltitude: 2 })).toBe(false);
   });
 });

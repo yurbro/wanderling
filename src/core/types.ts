@@ -1,3 +1,5 @@
+import type { Outset } from './outset';
+
 /**
  * Core data model.
  *
@@ -112,6 +114,11 @@ export interface Leg {
   terrain: Terrain;
   /** Defaults to 'walk'. */
   mode?: LegMode;
+  /**
+   * A leg that runs to a timetable rather than a speed: it takes this many
+   * hours whatever the distance. The night train of the going-out stretch.
+   */
+  hours?: number;
 }
 
 export interface Route {
@@ -149,6 +156,8 @@ export interface JourneyState {
   walked?: string[];
   /** A route the person picked on the map for the next segment; null or unset means the chain decides. */
   next?: string | null;
+  /** A new journey's going-out stretch (ruling 14): the walk to the little station and the night train. */
+  outset?: Outset;
 }
 
 /** Where the wanderer is on the route right now, derived from JourneyState. */
@@ -236,6 +245,8 @@ export interface SurpriseShow {
   moonWatch: boolean;
   /** 0..1 the snow globe shake: a flurry and a wobble. */
   snowGlobe: number;
+  /** 0..1 a cat walking behind him (the first week's day 2). */
+  cat?: number;
 }
 
 /** Colors are 0xRRGGBB numbers so they can go straight into PixiJS. */
