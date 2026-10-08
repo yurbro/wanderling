@@ -9,10 +9,11 @@
  *   the highest priority first, the rest pushed to the next morning;
  * - at most three unread in the box: beyond that the older ones fold into
  *   one "a few things from the road";
- * - a skeleton is not used twice until every one of its kind has been.
+ * - a skeleton is not used twice until every one of its kind has been;
+ * - a question, and the week of sky, never fold: they stay on their own sheet.
  */
 
-export type LetterKind = 'postcard' | 'moment' | 'weather' | 'sky' | 'missed' | 'question' | 'digest';
+export type LetterKind = 'postcard' | 'moment' | 'weather' | 'sky' | 'missed' | 'question' | 'week' | 'digest';
 
 export interface Letter {
   /** Unique; the candidate's id. */
@@ -24,6 +25,8 @@ export interface Letter {
   skeleton: string;
   vars: Record<string, string>;
   read: boolean;
+  /** When the box was first opened with it in: questions wait for that before he decides alone. */
+  readAt?: number;
   /** Folded into a digest: shown there, not on its own. */
   folded?: boolean;
   /** Digests: the ids of the letters folded in, oldest first. */
@@ -46,6 +49,8 @@ export interface Candidate {
   skeleton?: string;
   pool?: string[];
   vars?: Record<string, string>;
+  /** Only worth sending on its own day (tomorrow's weather): dropped rather than pushed. */
+  sameDayOnly?: boolean;
 }
 
 export const EMPTY_MAIL: Mail = { letters: [], used: [] };
@@ -91,14 +96,20 @@ export function deliver(mail: Mail, candidates: Candidate[], now: number): Mail 
   let used = [...mail.used];
   for (const c of fresh) {
     let at = c.wantAt;
+    let seated = false;
     for (let guard = 0; guard < 30; guard++) {
       const day = dayKey(at);
       const sameDay = letters.filter((l) => l.kind !== 'digest' && dayKey(l.at) === day);
       const full = sameDay.length >= LETTERS_PER_DAY;
       const clash = EXCLUSIVE.has(c.kind) && sameDay.some((l) => EXCLUSIVE.has(l.kind));
-      if (!full && !clash) break;
+      if (!full && !clash) {
+        seated = true;
+        break;
+      }
+      if (c.sameDayOnly) break;
       at = nextMorning(at);
     }
+    if (!seated && c.sameDayOnly) continue;
     let skeleton = c.skeleton;
     if (!skeleton) {
       const pool = c.pool ?? [];
@@ -116,12 +127,15 @@ export function deliver(mail: Mail, candidates: Candidate[], now: number): Mail 
   return fold({ letters, used }, now);
 }
 
+/** A question needs its own sheet to be answered; the week of sky is a picture. */
+const FOLDABLE = (k: LetterKind): boolean => k !== 'digest' && k !== 'question' && k !== 'week';
+
 /**
  * Keep the box calm: when more than UNREAD_LIMIT letters sit unread, the
  * older ones fold into one digest, leaving the newest two on their own.
  */
 export function fold(mail: Mail, now: number): Mail {
-  const unread = mail.letters.filter((l) => l.at <= now && !l.read && !l.folded && l.kind !== 'digest').sort((a, b) => a.at - b.at);
+  const unread = mail.letters.filter((l) => l.at <= now && !l.read && !l.folded && FOLDABLE(l.kind)).sort((a, b) => a.at - b.at);
   if (unread.length <= UNREAD_LIMIT) return mail;
   const toFold = unread.slice(0, unread.length - (UNREAD_LIMIT - 1));
   const foldIds = new Set(toFold.map((l) => l.id));
@@ -147,7 +161,7 @@ export function unreadCount(mail: Mail, now: number): number {
 
 /** Opening the box reads everything that has arrived, digests and their bundles included. */
 export function markAllRead(mail: Mail, now: number): Mail {
-  return { ...mail, letters: mail.letters.map((l) => (l.at <= now ? { ...l, read: true } : l)) };
+  return { ...mail, letters: mail.letters.map((l) => (l.at <= now ? { ...l, read: true, readAt: l.readAt ?? now } : l)) };
 }
 
 /** The letters folded into a digest, oldest first. */

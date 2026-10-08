@@ -111,6 +111,8 @@ export function afterAwake(a: number, ms: number, sleep: SleepClock = localNight
 }
 
 export function legSpeed(leg: Leg | undefined): number {
+  // A timetabled leg (the night train) takes its hours, whatever the distance.
+  if (leg && typeof leg.hours === 'number' && leg.hours > 0 && leg.km > 0) return leg.km / leg.hours;
   switch (leg?.mode) {
     case 'ride':
       return RIDE_KM_PER_HOUR;
@@ -304,12 +306,27 @@ export function almostThere(pos: Position): boolean {
   return !pos.finished && !pos.resting && pos.to !== null && pos.kmToNext < NEAR_KM[pos.mode];
 }
 
-/** The HUD line, e.g. "Walking to Brighton · 31 km to go". */
-export function describeJourney(pos: Position): string {
+/**
+ * The HUD line, e.g. "Walking to Brighton · 31 km to go". The night train
+ * runs to a timetable, so it says when it gets in instead of how far.
+ */
+export function describeJourney(pos: Position, now: number = Date.now()): string {
   if (pos.finished) return t('journeysEnd', { name: placeName(pos.from) });
   if (pos.resting) return t('restingIn', { name: placeName(pos.from) });
+  const leg = pos.route.legs[pos.legIndex];
+  if (pos.to && leg && leg.mode === 'ride' && typeof leg.hours === 'number' && leg.hours > 0) {
+    const eta = now + (pos.kmToNext / legSpeed(leg)) * HOUR_MS;
+    const days = Math.round((startOfDay(eta) - startOfDay(now)) / (24 * HOUR_MS));
+    const when = days <= 0 ? 'arrivesDawn' : days === 1 ? 'arrivesTomorrow' : 'arrivesLater';
+    return `${t('nightTrainTo', { name: placeName(pos.to) })} · ${t(when)}`;
+  }
   const left = almostThere(pos) ? t('almostThere') : t('kmToGo', { km: formatKm(pos.kmToNext) });
   return `${t(VERB[pos.mode], { name: placeName(pos.to!) })} · ${left}`;
+}
+
+function startOfDay(ms: number): number {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
 /** The last arrival, handy for "arrived while you were away" notes. */

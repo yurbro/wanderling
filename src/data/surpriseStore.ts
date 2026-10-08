@@ -18,7 +18,7 @@ const defaultStorage = (): StorageLike | null => {
   }
 };
 
-const IDS = new Set(['rainbow', 'fullMoon', 'asleep', 'snowGlobe', 'wave']);
+const IDS = new Set(['rainbow', 'fullMoon', 'asleep', 'snowGlobe', 'wave', 'cat']);
 
 function isEvent(v: unknown): v is SurpriseEvent {
   if (!v || typeof v !== 'object') return false;

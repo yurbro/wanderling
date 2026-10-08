@@ -1,4 +1,4 @@
-import type { Candidate } from './letters';
+import { dayKey, type Candidate } from './letters';
 
 /**
  * The surprise engine: the small things that happen once in a while, written
@@ -13,7 +13,7 @@ import type { Candidate } from './letters';
  * snow globe): those are never missed.
  */
 
-export type SurpriseId = 'rainbow' | 'fullMoon' | 'asleep' | 'snowGlobe' | 'wave';
+export type SurpriseId = 'rainbow' | 'fullMoon' | 'asleep' | 'snowGlobe' | 'wave' | 'cat';
 
 /** What the rules look at, at one moment. */
 export interface Facts {
@@ -34,6 +34,15 @@ export interface Facts {
   rainEndedAgo: number | null;
   /** On foot, outdoors (not aboard a train or plane). */
   walking: boolean;
+  /**
+   * The astronomical calendar says this evening is the full moon's (review 3,
+   * ruling 8: the calendar is the one source). Unset: judged by the moon's face.
+   */
+  fullMoonNight?: boolean;
+  /** Day of the first week's script, 0 on the day the journey began; null or unset outside it. */
+  scriptDay?: number | null;
+  /** The person has the app open right now (set by `offer`). */
+  present?: boolean;
 }
 
 export interface SurpriseRule {
@@ -53,6 +62,8 @@ export interface SurpriseRule {
   missed: string[] | null;
   /** Only the first missed one is worth a letter (sleep happens every night). */
   missedOnce?: boolean;
+  /** Not on a day one of these has already happened: it stands in for them. */
+  unlessToday?: SurpriseId[];
 }
 
 const MIN = 60_000;
@@ -76,7 +87,7 @@ export const RULES: SurpriseRule[] = [
     id: 'fullMoon',
     source: 'world',
     // A full moon, well up, in the evening, with a sky clear enough to show it.
-    trigger: (f) => f.moonFraction >= 0.97 && f.moonAltitude > 8 && (f.hour >= 20 || f.hour < 1) && f.cloud < 0.7,
+    trigger: (f) => (f.fullMoonNight ?? f.moonFraction >= 0.97) && f.moonAltitude > 8 && (f.hour >= 20 || f.hour < 1) && f.cloud < 0.7,
     chance: 1,
     cooldownMs: 20 * DAY,
     durationMs: 90 * MIN,
@@ -95,6 +106,22 @@ export const RULES: SurpriseRule[] = [
     once: false,
     missed: ['x.sleep1'],
     missedOnce: true,
+  },
+  {
+    id: 'cat',
+    source: 'world',
+    // Day 2 of the first week promises a small surprise (review v2, section 4):
+    // when the day brought nothing of its own, a cat follows him for a while.
+    // It comes when the person is there; if they are not, it comes at four in
+    // the afternoon anyway, unseen, and becomes a letter.
+    trigger: (f) => f.scriptDay === 2 && f.walking && f.hour >= 8 && f.hour < 21 && (f.present === true || f.hour >= 16),
+    chance: 1,
+    cooldownMs: 0,
+    durationMs: 30 * MIN,
+    fadeMs: 20_000,
+    once: true,
+    missed: ['x.cat1'],
+    unlessToday: ['rainbow', 'fullMoon'],
   },
   {
     id: 'snowGlobe',
@@ -193,7 +220,8 @@ export function offer(log: SurpriseLog, f: Facts, present: boolean): SurpriseLog
       }
       continue;
     }
-    if (!rule.trigger(f) || !mayStart(out, rule, f.at)) continue;
+    if (!rule.trigger({ ...f, present }) || !mayStart(out, rule, f.at)) continue;
+    if (rule.unlessToday && out.events.some((e) => rule.unlessToday!.includes(e.id) && dayKey(e.at) === dayKey(f.at))) continue;
     if (rule.chance < 1 && roll(rule.id, f.at) >= rule.chance) continue;
     out = push(out, { id: rule.id, at: f.at, until: f.at + rule.durationMs, witnessed: present });
   }

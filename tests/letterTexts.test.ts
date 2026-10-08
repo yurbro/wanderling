@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SKELETONS, skyLine, skyVars, storiesFor } from '../src/data/letterTexts';
+import { BAG_ITEMS, SKELETONS, skyLine, skyVars, storiesFor } from '../src/data/letterTexts';
+import { STATION_PLACE } from '../src/core/outset';
 import { setLang, t } from '../src/core/i18n';
 import { ROUTES } from '../src/data/routes';
 
@@ -31,7 +32,8 @@ interface Line {
 
 /** What the wanderling (or the firefly beside him) says in the HUD, in both languages. */
 const HUD_VOICE = ['hushAsleep', 'postcardPosted', 'postcardArrived', 'letterArrived', 'homeAgain', 'noMail', 'noPostcards',
-  'introLook', 'introWhy', 'introNoName', 'introSayName', 'introSaySky', 'introSayLetter', 'askShake'] as const;
+  'introLook', 'introWhy', 'introNoName', 'introSayName', 'introSaySky', 'introSayLetter', 'askShake',
+  'questionArrived', 'answerKept', 'packHolds', 'catFollows', 'boardedNight', 'nightTrainTo', 'arrivesLater'] as const;
 const said = (key: (typeof HUD_VOICE)[number]): { en: string; zh: string } => {
   setLang('zh');
   const zh = t(key);
@@ -42,6 +44,9 @@ const said = (key: (typeof HUD_VOICE)[number]): { en: string; zh: string } => {
 const lines: Line[] = [
   ...HUD_VOICE.map((k) => ({ where: `hud ${k}`, ...said(k), reminderAllowed: false })),
   ...SKELETONS.map((s) => ({ where: `skeleton ${s.id}`, en: s.en, zh: s.zh, reminderAllowed: s.kind === 'weather' })),
+  ...SKELETONS.flatMap((s) => (s.options ?? []).map((o) => ({ where: `option ${s.id}/${o.id}`, en: o.en, zh: o.zh, reminderAllowed: false }))),
+  ...Object.entries(BAG_ITEMS).map(([id, b]) => ({ where: `pack ${id}`, en: `${b.en}. ${b.short.en}.`, zh: `${b.zh}。${b.short.zh}。`, reminderAllowed: false })),
+  { where: 'station', en: STATION_PLACE.en.note, zh: STATION_PLACE.zh.note, reminderAllowed: false },
   ...ROUTES.flatMap((r) =>
     r.places
       .filter((p) => p.note)
@@ -80,6 +85,20 @@ describe('every line the wanderling says', () => {
       if (l.reminderAllowed) continue;
       expect(l.en, l.where).not.toMatch(/\b(minutes?|hours?) (you|since)/i);
       expect(l.en, l.where).not.toMatch(/\bopen(ed)? the app\b/i);
+    }
+  });
+});
+
+describe('the first week\'s new lines (ruling 16)', () => {
+  it('name him rather than say "he"', () => {
+    for (const k of ['questionArrived', 'answerKept', 'packHolds', 'catFollows', 'boardedNight'] as const) {
+      const { en, zh } = said(k);
+      expect(en, k).toContain('{name}');
+      expect(zh, k).toContain('{name}');
+      expect(en, k).not.toMatch(/\b(he|him|his)\b/i);
+    }
+    for (const s of SKELETONS.filter((x) => x.kind === 'question' || x.replyTo || x.story === 'station' || x.sky || x.kind === 'week' || x.id === 'd0.night' || x.id === 'x.cat1')) {
+      expect(s.en, s.id).not.toMatch(/\b(he|him|his)\b/i);
     }
   });
 });

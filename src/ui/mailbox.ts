@@ -19,13 +19,14 @@ export interface Mailbox {
   readonly isOpen: boolean;
 }
 
-const KIND_KEY: Record<LetterKind, 'kindPostcard' | 'kindMoment' | 'kindWeather' | 'kindSky' | 'kindMissed' | 'kindQuestion' | 'digestTitle'> = {
+const KIND_KEY: Record<LetterKind, 'kindPostcard' | 'kindMoment' | 'kindWeather' | 'kindSky' | 'kindMissed' | 'kindQuestion' | 'kindWeek' | 'digestTitle'> = {
   postcard: 'kindPostcard',
   moment: 'kindMoment',
   weather: 'kindWeather',
   sky: 'kindSky',
   missed: 'kindMissed',
   question: 'kindQuestion',
+  week: 'kindWeek',
   digest: 'digestTitle',
 };
 
