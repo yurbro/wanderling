@@ -603,7 +603,11 @@ export class SceneRenderer {
         // Nothing special here: a stone instead.
         return this.dressDetail(sprite, 'stone', rng);
       }
-      const name = names[Math.floor(rng() * names.length)];
+      let name = names[Math.floor(rng() * names.length)];
+      // The postbox is the one muted red in town; the scarf must stay the only loud one, so one at a time.
+      if (name === 'postbox' && this.details.some((o) => o.g !== sprite && o.g instanceof Sprite && o.g.texture === props.extras.postbox)) {
+        name = names.find((n) => n !== 'postbox') ?? name;
+      }
       sprite.texture = props.extras[name];
       return (ground * EXTRA_HEIGHT[name]) / sprite.texture.height;
     }
