@@ -33,7 +33,7 @@ interface Line {
 /** What the wanderling (or the firefly beside him) says in the HUD, in both languages. */
 const HUD_VOICE = ['hushAsleep', 'postcardPosted', 'postcardArrived', 'letterArrived', 'homeAgain', 'noMail', 'noPostcards',
   'introLook', 'introWhy', 'introNoName', 'introSayName', 'introSaySky', 'introSayLetter', 'askShake',
-  'questionArrived', 'answerKept', 'packHolds', 'catFollows', 'boardedNight', 'nightTrainTo', 'arrivesLater'] as const;
+  'questionArrived', 'answerKept', 'packHolds', 'catFollows', 'boardedNight', 'nightTrainTo', 'arrivesLater', 'arrivesEvening'] as const;
 const said = (key: (typeof HUD_VOICE)[number]): { en: string; zh: string } => {
   setLang('zh');
   const zh = t(key);
@@ -105,7 +105,7 @@ describe('the first week\'s new lines (ruling 16)', () => {
 
 describe('the firefly (review 3, ruling 6)', () => {
   it('says only that he is asleep, and tells the person nothing', () => {
-    expect(said('hushAsleep')).toEqual({ en: 'Shh. He is asleep.', zh: '嘘，他睡着了。' });
+    expect(said('hushAsleep')).toEqual({ en: 'Shh. {name} is asleep.', zh: '嘘，{name}睡着了。' });
   });
 });
 
@@ -146,5 +146,11 @@ describe('postcard letters (review 3, ruling 9)', () => {
     expect(skyLine(skyVars({ hisCond: 'snow', hisTemp: -2 }), 'en', 'C', 'p')).toBe('Here I had snow, -2°.');
     expect(skyLine(skyVars({ yourCond: 'clear', yourTemp: 20 }), 'en', 'C', 'p')).toBeNull();
     expect(skyLine({}, 'zh', 'C', 'p')).toBeNull();
+  });
+});
+
+describe('pronouns (ruling 16)', () => {
+  it('writes the name in the HUD voice, never "he" in English', () => {
+    for (const k of HUD_VOICE) expect(said(k).en, k).not.toMatch(/\b(he|him|his)\b/i);
   });
 });

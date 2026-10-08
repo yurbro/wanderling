@@ -4,7 +4,6 @@ import { CONDITIONS, describeWeather, formatTemperature } from '../core/weather'
 
 export interface HudOptions {
   demo: boolean;
-  onLocate: () => Promise<void>;
   onScrub?: (minutesOfDay: number) => void;
   /** Demo only: null means "back to the real weather". */
   onWeather?: (condition: WeatherCondition | null) => void;
@@ -13,12 +12,12 @@ export interface HudOptions {
   onMap?: () => void;
   /** Tapping the place name: choose a city by hand. */
   onPlace?: () => void;
-  onLanguage?: () => void;
+  /** The gear button at the foot: name, place, language and motion live there. */
+  onSettings?: () => void;
 }
 
 export interface Hud {
   update(ws: WorldState, rs: RenderState): void;
-  setLocating(flag: boolean): void;
   /** A short message near the bottom; it fades out after a while. */
   setNote(text: string, lingerMs?: number): void;
   setJourney(text: string): void;
@@ -26,7 +25,6 @@ export interface Hud {
   setPostcards(count: number, fresh: boolean): void;
   /** Unread letters on the letters button; it pulses while there are any. */
   setMail(unread: number): void;
-  hideLocate(): void;
   /** The temperature unit the HUD picked from the browser language. */
   readonly unit: 'C' | 'F';
 }
@@ -62,8 +60,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         <button class="pill" id="hud-mail" type="button">${t('mail')}</button>
         <button class="pill" id="hud-album" type="button">${t('postcards')}</button>
         <button class="pill" id="hud-map" type="button">${t('map')}</button>
-        <button class="pill" id="hud-locate" type="button">${t('useLocation')}</button>
-        <button class="pill pill-small" id="hud-lang" type="button">${t('language')}</button>
+        <button class="pill" id="hud-settings" type="button">${t('settings')}</button>
       </div>
       ${
         opts.demo
@@ -90,26 +87,13 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const note = el.querySelector<HTMLDivElement>('#hud-note')!;
   const journey = el.querySelector<HTMLDivElement>('#hud-journey')!;
   let noteTimer: number | null = null;
-  const locate = el.querySelector<HTMLButtonElement>('#hud-locate')!;
   const album = el.querySelector<HTMLButtonElement>('#hud-album')!;
   const mail = el.querySelector<HTMLButtonElement>('#hud-mail')!;
   const map = el.querySelector<HTMLButtonElement>('#hud-map')!;
-  const langBtn = el.querySelector<HTMLButtonElement>('#hud-lang')!;
-  langBtn.addEventListener('click', () => opts.onLanguage?.());
+  el.querySelector<HTMLButtonElement>('#hud-settings')!.addEventListener('click', () => opts.onSettings?.());
   const scrub = el.querySelector<HTMLInputElement>('#hud-scrub');
   const scrubLabel = el.querySelector<HTMLSpanElement>('#hud-scrub-label');
   const weatherSelect = el.querySelector<HTMLSelectElement>('#hud-weather-select');
-
-  locate.addEventListener('click', async () => {
-    locate.disabled = true;
-    locate.textContent = t('finding');
-    try {
-      await opts.onLocate();
-    } finally {
-      locate.disabled = false;
-      locate.textContent = t('useLocation');
-    }
-  });
 
   if (scrub && scrubLabel && opts.onScrub) {
     scrub.addEventListener('input', () => {
@@ -157,9 +141,6 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         weatherSelect.value = ws.weather.condition;
       }
     },
-    setLocating(flag) {
-      locate.disabled = flag;
-    },
     setNote(text, lingerMs) {
       note.textContent = text;
       note.classList.toggle('visible', text !== '');
@@ -184,9 +165,6 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       album.classList.toggle('has-new', fresh);
     },
     unit,
-    hideLocate() {
-      locate.hidden = true;
-    },
   };
 }
 

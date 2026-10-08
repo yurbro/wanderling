@@ -156,6 +156,8 @@ export interface SurpriseEvent {
   witnessed: boolean;
   /** A letter about it has been offered to the letter engine. */
   lettered?: boolean;
+  /** Passed over on purpose (the first week's quiet): it does not count as a letter written. */
+  silenced?: boolean;
 }
 
 export interface SurpriseLog {
@@ -262,9 +264,9 @@ export function intensity(log: SurpriseLog, id: SurpriseId, now: number): number
 
 /**
  * The surprises that came and went unseen, as letter candidates, each offered
- * once. Returns the same log when there is nothing new.
+ * once. `quiet` holds one kind back until a moment (the sleep letter for the first week). Returns the same log when there is nothing new.
  */
-export function missedLetters(log: SurpriseLog, now: number): { log: SurpriseLog; candidates: Candidate[] } {
+export function missedLetters(log: SurpriseLog, now: number, quiet: { id: SurpriseId; before: number } | null = null): { log: SurpriseLog; candidates: Candidate[] } {
   const candidates: Candidate[] = [];
   let changed = false;
   const events = log.events.map((e) => {
@@ -272,7 +274,9 @@ export function missedLetters(log: SurpriseLog, now: number): { log: SurpriseLog
     const rule = ruleById(e.id);
     changed = true;
     if (!rule.missed) return { ...e, lettered: true };
-    const alreadyWritten = rule.missedOnce && log.events.some((o) => o.id === e.id && o.lettered && o !== e);
+    // Ruling 21: the first week writes no missed-sleep letter, the first night's letter already says it.
+    if (quiet && quiet.id === e.id && e.until < quiet.before) return { ...e, lettered: true, silenced: true };
+    const alreadyWritten = rule.missedOnce && log.events.some((o) => o.id === e.id && o.lettered && !o.silenced && o !== e);
     if (!alreadyWritten) {
       candidates.push({ id: `missed:${e.id}:${e.at}`, kind: 'missed', wantAt: e.until, pool: rule.missed });
     }

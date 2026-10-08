@@ -103,6 +103,8 @@ export interface Place {
   note?: string;
   /** Chinese name, region and line, when written. */
   zh?: { name: string; region?: string; note?: string };
+  /** A stop on the way that is not a destination: he changes there and no postcard is sent. */
+  transit?: boolean;
 }
 
 /** How a leg is covered: on foot, or by train or plane between routes. */

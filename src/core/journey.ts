@@ -317,7 +317,8 @@ export function describeJourney(pos: Position, now: number = Date.now()): string
   if (pos.to && leg && leg.mode === 'ride' && typeof leg.hours === 'number' && leg.hours > 0) {
     const eta = now + (pos.kmToNext / legSpeed(leg)) * HOUR_MS;
     const days = Math.round((startOfDay(eta) - startOfDay(now)) / (24 * HOUR_MS));
-    const when = days <= 0 ? 'arrivesDawn' : days === 1 ? 'arrivesTomorrow' : 'arrivesLater';
+    const evening = new Date(eta).getHours() >= 12;
+    const when = days <= 0 ? (evening ? 'arrivesEvening' : 'arrivesDawn') : days === 1 ? 'arrivesTomorrow' : 'arrivesLater';
     return `${t('nightTrainTo', { name: placeName(pos.to) })} · ${t(when)}`;
   }
   const left = almostThere(pos) ? t('almostThere') : t('kmToGo', { km: formatKm(pos.kmToNext) });
