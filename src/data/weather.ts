@@ -85,6 +85,48 @@ export async function fetchSnapshot(
   }
 }
 
+/**
+ * The weather where the wanderling was at a moment (his side of the two
+ * skies in a postcard letter): one small request per postcard, only when it
+ * is posted (review v1, ruling 5). Hourly history reaches back up to 92 days.
+ */
+export function placeWeatherUrl(p: { lat: number; lon: number }, at: number, now: number): string {
+  const daysBack = Math.min(92, Math.max(1, Math.ceil((now - at) / 86_400_000) + 1));
+  const q = new URLSearchParams({
+    latitude: p.lat.toFixed(2),
+    longitude: p.lon.toFixed(2),
+    current: ['temperature_2m', 'weather_code', 'cloud_cover'].join(','),
+    hourly: ['temperature_2m', 'weather_code', 'cloud_cover'].join(','),
+    past_days: String(daysBack),
+    forecast_days: '1',
+    timeformat: 'unixtime',
+    timezone: 'UTC',
+  });
+  return `${ENDPOINT}?${q.toString()}`;
+}
+
+/** His weather at `at`, or null when it cannot be had. Never throws. */
+export async function fetchPlaceWeather(
+  p: { lat: number; lon: number },
+  at: number,
+  fetchImpl: typeof fetch = (...args) => fetch(...args),
+  now: number = Date.now(),
+): Promise<{ condition: WeatherState['condition']; code: number; temperature: number } | null> {
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), TIMEOUT_MS) : null;
+  try {
+    const res = await fetchImpl(placeWeatherUrl(p, at, now), { signal: ctrl?.signal });
+    if (!res.ok) return null;
+    const snap = parseForecast(await res.json(), now, p.lat, p.lon);
+    const w = snap ? weatherAt(snap, new Date(at)) : null;
+    return w ? { condition: w.condition, code: w.code, temperature: w.temperature } : null;
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export type WeatherStatus = 'idle' | 'loading' | 'ok' | 'offline';
 
 /**

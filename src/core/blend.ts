@@ -10,11 +10,11 @@ import type { RenderState } from './types';
 /** Keys whose numbers are 0xRRGGBB colours. */
 const COLOR_KEYS = new Set([
   'top', 'mid', 'horizon', 'far', 'near', 'ground', 'path',
-  'cloudColor', 'fogColor', 'dropColor', 'seaColor', 'seaNear', 'tint',
+  'cloudColor', 'fogColor', 'dropColor', 'seaColor', 'seaNear', 'tint', 'silhouette',
 ]);
 
 /** Keys that must switch at once rather than slide. */
-const INSTANT_KEYS = new Set(['phase', 'fraction', 'pace', 'lightning', 'offsetKm']);
+const INSTANT_KEYS = new Set(['phase', 'fraction', 'pace', 'lightning', 'offsetKm', 'seed']);
 
 function blendValue(key: string, a: unknown, b: unknown, t: number): unknown {
   if (INSTANT_KEYS.has(key)) return b;

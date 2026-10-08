@@ -7,6 +7,7 @@ import {
   deliveryDelayMs,
   demoPostcards,
   describeArrival,
+  isDeparture,
   makePostcard,
   missingArrivals,
   pendingCards,
@@ -138,6 +139,29 @@ describe('slow post', () => {
 
   it('hands demo cards over at once', () => {
     for (const card of demoPostcards(ROUTE, LONDON, T0)) expect(card.deliverAt).toBe(card.at);
+  });
+});
+
+describe('the card from where he set out (review 3, ruling 5)', () => {
+  it('is handed over the moment the journey begins', () => {
+    const j = startJourney(ROUTE, T0);
+    const arrival = j.arrivals[0];
+    expect(isDeparture(ROUTE, j, arrival)).toBe(true);
+    const card = makePostcard(ROUTE, arrival, LONDON, null, { home: { name: 'Far', lat: -33.9, lon: 151.2 }, departure: true })!;
+    expect(card.deliverAt).toBe(T0);
+    expect(card.departure).toBe(true);
+    expect(deliveredCards([card], T0)).toHaveLength(1);
+  });
+
+  it('is only the first place of a fresh journey; later places go by slow post', () => {
+    const j = advance(ROUTE, startJourney(ROUTE, T0), T0 + (6 / KM_PER_HOUR + 1) * H).state;
+    expect(isDeparture(ROUTE, j, j.arrivals[1])).toBe(false);
+    // A chained segment starts without arriving at its first place: nothing to hand over.
+    const chained = startJourney(ROUTE, T0, { arrived: false });
+    expect(isDeparture(ROUTE, chained, { placeId: 'b', at: T0 + 9 * H })).toBe(false);
+    const later = makePostcard(ROUTE, j.arrivals[1], LONDON, null, { home: { name: 'Home', lat: 51.5, lon: -0.1 } })!;
+    expect(later.deliverAt).toBeGreaterThanOrEqual(later.at + DELIVERY_MIN_MS);
+    expect(later.departure).toBeUndefined();
   });
 });
 

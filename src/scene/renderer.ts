@@ -93,6 +93,8 @@ export class SceneRenderer {
   private moonShadow = new Graphics();
   /** The rainbow after the rain: soft bands opposite the sun, behind the far hills. */
   private rainbow = new Graphics();
+  /** The next place seen from afar, between the far and the mid hills. */
+  private landmark = new Graphics();
   /** Each hill layer: a flat fill below the ridge, and once the kit is in, a painted band on top. */
   private hills: Record<'far' | 'mid' | 'near', HillLayer> = {
     far: { view: new Container(), fill: new Graphics(), band: null },
@@ -174,6 +176,7 @@ export class SceneRenderer {
       this.sea.gulls,
       this.hills.far.view,
       this.weather.fogFar,
+      this.landmark,
       this.hills.mid.view,
       this.sea.waves,
       this.sea.boats,
@@ -420,6 +423,7 @@ export class SceneRenderer {
 
     this.drawRainbow(st.surprise.rainbow, st.surprise.rainbowX, w, skyH);
     this.drawHills();
+    this.drawLandmark();
     if (syncMarker) this.placeSignpost();
 
     // Ground: a flat fill, and with the kit a painted grass edge along the horizon.
@@ -535,6 +539,7 @@ export class SceneRenderer {
   private showLand(show: boolean): void {
     for (const layer of [
       this.hills.far.view,
+      this.landmark,
       this.hills.mid.view,
       this.hills.near.view,
       this.ground,
@@ -650,6 +655,25 @@ export class SceneRenderer {
     for (const d of this.details) {
       d.g.tint = d.kind === 'tuft' ? tuft : d.kind === 'stone' ? stone : flower;
     }
+  }
+
+  /**
+   * The next place on the horizon: a flat silhouette in the far-hill haze,
+   * standing still ahead (it is far away, so it barely moves) and growing
+   * from a speck to a good size as the HUD's "almost there" runs down.
+   */
+  private drawLandmark(): void {
+    const g = this.landmark;
+    g.clear();
+    const lm = this.state?.landmark;
+    if (!lm || lm.alpha <= 0.005) return;
+    const { w, h } = this;
+    const size = h * (0.035 + 0.095 * Math.pow(lm.closeness, 1.2)) * (LANDMARK_SIZE[lm.terrain] ?? 1);
+    // Ahead of the wanderling, standing on the mid hills' line so they hide its foot.
+    const x = w * 0.76;
+    const y = h * (this.hillSpecs.mid.base + 0.012);
+    drawLandmarkShape(g, lm.terrain, lm.seed, x, y, size, lm.silhouette);
+    g.alpha = lm.alpha * 0.92;
   }
 
   private drawHills(): void {
@@ -927,6 +951,120 @@ export class SceneRenderer {
     this.drawMarkerLights(st.wanderer.lantern ? st.wanderer.lanternGlow : 0, st.marker.cottage);
     this.markerLights.alpha = this.markerLights.visible ? 1 : 0;
     this.setMarkerX(x, x > -w * 0.6 && x < w * 1.6);
+  }
+}
+
+/** Some landmarks stand taller than others: a mountain more than a village. */
+const LANDMARK_SIZE: Partial<Record<Terrain, number>> = { mountain: 1.45, city: 1.05, coast: 0.95, plain: 0.85, forest: 0.8, lake: 0.85, desert: 0.8 };
+
+/**
+ * A place's far silhouette, by terrain, in one flat colour (a mountain's snow
+ * a little paler). (x, y) is the foot of the shape, `s` its height in pixels.
+ * The seed varies the details so two cities are not the same skyline.
+ */
+function drawLandmarkShape(g: Graphics, terrain: Terrain, seed: number, x: number, y: number, s: number, color: number): void {
+  const rng = seeded(seed + 1);
+  const P = (pts: number[]): number[] => pts.map((v, i) => (i % 2 === 0 ? x + v * s : y + v * s));
+  const fill = { color };
+  switch (terrain) {
+    case 'city': {
+      // A row of blocks, and one tall tower with a spire or a dome.
+      const n = 5 + Math.floor(rng() * 3);
+      const span = 1.9;
+      const tower = Math.floor(rng() * n);
+      for (let i = 0; i < n; i++) {
+        const bw = span / n;
+        const bx = -span / 2 + i * bw;
+        const bh = i === tower ? 0.78 : 0.3 + rng() * 0.38;
+        g.rect(x + bx * s, y - bh * s, bw * s * 0.92, bh * s + 1).fill(fill);
+        if (i === tower) {
+          const cx = bx + bw * 0.46;
+          if (rng() < 0.5) g.poly(P([cx - bw * 0.3, -bh, cx, -1, cx + bw * 0.3, -bh])).fill(fill);
+          else g.circle(x + cx * s, y - bh * s, bw * 0.36 * s).fill(fill);
+        }
+      }
+      break;
+    }
+    case 'plain': {
+      // A village: low roofs either side of a church spire; sometimes a windmill.
+      for (const [cx, rw, rh] of [[-0.6, 0.32, 0.2], [-0.25, 0.26, 0.17], [0.32, 0.3, 0.19], [0.62, 0.24, 0.15]]) {
+        g.rect(x + (cx - rw / 2) * s, y - rh * s, rw * s, rh * s + 1).fill(fill);
+        g.poly(P([cx - rw / 2 - 0.03, -rh, cx, -rh - 0.13, cx + rw / 2 + 0.03, -rh])).fill(fill);
+      }
+      g.rect(x - 0.06 * s, y - 0.58 * s, 0.12 * s, 0.58 * s + 1).fill(fill);
+      g.poly(P([-0.08, -0.58, 0, -1, 0.08, -0.58])).fill(fill);
+      if (rng() < 0.5) {
+        g.poly(P([0.95, 0, 1.0, -0.45, 1.08, -0.45, 1.13, 0])).fill(fill);
+        for (const a of [0.4, 2.0, 3.6, 5.2]) {
+          g.moveTo(x + 1.04 * s, y - 0.47 * s).lineTo(x + (1.04 + Math.cos(a) * 0.28) * s, y + (-0.47 + Math.sin(a) * 0.28) * s);
+        }
+        g.stroke({ color, width: Math.max(1, s * 0.035) });
+      }
+      break;
+    }
+    case 'hills': {
+      // A round hill with a tower on its top.
+      const pts: number[] = [];
+      for (let i = 0; i <= 24; i++) {
+        const a = Math.PI * (i / 24);
+        pts.push(-1.2 * Math.cos(a), -0.55 * Math.sin(a));
+      }
+      g.poly(P(pts)).fill(fill);
+      g.rect(x - 0.07 * s, y - 0.98 * s, 0.14 * s, 0.46 * s).fill(fill);
+      for (const cx of [-0.07, -0.01, 0.05]) g.rect(x + cx * s, y - 1.04 * s, 0.03 * s, 0.07 * s).fill(fill);
+      break;
+    }
+    case 'mountain': {
+      // Two peaks, the higher with snow.
+      const lean = rng() * 0.2 - 0.1;
+      g.poly(P([-1.3, 0, -0.6, -0.62, -0.42, -0.52, 0.05 + lean, -1, 0.6, -0.42, 0.78, -0.48, 1.3, 0])).fill(fill);
+      g.poly(P([0.05 + lean, -1, -0.12 + lean, -0.8, 0.0 + lean, -0.84, 0.08 + lean, -0.77, 0.24 + lean, -0.82])).fill({ color: mix(color, 0xffffff, 0.35) });
+      break;
+    }
+    case 'forest': {
+      // Tall pines, one behind another.
+      const n = 7;
+      for (let i = 0; i < n; i++) {
+        const cx = -0.85 + (1.7 * i) / (n - 1) + (rng() - 0.5) * 0.1;
+        const th = 0.5 + rng() * 0.5;
+        g.poly(P([cx - 0.15, 0.02, cx, -th, cx + 0.15, 0.02])).fill(fill);
+      }
+      g.rect(x - 0.95 * s, y - 0.12 * s, 1.9 * s, 0.12 * s + 1).fill(fill);
+      break;
+    }
+    case 'coast': {
+      // A headland running out to sea, a lighthouse at its end.
+      g.poly(P([-1.3, 0, -0.9, -0.12, -0.3, -0.2, 0.3, -0.24, 0.62, -0.22, 0.72, 0])).fill(fill);
+      g.poly(P([0.38, -0.22, 0.42, -0.82, 0.5, -0.82, 0.54, -0.22])).fill(fill);
+      g.rect(x + 0.4 * s, y - 0.93 * s, 0.12 * s, 0.11 * s).fill({ color: mix(color, 0xffffff, 0.25) });
+      g.poly(P([0.38, -0.93, 0.46, -1.02, 0.54, -0.93])).fill(fill);
+      break;
+    }
+    case 'lake': {
+      // The far shore: a low line of trees, and a tiered tower by the water.
+      g.rect(x - 1.25 * s, y - 0.1 * s, 2.5 * s, 0.1 * s + 1).fill(fill);
+      for (let i = 0; i < 6; i++) {
+        const cx = -1.1 + i * 0.28 + (i > 2 ? 0.5 : 0);
+        g.circle(x + cx * s, y - 0.16 * s, (0.1 + rng() * 0.06) * s).fill(fill);
+      }
+      for (let k = 0; k < 3; k++) {
+        const top = -0.3 - k * 0.22;
+        const half = 0.2 - k * 0.04;
+        g.rect(x + (0.12 - half * 0.45) * s, y + top * s, half * 0.9 * s, 0.22 * s + 1).fill(fill);
+        g.poly(P([0.12 - half, top, 0.12, top - 0.1, 0.12 + half, top])).fill(fill);
+      }
+      g.poly(P([0.1, -0.96, 0.12, -1.06, 0.14, -0.96])).fill(fill);
+      break;
+    }
+    case 'desert': {
+      // A flat-topped mesa and a domed house.
+      g.poly(P([-1.2, 0, -0.9, -0.62, -0.3, -0.65, -0.05, 0])).fill(fill);
+      g.rect(x + 0.3 * s, y - 0.3 * s, 0.5 * s, 0.3 * s + 1).fill(fill);
+      g.circle(x + 0.55 * s, y - 0.3 * s, 0.18 * s).fill(fill);
+      g.rect(x + 0.86 * s, y - 0.55 * s, 0.07 * s, 0.55 * s).fill(fill);
+      g.circle(x + 0.895 * s, y - 0.58 * s, 0.05 * s).fill(fill);
+      break;
+    }
   }
 }
 

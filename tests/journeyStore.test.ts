@@ -24,7 +24,8 @@ describe('the first route', () => {
   it('is walked at the pace the design asks for: a new place every 2 to 3 days (D10)', () => {
     const H = 3_600_000;
     const legs = ROUTES.flatMap((r) => r.legs).filter((l) => (l.mode ?? 'walk') === 'walk');
-    const hoursPerStop = legs.map((l) => l.km / KM_PER_HOUR + REST_MS / H);
+    // He sleeps two hours a night (review 3), so a day holds 22 hours of walking.
+    const hoursPerStop = legs.map((l) => (l.km / KM_PER_HOUR) * (24 / 22) + REST_MS / H);
     const mean = hoursPerStop.reduce((a, b) => a + b, 0) / hoursPerStop.length;
     expect(mean).toBeGreaterThanOrEqual(2 * 24);
     expect(mean).toBeLessThanOrEqual(3 * 24);

@@ -67,7 +67,8 @@ const DICT: Dict = {
   kindMissed: { en: 'Meanwhile', zh: '那会儿' },
   kindQuestion: { en: 'A question', zh: '一个问题' },
   letterArrived: { en: 'A letter has arrived.', zh: '来了一封信。' },
-  hushAsleep: { en: 'Shh. He is asleep. A firefly is keeping watch.', zh: '嘘，他睡着了。一只萤火虫替他守着。' },
+  // The firefly's line (review 3, ruling 6): no telling the person what to do.
+  hushAsleep: { en: 'Shh. He is asleep.', zh: '嘘，他睡着了。' },
   postcardPosted: { en: 'A postcard is in the post. It will take a while.', zh: '他寄了一张明信片，在路上。' },
   postcardArrived: { en: 'A postcard has arrived.', zh: '一张明信片到了。' },
   noPostcards: { en: 'No postcards yet. The first one arrives with the first place.', zh: '还没有明信片。到第一站就会收到。' },

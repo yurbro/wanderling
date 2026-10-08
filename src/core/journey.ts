@@ -16,15 +16,16 @@ import type { Arrival, JourneyState, Leg, LegMode, Place, Position, Route, Terra
 /**
  * Walking pace. The design (decisions.md, D10) wants a new place every 2 to
  * 3 days, with real distances on the map: so the wanderling simply walks
- * slowly, about 0.9 km/h day and night, and rests half a day at each place.
- * Over the seven routes' legs (about 44 km on average) that is 2.5 days a
- * stop. The one knob for the rhythm of the whole journey.
+ * slowly and rests half a day at each place. Since review 3 it also really
+ * sleeps from 2:00 to 4:00 by the person's clock and does not walk then, so
+ * the pace is 24/22 of the old 0.9 km/h to keep the same rhythm: over the
+ * seven routes' legs (about 44 km on average) still 2.5 days a stop.
  *
  * Changing these is safe for a journey already under way: the engine
  * checkpoints `km` and `updatedAt` on every tick and only ever walks on from
  * there, so a new pace never rewinds or skips a place (see the journey tests).
  */
-export const KM_PER_HOUR = 0.9;
+export const KM_PER_HOUR = 0.98;
 /** How long the wanderling lingers at each place before walking on. */
 export const REST_MS = 12 * 60 * 60_000;
 /** Between routes the wanderer may take a train, or a plane across the sea. */
@@ -32,6 +33,82 @@ export const RIDE_KM_PER_HOUR = 60;
 export const FLY_KM_PER_HOUR = 700;
 
 const HOUR_MS = 3_600_000;
+
+/* ------------------------------------------------------------------------ */
+/* Sleep: no walking from 2:00 to 4:00 by the person's own clock             */
+/* ------------------------------------------------------------------------ */
+
+export const SLEEP_FROM_HOUR = 2;
+export const SLEEP_UNTIL_HOUR = 4;
+
+/**
+ * When the wanderling is asleep: given a moment, the first sleep window that
+ * has not ended yet, as [start, end) in epoch ms (start may be in the past).
+ */
+export type SleepClock = (t: number) => [number, number];
+
+/**
+ * The person's own nights, from the device's time zone (the same clock the
+ * scene uses to draw him asleep). A night that loses or gains an hour to
+ * daylight saving simply has a shorter or longer sleep.
+ */
+export const localNights: SleepClock = (t) => {
+  const d = new Date(t);
+  for (let add = 0; add < 3; add++) {
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() + add, SLEEP_FROM_HOUR).getTime();
+    const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + add, SLEEP_UNTIL_HOUR).getTime();
+    if (end > t) return [start, end];
+  }
+  return [Infinity, Infinity];
+};
+
+/** Nights at a fixed offset from UTC, in minutes (tests, and anywhere the device clock will not do). */
+export function nightsAt(offsetMinutes: number): SleepClock {
+  const DAY = 24 * HOUR_MS;
+  const off = offsetMinutes * 60_000;
+  return (t) => {
+    const dayStart = Math.floor((t + off) / DAY) * DAY - off;
+    for (let add = 0; add < 3; add++) {
+      const start = dayStart + add * DAY + SLEEP_FROM_HOUR * HOUR_MS;
+      const end = dayStart + add * DAY + SLEEP_UNTIL_HOUR * HOUR_MS;
+      if (end > t) return [start, end];
+    }
+    return [Infinity, Infinity];
+  };
+}
+
+/** A wanderling that never sleeps: for checking the pace arithmetic on its own. */
+export const NEVER_ASLEEP: SleepClock = () => [Infinity, Infinity];
+
+/** Milliseconds awake between `a` and `b`. */
+export function awakeMs(a: number, b: number, sleep: SleepClock = localNights): number {
+  let total = 0;
+  let t = a;
+  // One turn per night in the span; a year away is a few hundred turns.
+  for (let guard = 0; guard < 4000 && t < b; guard++) {
+    const [start, end] = sleep(t);
+    if (start >= b) return total + (b - t);
+    if (start > t) total += start - t;
+    t = Math.max(t, end);
+  }
+  return total;
+}
+
+/** The moment `ms` of awake time has passed since `a`. */
+export function afterAwake(a: number, ms: number, sleep: SleepClock = localNights): number {
+  let t = a;
+  let left = ms;
+  for (let guard = 0; guard < 4000; guard++) {
+    if (left <= 0) return t;
+    const [start, end] = sleep(t);
+    if (start > t) {
+      if (left <= start - t) return t + left;
+      left -= start - t;
+    }
+    t = Math.max(t, end);
+  }
+  return t + left;
+}
 
 export function legSpeed(leg: Leg | undefined): number {
   switch (leg?.mode) {
@@ -81,9 +158,11 @@ export interface AdvanceResult {
 /**
  * Move the journey forward to `now`. Walks leg by leg, pausing REST_MS at
  * every place, and stops at the end of the route. Never moves backwards,
- * even if the clock does.
+ * even if the clock does. On foot nothing happens while the wanderling
+ * sleeps (`sleep`, the person's nights by default); a train or a plane
+ * carries a sleeping passenger on regardless.
  */
-export function advance(route: Route, state: JourneyState, now: number): AdvanceResult {
+export function advance(route: Route, state: JourneyState, now: number, sleep: SleepClock = localNights): AdvanceResult {
   const kms = placeKms(route);
   const end = kms[kms.length - 1];
   if (now <= state.updatedAt) return { state: { ...state }, arrived: [] };
@@ -104,15 +183,18 @@ export function advance(route: Route, state: JourneyState, now: number): Advance
     const nextIndex = kms.findIndex((k) => k > km + 1e-9);
     const nextKm = nextIndex === -1 ? end : kms[nextIndex];
     // The leg we are on sets the speed: feet, train or plane.
-    const speed = legSpeed(route.legs[Math.max(0, nextIndex - 1)]);
-    const kmAvailable = ((now - t) / HOUR_MS) * speed;
+    const leg = route.legs[Math.max(0, nextIndex - 1)];
+    const speed = legSpeed(leg);
+    const onFoot = (leg?.mode ?? 'walk') === 'walk';
+    const kmAvailable = ((onFoot ? awakeMs(t, now, sleep) : now - t) / HOUR_MS) * speed;
     const kmNeeded = nextKm - km;
     if (kmAvailable < kmNeeded) {
       km += kmAvailable;
       t = now;
       break;
     }
-    const arriveAt = t + (kmNeeded / speed) * HOUR_MS;
+    const needMs = (kmNeeded / speed) * HOUR_MS;
+    const arriveAt = onFoot ? afterAwake(t, needMs, sleep) : t + needMs;
     km = nextKm;
     t = arriveAt;
     const place = route.places[nextIndex];
@@ -131,8 +213,8 @@ export function advance(route: Route, state: JourneyState, now: number): Advance
  * Real-world activity pushes the wanderer ahead; it never slows them down.
  * Places crossed by the push count as reached now, and any rest is cut short.
  */
-export function addBonusKm(route: Route, state: JourneyState, km: number, now: number): AdvanceResult {
-  const first = advance(route, state, now);
+export function addBonusKm(route: Route, state: JourneyState, km: number, now: number, sleep: SleepClock = localNights): AdvanceResult {
+  const first = advance(route, state, now, sleep);
   const bonus = Math.max(0, km);
   if (bonus === 0) return first;
   const kms = placeKms(route);
@@ -204,11 +286,29 @@ export function locate(route: Route, state: JourneyState, now: number): Position
 const VERB: Record<LegMode, 'walkingTo' | 'ridingTo' | 'flyingTo'> = { walk: 'walkingTo', ride: 'ridingTo', fly: 'flyingTo' };
 const NEAR_KM: Record<LegMode, number> = { walk: 1, ride: 10, fly: 50 };
 
+/**
+ * How far into the "almost there" stretch, 0..1: 0 while the HUD still counts
+ * kilometres, rising from the moment it says "almost there" to 1 on arrival.
+ * The scene grows the destination's far silhouette by the same number, so
+ * the picture and the words agree (review 3, ruling 4).
+ */
+export function approach(pos: Position): number {
+  if (pos.finished || pos.resting || pos.to === null) return 0;
+  const near = NEAR_KM[pos.mode];
+  if (pos.kmToNext >= near) return 0;
+  return Math.min(1, Math.max(0, 1 - pos.kmToNext / near));
+}
+
+/** True while the HUD says "almost there". */
+export function almostThere(pos: Position): boolean {
+  return !pos.finished && !pos.resting && pos.to !== null && pos.kmToNext < NEAR_KM[pos.mode];
+}
+
 /** The HUD line, e.g. "Walking to Brighton · 31 km to go". */
 export function describeJourney(pos: Position): string {
   if (pos.finished) return t('journeysEnd', { name: placeName(pos.from) });
   if (pos.resting) return t('restingIn', { name: placeName(pos.from) });
-  const left = pos.kmToNext < NEAR_KM[pos.mode] ? t('almostThere') : t('kmToGo', { km: formatKm(pos.kmToNext) });
+  const left = almostThere(pos) ? t('almostThere') : t('kmToGo', { km: formatKm(pos.kmToNext) });
   return `${t(VERB[pos.mode], { name: placeName(pos.to!) })} · ${left}`;
 }
 

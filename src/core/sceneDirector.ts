@@ -1,7 +1,7 @@
 import { clamp01, hexToRgb, mix, smoothstep } from './color';
 import { CELESTIAL, LAND, WEATHER_TONES, skyAt } from './palette';
-import type { SurpriseShow, CelestialPlacement, DayPhase, LeafState, LegMode, PlaceMarker, Position, RenderState, Terrain, WorldState } from './types';
-import { TERRAIN, landAt } from './journey';
+import type { SurpriseShow, CelestialPlacement, DayPhase, Landmark, LeafState, LegMode, PlaceMarker, Position, RenderState, Terrain, WorldState } from './types';
+import { TERRAIN, approach, landAt } from './journey';
 import { NO_WEATHER, weatherIntensities } from './weather';
 
 /**
@@ -138,6 +138,8 @@ export function direct(ws: WorldState): RenderState {
     marker = { offsetKm, cottage: TOWNS.has(place.terrain) };
   }
 
+  const landmark = landmarkFor(journey, travelMode, mix(hills.far, hills.mid, 0.35));
+
   return {
     phase: phaseOf(alt, ws.sun.azimuth),
     sky,
@@ -165,10 +167,46 @@ export function direct(ws: WorldState): RenderState {
     land: landLayers,
     travel: { mode: travelMode },
     marker,
+    landmark,
     darkInk: luminance(sky.top) > 0.55,
     // A rainbow stands opposite the sun; it needs the sun up and the walk outdoors.
     surprise: { ...show, rainbow: sun.visible && travelMode === 'walk' ? show.rainbow : 0, rainbowX: 1 - sun.x },
   };
+}
+
+/**
+ * The next place on the horizon. It shows from the moment the HUD says
+ * "almost there" (the same `approach` number), grows as the kilometres
+ * close, and on arrival fades where it stands while the signpost and the
+ * place take over. Only on foot: from a train or a plane the land is a blur.
+ */
+export function landmarkFor(journey: Position | null, mode: LegMode, silhouette: number): Landmark {
+  const hidden: Landmark = { terrain: 'hills', seed: 0, closeness: 0, alpha: 0, silhouette };
+  if (!journey || journey.finished || mode !== 'walk') return hidden;
+  if (journey.resting) {
+    // Just arrived: the far view of this place has become the place itself.
+    return { terrain: journey.from.terrain, seed: placeSeed(journey.from.id), closeness: 1, alpha: 0, silhouette };
+  }
+  if (!journey.to) return hidden;
+  const closeness = approach(journey);
+  return {
+    terrain: journey.to.terrain,
+    seed: placeSeed(journey.to.id),
+    closeness,
+    // A short fade in, so it rises out of the haze rather than popping up.
+    alpha: closeness > 0 ? smoothstep(0, 0.06, closeness) : 0,
+    silhouette,
+  };
+}
+
+function hexToNumber(hex: string): number {
+  return parseInt(hex.replace('#', ''), 16);
+}
+
+function placeSeed(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % 1000;
 }
 
 const NO_SURPRISES: SurpriseShow = { rainbow: 0, moonWatch: false, snowGlobe: 0 };
@@ -192,25 +230,27 @@ export function leafState(ws: WorldState, umbrella: boolean, sun: CelestialPlace
   return { droop, toSun, stiff, tint: leafSeasonTint(ws.now, ws.location.lat) };
 }
 
-/** Leaf colours through the year, in the style guide's muted greens; the painted leaf is LEAF_PAINT. */
-const LEAF_PAINT = '#7E9A8C';
-// A tint can only hold channels back, so each season is written as the paint
-// with some channels lowered: spring greener (less red and blue), autumn
-// yellow-olive (blue well back), winter greyer and a touch darker.
-const LEAF_SEASONS = {
-  spring: '#6C9A78',
-  summer: '#7E9A8C',
-  autumn: '#7E9268',
-  winter: '#6F8A86',
+/**
+ * The painted leaf's own colour, measured from public/art/leaf.png (the
+ * median of its opaque pixels; the umbrella leaf is within a few steps).
+ * Seasons are written as the colour wanted on screen, and the tint is that
+ * over this paint, so the two must agree.
+ */
+export const LEAF_PAINT = '#9CA79A';
+// A tint can only hold channels back, so no season is brighter than the
+// paint in any channel. Review 3 (ruling 2): a season may turn the hue, but
+// its saturation stays within the spring and summer grey-greens (spring, the
+// greener of the two, is the ceiling); autumn is a greyed ochre, winter
+// greyer still. The scarf stays the one saturated thing.
+export const LEAF_SEASONS = {
+  spring: '#86A784',
+  summer: '#9CA79A',
+  autumn: '#969183',
+  winter: '#8C9290',
 };
 
-/**
- * The leaf's tint for the date and hemisphere: a multiplicative colour that
- * turns the painted grey-green into the season's green. Blends smoothly
- * between four keyframes (20 April, 20 July, 20 October, 20 January in the
- * north; six months shifted in the south).
- */
-export function leafSeasonTint(now: Date, lat: number): number {
+/** The leaf's colour for the date and hemisphere, before it is turned into a tint. */
+export function leafSeasonColor(now: Date, lat: number): number {
   const start = Date.UTC(now.getUTCFullYear(), 0, 1);
   let day = (now.getTime() - start) / 86_400_000;
   if (lat < 0) day += 182.5;
@@ -224,17 +264,23 @@ export function leafSeasonTint(now: Date, lat: number): number {
     [292, LEAF_SEASONS.autumn],
     [19 + year, LEAF_SEASONS.winter],
   ];
-  let d = day < 19 ? day + year : day;
-  let color = LEAF_SEASONS.winter as number | string;
+  const d = day < 19 ? day + year : day;
   for (let i = 0; i < keys.length - 1; i++) {
     const [d0, c0] = keys[i];
     const [d1, c1] = keys[i + 1];
-    if (d >= d0 && d <= d1) {
-      color = mix(c0, c1, (d - d0) / (d1 - d0));
-      break;
-    }
+    if (d >= d0 && d <= d1) return mix(c0, c1, (d - d0) / (d1 - d0));
   }
-  d = 0;
+  return hexToNumber(LEAF_SEASONS.winter);
+}
+
+/**
+ * The leaf's tint for the date and hemisphere: a multiplicative colour that
+ * turns the painted grey-green into the season's colour. Blends smoothly
+ * between four keyframes (20 April, 20 July, 20 October, 20 January in the
+ * north; six months shifted in the south).
+ */
+export function leafSeasonTint(now: Date, lat: number): number {
+  const color = leafSeasonColor(now, lat);
   // Tint = season / paint per channel, clamped: white keeps the paint, less than white darkens that channel.
   const want = hexToRgb(color);
   const paint = hexToRgb(LEAF_PAINT);

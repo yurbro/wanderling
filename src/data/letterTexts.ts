@@ -1,5 +1,5 @@
 import type { LetterKind } from '../core/letters';
-import type { Terrain } from '../core/types';
+import type { Terrain, WeatherCondition } from '../core/types';
 
 /**
  * The skeletons the letter engine fills in: human-written lines with a few
@@ -7,7 +7,7 @@ import type { Terrain } from '../core/types';
  * and the red lines in docs/design/decisions.md section 6; a test scans
  * this file for them (tests/letterTexts.test.ts).
  *
- * Slots: {place} {terrain} {yourWeather} {hisWeather} {yourTimeOfDay} {bagItem}.
+ * Slots: {place} {terrain} {yourWeather} {hisWeather} {yourTemp} {hisTemp} {yourTimeOfDay} {bagItem}.
  */
 export interface Skeleton {
   id: string;
@@ -18,6 +18,14 @@ export interface Skeleton {
   terrains?: Terrain[];
   /** Weather letters: which forecast they answer. */
   outlook?: 'rain' | 'snow' | 'wind';
+  /** Postcard letters: how this stop went (2 to 3 sentences); `departure` ones are for the first place. */
+  story?: 'stop' | 'departure';
+  /**
+   * The two-skies line closing a postcard letter (review v1, ruling 5):
+   * `apart` when the weathers differ, `alike` when they match, `together`
+   * for the place he set out from (the same sky), `his` when only his is known.
+   */
+  contrast?: 'apart' | 'alike' | 'together' | 'his';
 }
 
 export const SKELETONS: Skeleton[] = [
@@ -58,11 +66,135 @@ export const SKELETONS: Skeleton[] = [
   { id: 'x.moon2', kind: 'missed', en: 'A full moon tonight. I did not walk. Some things you just look at.', zh: '今晚满月。我没有走路。有些东西只能看着。' },
   { id: 'x.sleep1', kind: 'missed', en: 'I slept by the road last night. A firefly kept watch. I hope you slept well too.', zh: '昨晚我在路边睡了。一只萤火虫替我守着。希望你也睡得好。' },
 
+  // --- A postcard letter: how the stop went (review 3, ruling 9) ---------
+  // The card's back keeps the place's one arrival line; the letter tells a
+  // little more, then closes with the two skies.
+  { id: 's.ask', kind: 'postcard', story: 'stop', en: 'I asked a cat the way to {place}. It walked off. I followed, and here I am.', zh: '我问一只猫去{place}怎么走。它走开了。我跟着它，就到了。' },
+  { id: 's.stay', kind: 'postcard', story: 'stop', en: 'I stayed in {place} for half a day. I sat, I looked, I sat again.', zh: '我在{place}待了半天。坐一会儿，看一会儿，又坐一会儿。' },
+  { id: 's.boots', kind: 'postcard', story: 'stop', en: 'The road into {place} was longer than the map said. My boots did not mind.', zh: '去{place}的路比地图上长。我的靴子不介意。' },
+  { id: 's.wave', kind: 'postcard', story: 'stop', en: 'Someone in {place} waved at me. I waved back with both hands, to be sure.', zh: '{place}有人朝我挥手。为了保险，我用两只手挥了回去。' },
+  { id: 's.map', kind: 'postcard', story: 'stop', en: 'I found {place} on my map first. Then I found the real one. Both were nice.', zh: '我先在地图上找到了{place}。然后找到了真的那个。两个都不错。' },
+  { id: 's.city1', kind: 'postcard', story: 'stop', terrains: ['city'], en: '{place} is full of doors. I knocked on none of them. I counted eleven bicycles.', zh: '{place}到处都是门。我一扇也没敲。我数了十一辆自行车。' },
+  { id: 's.city2', kind: 'postcard', story: 'stop', terrains: ['city'], en: 'The streets in {place} go in every direction. I picked the one with a bakery.', zh: '{place}的街往四面八方走。我挑了有面包店的那条。' },
+  { id: 's.coast1', kind: 'postcard', story: 'stop', terrains: ['coast'], en: 'In {place} the wind tastes of salt. I sat on the harbour wall. Boats came and went.', zh: '{place}的风是咸的。我坐在港口的墙上。船来了又走。' },
+  { id: 's.coast2', kind: 'postcard', story: 'stop', terrains: ['coast'], en: 'I walked along the water into {place}. A gull came with me. I think it wanted my bread.', zh: '我沿着水边走进{place}。一只海鸥跟着我。我想它是看上了我的面包。' },
+  { id: 's.lake1', kind: 'postcard', story: 'stop', terrains: ['lake'], en: '{place} sits by very still water. I skipped a stone. It went four times.', zh: '{place}挨着一片很静的水。我打了个水漂。跳了四下。' },
+  { id: 's.lake2', kind: 'postcard', story: 'stop', terrains: ['lake'], en: 'There is a little jetty in {place}. I sat at the end, feet over the water.', zh: '{place}有一座小码头。我坐在尽头，脚悬在水面上。' },
+  { id: 's.mountain1', kind: 'postcard', story: 'stop', terrains: ['mountain'], en: 'The way up to {place} was steep. I stopped often. The view waited for me.', zh: '去{place}的路很陡。我常常停下来。风景一直等着我。' },
+  { id: 's.mountain2', kind: 'postcard', story: 'stop', terrains: ['mountain'], en: 'In {place} the air is thin and cold. Everything looks very far away.', zh: '{place}的空气又薄又凉。什么都显得很远。' },
+  { id: 's.forest1', kind: 'postcard', story: 'stop', terrains: ['forest'], en: 'The path to {place} went under tall trees. It was green and quiet. I whispered, just in case.', zh: '去{place}的路穿过高高的树。又绿又静。我说话都小声了。' },
+  { id: 's.forest2', kind: 'postcard', story: 'stop', terrains: ['forest'], en: 'Near {place} I found a mushroom bigger than my foot. I left it where it was.', zh: '在{place}附近我看到一朵比我的脚还大的蘑菇。我没碰它。' },
+  { id: 's.hills1', kind: 'postcard', story: 'stop', terrains: ['hills'], en: '{place} is at the top of a long hill. I got there slowly. Then I sat for a long time.', zh: '{place}在一道长坡的顶上。我慢慢爬上去。然后坐了很久。' },
+  { id: 's.hills2', kind: 'postcard', story: 'stop', terrains: ['hills'], en: 'From {place} I could see the road I came on. It looks small from here.', zh: '从{place}能看见我走来的路。从这里看它好小。' },
+  { id: 's.plain1', kind: 'postcard', story: 'stop', terrains: ['plain'], en: 'The fields around {place} go on and on. I followed a fence most of the way.', zh: '{place}周围的田一直铺到天边。大半路我都跟着一道篱笆走。' },
+  { id: 's.plain2', kind: 'postcard', story: 'stop', terrains: ['plain'], en: 'In {place} a cow looked at me for a long time. I looked back. We are friends now, I think.', zh: '在{place}，一头牛看了我很久。我也看着它。我想我们现在是朋友了。' },
+  { id: 's.desert1', kind: 'postcard', story: 'stop', terrains: ['desert'], en: '{place} is warm and very quiet. My footprints followed me all the way in.', zh: '{place}很暖，也很安静。我的脚印一路跟着我走进来。' },
+  { id: 's.desert2', kind: 'postcard', story: 'stop', terrains: ['desert'], en: 'I reached {place} with sand in both boots. I emptied them. More sand came.', zh: '我到{place}时两只靴子里都是沙。倒干净了。又进来了。' },
+  { id: 's.depart1', kind: 'postcard', story: 'departure', en: 'I set off from {place} today. My pack is heavy and my leaf is up.', zh: '今天我从{place}出发了。背包很沉，叶子竖着。' },
+  { id: 's.depart2', kind: 'postcard', story: 'departure', en: 'We start here, in {place}. I looked back once. Then I walked.', zh: '我们从{place}出发。我回头看了一眼。然后就走了。' },
+
+  // --- Two skies: the line that closes a postcard letter -----------------
+  { id: 'c.apart1', kind: 'postcard', contrast: 'apart', en: 'I had {hisWeather} here, {hisTemp}. You had {yourWeather}, {yourTemp}.', zh: '我这边是{hisWeather}，{hisTemp}。你那边是{yourWeather}，{yourTemp}。' },
+  { id: 'c.apart2', kind: 'postcard', contrast: 'apart', en: 'Here I had {hisWeather}, {hisTemp}. With you, {yourWeather}. Two skies, one day.', zh: '这里是{hisWeather}，{hisTemp}。你那里是{yourWeather}。两片天，同一天。' },
+  { id: 'c.alike1', kind: 'postcard', contrast: 'alike', en: 'I had {hisWeather} here, {hisTemp}. You had {yourWeather} too. Maybe the clouds follow me.', zh: '我这边是{hisWeather}，{hisTemp}。你那边也是{yourWeather}。说不定云在跟着我。' },
+  { id: 'c.alike2', kind: 'postcard', contrast: 'alike', en: 'Here I had {hisWeather}, {hisTemp}. You had {yourWeather} as well. Our skies agree today.', zh: '这里是{hisWeather}，{hisTemp}。你那边也是{yourWeather}。今天我们的天空意见一致。' },
+  { id: 'c.together', kind: 'postcard', contrast: 'together', en: 'We had the same sky when I left. We both had {yourWeather}.', zh: '我出发时，我们头顶是同一片天。那会儿我们俩都是{yourWeather}。' },
+  { id: 'c.his', kind: 'postcard', contrast: 'his', en: 'Here I had {hisWeather}, {hisTemp}.', zh: '这里是{hisWeather}，{hisTemp}。' },
+
   // --- The back of a postcard, when a place has no line of its own ------
+  // (Letters from before review 3 used these too; kept so old ones still read.)
   { id: 'p.here', kind: 'postcard', en: 'I am in {place} now. I will tell you about it soon.', zh: '我到{place}了。回头慢慢跟你说。' },
   { id: 'p.sky', kind: 'postcard', en: 'This is {place}. The sky here is a different kind of big.', zh: '这是{place}。这里的天空是另一种大。' },
   { id: 'p.sit', kind: 'postcard', en: 'Made it to {place}. I sat down first. Then I looked.', zh: '到{place}了。我先坐下，然后才看。' },
 ];
+
+/** The weather in a few words, for the two-skies line. */
+const WEATHER_WORDS: Record<WeatherCondition, { en: string; zh: string }> = {
+  clear: { en: 'sunshine', zh: '晴天' },
+  'partly-cloudy': { en: 'some clouds', zh: '多云' },
+  overcast: { en: 'grey skies', zh: '阴天' },
+  fog: { en: 'fog', zh: '雾天' },
+  drizzle: { en: 'drizzle', zh: '毛毛雨' },
+  rain: { en: 'rain', zh: '雨天' },
+  'heavy-rain': { en: 'heavy rain', zh: '大雨' },
+  thunderstorm: { en: 'a storm', zh: '雷雨' },
+  snow: { en: 'snow', zh: '雪天' },
+  'heavy-snow': { en: 'deep snow', zh: '大雪' },
+};
+
+/** Weathers that count as the same sky: sun, cloud, wet, snow. */
+function skyGroup(c: WeatherCondition): string {
+  if (c === 'clear' || c === 'partly-cloudy') return 'sun';
+  if (c === 'overcast' || c === 'fog') return 'cloud';
+  if (c === 'snow' || c === 'heavy-snow') return 'snow';
+  return 'wet';
+}
+
+function isCondition(v: string | undefined): v is WeatherCondition {
+  return !!v && v in WEATHER_WORDS;
+}
+
+/** What a postcard letter carries about the two weathers; all optional. */
+export interface SkyVars {
+  /** His weather at the place on arrival. */
+  hisCond?: WeatherCondition;
+  hisTemp?: number;
+  /** The person's weather at that moment. */
+  yourCond?: WeatherCondition;
+  yourTemp?: number;
+  /** The place he set out from: one sky for both. */
+  together?: boolean;
+}
+
+/** Stories for a postcard letter: the terrain's own and the ones that fit anywhere. */
+export function storiesFor(terrain: Terrain, departure = false): Skeleton[] {
+  return SKELETONS.filter(
+    (s) => s.story === (departure ? 'departure' : 'stop') && (!s.terrains || s.terrains.includes(terrain)),
+  );
+}
+
+/** Pack the two weathers into a letter's vars (letters keep plain strings). */
+export function skyVars(v: SkyVars): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (v.hisCond) out.hisCond = v.hisCond;
+  if (typeof v.hisTemp === 'number') out.hisTemp = String(Math.round(v.hisTemp));
+  if (v.yourCond) out.yourCond = v.yourCond;
+  if (typeof v.yourTemp === 'number') out.yourTemp = String(Math.round(v.yourTemp));
+  if (v.together) out.together = '1';
+  return out;
+}
+
+/**
+ * The two-skies line for a postcard letter in the given language, or null
+ * when not enough is known (no network then, say). The variant is picked
+ * from the letter's id so it reads the same every time the box is opened.
+ */
+export function skyLine(vars: Record<string, string>, lang: 'en' | 'zh', unit: 'C' | 'F', letterId: string): string | null {
+  const his = vars.hisCond;
+  const yours = vars.yourCond;
+  const temp = (c: string | undefined): string => {
+    const n = Number(c);
+    if (c === undefined || !Number.isFinite(n)) return '';
+    return `${Math.round(unit === 'F' ? n * 1.8 + 32 : n)}°`;
+  };
+  let kind: Skeleton['contrast'];
+  if (vars.together === '1') kind = isCondition(yours) ? 'together' : undefined;
+  else if (isCondition(his) && isCondition(yours)) kind = skyGroup(his) === skyGroup(yours) ? 'alike' : 'apart';
+  else if (isCondition(his)) kind = 'his';
+  if (!kind) return null;
+  const pool = SKELETONS.filter((s) => s.contrast === kind);
+  let h = 0;
+  for (let i = 0; i < letterId.length; i++) h = (h * 31 + letterId.charCodeAt(i)) >>> 0;
+  const sk = pool[h % pool.length];
+  const words = (c: string | undefined): string => (isCondition(c) ? WEATHER_WORDS[c][lang] : '');
+  const fill: Record<string, string> = {
+    hisWeather: words(his),
+    yourWeather: words(yours),
+    hisTemp: temp(vars.hisTemp),
+    yourTemp: temp(vars.yourTemp),
+  };
+  return (lang === 'zh' ? sk.zh : sk.en).replace(/\{(\w+)\}/g, (m, k: string) => fill[k] ?? m);
+}
 
 export function skeletonsOf(kind: LetterKind): Skeleton[] {
   return SKELETONS.filter((s) => s.kind === kind);

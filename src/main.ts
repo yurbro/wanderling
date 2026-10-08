@@ -5,9 +5,9 @@ import { buildSegmentRoute, chooseNext, departureNote, nextSegment, routeOptions
 import { homeFrom, nearestRoute, routeFromHome } from './core/geo';
 import { detectLang, placeName, placeNote, setLang, t } from './core/i18n';
 import { REST_MS, advance, describeJourney, lastArrival, locate, startJourney, TERRAIN } from './core/journey';
-import { deliveredCards, demoPostcards, makePostcard, missingArrivals } from './core/postcards';
+import { deliveredCards, demoPostcards, isDeparture, makePostcard, missingArrivals, pendingCards } from './core/postcards';
 import { dayKey, deliver, fillSlots, markAllRead, momentTime, type Candidate, unreadCount, visibleLetters, weatherTime, bundled, type Letter } from './core/letters';
-import { momentsFor, skeletonById, weatherSkeletons } from './data/letterTexts';
+import { momentsFor, skeletonById, skyLine, skyVars, storiesFor, weatherSkeletons } from './data/letterTexts';
 import { loadMail, saveMail } from './data/mailStore';
 import { EMPTY_LOG, begin as beginSurprise, intensity, missedLetters, offer as offerSurprise, rainEndedAgo, scanPast, type Facts, type SurpriseId, type SurpriseLog } from './core/surprises';
 import { weatherIntensities } from './core/weather';
@@ -22,7 +22,7 @@ import { clearPostcards, loadPostcards, savePostcards } from './data/postcardSto
 import { routeById as findRoute } from './data/routes';
 import { DEFAULT_LOCATION, isDefaultLocation, loadLocation, requestLocation, saveLocation } from './data/location';
 import { ROUTES, TO_THE_SEA, routeById } from './data/routes';
-import { WeatherService } from './data/weather';
+import { WeatherService, fetchPlaceWeather } from './data/weather';
 import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
 import { createCityChooser } from './ui/city';
@@ -139,7 +139,8 @@ async function main(): Promise<void> {
   const mailbox = createMailbox(root, () => {
     // Opening the box reads everything that has arrived.
     mail = markAllRead(mail, Date.now());
-    if (!demoJourney) saveMail(mail);
+    // Demo letters stay out of the saved box.
+    if (!demoJourney && !mailDemo) saveMail(mail);
     hud.setMail(0);
   });
   const map = createMap(root, {
@@ -248,16 +249,37 @@ async function main(): Promise<void> {
     if (album.isOpen) album.setCards(visibleCards());
   };
   let postedTimer: number | null = null;
+  /** His side of the two skies: the weather at the place, asked once per card while it is in the post. */
+  const askedThere = new Set<string>();
+  const fetchThere = (): void => {
+    for (const card of pendingCards(postcards, Date.now())) {
+      if (card.there !== undefined || card.departure || askedThere.has(card.id)) continue;
+      const r = card.routeId === route.id ? route : findRoute(card.routeId);
+      const place = r?.places.find((p) => p.id === card.placeId);
+      if (!place || typeof place.lat !== 'number' || typeof place.lon !== 'number') continue;
+      askedThere.add(card.id);
+      void fetchPlaceWeather({ lat: place.lat, lon: place.lon }, card.at).then((there) => {
+        // Offline: leave it unknown, so the next visit can ask again.
+        if (!there) return;
+        postcards = postcards.map((c) => (c.id === card.id ? { ...c, there } : c));
+        if (!demoJourney) savePostcards(postcards);
+      });
+    }
+  };
   const syncPostcards = (arrivedNow: boolean): void => {
+    fetchThere();
     const missing = missingArrivals(route, journey, postcards);
     if (missing.length === 0) return;
     for (const arrival of missing) {
       const card = makePostcard(route, arrival, location, forcedWeather ? null : weather.current(new Date(arrival.at)), {
         home: journey.home,
         deliverNow,
+        // The card from where he set out comes at once, as the journey begins.
+        departure: isDeparture(route, journey, arrival),
       });
       if (card) postcards = [...postcards, card];
     }
+    fetchThere();
     if (!demoJourney) savePostcards(postcards);
     // "In the post": after the arrival line if there was one just now, else right away.
     if (!deliverNow && deliveredCards(postcards, Date.now()).length < postcards.length) {
@@ -272,6 +294,12 @@ async function main(): Promise<void> {
   /** A letter's text in the current language: a place's own line, a skeleton, or a digest's lines. */
   const letterLines = (l: Letter): string[] => {
     if (l.kind === 'digest') return bundled(mail, l).flatMap((x) => letterLines(x));
+    // A postcard letter: how the stop went, then the two skies.
+    const story = skeletonById(l.skeleton);
+    if (l.kind === 'postcard' && story?.story) {
+      const sky = skyLine(l.vars, lang, hud.unit, l.id);
+      return [[fillSlots(lang === 'zh' ? story.zh : story.en, l.vars), sky].filter(Boolean).join(lang === 'zh' ? '' : ' ')];
+    }
     if (l.skeleton.startsWith('place:')) {
       const [, routeId, placeId] = l.skeleton.split(':');
       const r = routeId === route.id ? route : findRoute(routeId);
@@ -290,16 +318,29 @@ async function main(): Promise<void> {
     const now = Date.now();
     const today = dayKey(now);
     const candidates: Candidate[] = [];
-    // Each delivered postcard carries a line on its back.
+    // Each delivered postcard comes with a letter: a few lines on how the stop
+    // went, and the two skies (his weather there, the person's at home). The
+    // card's back keeps the place's one arrival line (review 3, ruling 9).
     for (const card of deliveredCards(postcards, now)) {
-      const place = route.places.find((p) => p.id === card.placeId);
+      // The first card is made on the first tick, often before the weather has
+      // loaded: give it a minute so the "same sky" line can say what the sky was.
+      const yours = card.weather ?? (card.departure ? weather.current(new Date(card.at)) : null);
+      if (card.departure && !yours && now - card.at < 60_000) continue;
       candidates.push({
         id: `postcard:${card.id}`,
         kind: 'postcard',
         wantAt: card.deliverAt ?? card.at,
-        skeleton: place?.note ? `place:${route.id}:${card.placeId}` : undefined,
-        pool: place?.note ? undefined : ['p.here', 'p.sky', 'p.sit'],
-        vars: { place: card.placeName },
+        pool: storiesFor(card.terrain, !!card.departure).map((sk) => sk.id),
+        vars: {
+          place: card.placeName,
+          ...skyVars({
+            hisCond: card.there?.condition,
+            hisTemp: card.there?.temperature,
+            yourCond: yours?.condition,
+            yourTemp: yours?.temperature,
+            together: card.departure,
+          }),
+        },
       });
     }
     // One small thing from the road a day, at its steady hour, from where he is.
@@ -336,7 +377,7 @@ async function main(): Promise<void> {
       { id: 'demo:1', kind: 'moment', wantAt: now - 26 * 3_600_000, pool: ['m.dog'] },
       { id: 'demo:2', kind: 'weather', wantAt: now - 20 * 3_600_000, pool: ['w.rain1'] },
       { id: 'demo:3', kind: 'moment', wantAt: now - 3 * 3_600_000, pool: ['m.clouds'] },
-      { id: 'demo:4', kind: 'postcard', wantAt: now - 3_600_000, pool: ['p.sky'], vars: { place: 'Porto' } },
+      { id: 'demo:4', kind: 'postcard', wantAt: now - 3_600_000, pool: ['s.coast1'], vars: { place: lang === 'zh' ? '波尔图' : 'Porto', ...skyVars({ hisCond: 'rain', hisTemp: 14, yourCond: 'clear', yourTemp: 19 }) } },
     ], now);
   }
 

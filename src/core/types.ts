@@ -196,8 +196,15 @@ export interface Postcard {
   deliverAt?: number;
   /** The wanderer's line. */
   note: string;
-  /** Weather at the moment of arrival, when known. */
+  /** Weather at the moment of arrival, when known: the person's own (the card shows "your sky then"). */
   weather: { condition: WeatherCondition; code: number; temperature: number } | null;
+  /**
+   * The weather where he was, for the letter's two skies; fetched once after
+   * posting. Undefined until then, null when it could not be had.
+   */
+  there?: { condition: WeatherCondition; code: number; temperature: number } | null;
+  /** The card from the place he set out from: handed over at once (review 3, ruling 5). */
+  departure?: boolean;
   /** Scene colors at arrival, 0xRRGGBB, for the card's little landscape. */
   colors: { skyTop: number; skyHorizon: number; hillFar: number; hillNear: number; ground: number; sea: number };
   /** True when the sky was pale enough for dark ink. */
@@ -332,6 +339,23 @@ export interface PlaceMarker {
   cottage: boolean;
 }
 
+/**
+ * The next place seen from afar: a flat silhouette on the horizon that comes
+ * up when the HUD says "almost there" and grows as the distance closes, before
+ * the signpost (review 3, ruling 4). Always present; alpha 0 hides it.
+ */
+export interface Landmark {
+  /** The shape follows the place's terrain: towers for a city, a lighthouse at the coast. */
+  terrain: Terrain;
+  /** A small number from the place's id, so two cities are not drawn alike. */
+  seed: number;
+  /** 0..1 how close: 0 is a speck on the horizon, 1 is the place itself. (Not `near`: that key is a hill colour to the blender.) */
+  closeness: number;
+  alpha: number;
+  /** The silhouette's colour, a far-hill haze. */
+  silhouette: number;
+}
+
 export interface RenderState {
   phase: DayPhase;
   sky: SkyPalette;
@@ -351,6 +375,7 @@ export interface RenderState {
   travel: { mode: LegMode };
   /** Null when no journey is under way. */
   marker: PlaceMarker | null;
+  landmark: Landmark;
   /** True when the HUD text should be dark ink instead of pale paper. */
   darkInk: boolean;
   surprise: SurpriseShow & {
