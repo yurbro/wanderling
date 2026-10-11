@@ -153,7 +153,8 @@ describe('direct with weather', () => {
   });
 
   it('fog pulls the far hills towards the fog color', () => {
-    const clear = direct(buildWorldState(noon, LONDON, null));
+    // Against a grey day without fog: a clear day's far land is already pale as air.
+    const clear = direct(buildWorldState(noon, LONDON, demoWeather('overcast', noon)));
     const foggy = direct(buildWorldState(noon, LONDON, demoWeather('fog', noon)));
     const dist = (a: number, b: number): number => {
       const x = hexToRgb(a);

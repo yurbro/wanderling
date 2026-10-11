@@ -75,7 +75,8 @@ export function direct(ws: WorldState): RenderState {
   };
 
   const hills = {
-    far: land(mix(LAND.hillFar, sky.horizon, 0.45), 0.9, 0.3, 0.92, 0.2),
+    // The far land is mostly air: it leans well towards the sky at the horizon.
+    far: land(mix(LAND.hillFar, sky.horizon, 0.58), 0.9, 0.3, 0.92, 0.2),
     mid: land(mix(LAND.hillMid, sky.horizon, 0.2), 0.92, 0.3, 0.6, 0.3),
     near: land(LAND.hillNear, 0.94, 0.3, 0.3, 0.4),
   };
