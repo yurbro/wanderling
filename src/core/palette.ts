@@ -132,4 +132,14 @@ export const PROPS = {
   trainRoof: '#3E3E46',
   trim: '#E8DEC3',
   fuselage: '#4A5062',
+  // Inside the carriage: pale wood and paper, so the figure still carries the picture.
+  cabinWall: '#DDD2B8',
+  cabinFrame: '#A88E6C',
+  cabinSill: '#C7B48F',
+  cabinPanel: '#C9B692',
+  cabinFloor: '#A8957A',
+  // On deck: sun-bleached planks and a painted bulwark.
+  deck: '#CDBB97',
+  bulwark: '#E3DAC4',
+  woodDark: '#6E5A44',
 };
