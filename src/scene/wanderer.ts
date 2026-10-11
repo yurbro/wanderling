@@ -322,6 +322,11 @@ export class Wanderer {
     this.chooseEyes();
   }
 
+  /** Where the boots stand and how big one unit is, for things that sit beside him. */
+  footing(): { x: number; y: number; u: number } {
+    return { x: this.feet.x, y: this.feet.y, u: U * this.scale };
+  }
+
   /** Place the boots at (x, groundY) and scale the figure to `height` pixels per unit. */
   layout(x: number, groundY: number, height: number): void {
     this.feet = { x, y: groundY };

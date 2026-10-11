@@ -391,6 +391,8 @@ export interface RenderState {
   landmark: Landmark;
   /** True when the HUD text should be dark ink instead of pale paper. */
   darkInk: boolean;
+  /** Bedtime mode's campfire: 0 is no fire, 1 burning. */
+  bedtime: { fire: number };
   surprise: SurpriseShow & {
     /** Where the rainbow's centre stands across the sky, 0..1: opposite the sun. */
     rainbowX: number;

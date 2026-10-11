@@ -50,6 +50,7 @@ import { WeatherService, fetchHistory, fetchPlaceWeather } from './data/weather'
 import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
 import { createCityChooser } from './ui/city';
+import { applyBedtime, bedtimeLook, isBedtimeHour, REOPEN_AFTER_MS } from './core/bedtime';
 import { createHud } from './ui/hud';
 import { createSettings } from './ui/settings';
 import { setupInstallHint } from './ui/install';
@@ -175,6 +176,8 @@ async function main(): Promise<void> {
   // He is not here until the backpack rolls in.
   if (introMode === 'full') renderer.hold(true);
 
+  /** When bedtime mode began (the app's clock), or null while it is not on. */
+  let bedtimeAt: number | null = null;
   const hud = createHud(root, {
     demo: params.get('demo') === '1',
     onPlace: () => city.open(),
@@ -204,6 +207,8 @@ async function main(): Promise<void> {
   // Notes are for the present: a replayed day says nothing.
   const showNote = hud.setNote.bind(hud);
   hud.setNote = (text: string, lingerMs?: number): void => {
+    // By the fire there is only his one line, no letters or postcards to look at.
+    if (bedtimeAt !== null && text !== say('hushAsleep', { name: nameNow() })) return;
     if (replayAt === null) showNote(text, lingerMs);
   };
   const album = createAlbum(root, hud.unit, () => myName);
@@ -746,6 +751,40 @@ async function main(): Promise<void> {
     });
   }
 
+  // Bedtime mode (decisions D9): opened late at night, he sits by a fire, the
+  // sky darkens, ten minutes on he sleeps and the picture fades to black and
+  // stops. ?bedtime=1 forces it at any hour, ?bedtime=30 runs it 30 times faster,
+  // ?bedtimeMin=6 starts it six minutes in.
+  const bedtimeParam = params.get('bedtime');
+  const bedtimeSpeed = Math.max(1, Number(bedtimeParam) || 1);
+  const veil = document.createElement('div');
+  veil.className = 'bedtime-veil';
+  root.appendChild(veil);
+  const bedtimeHead = Math.max(0, Number(params.get('bedtimeMin')) || 0) * 60_000;
+  let bedtimeTimer: number | null = null;
+  const stopBedtime = (): void => {
+    bedtimeAt = null;
+    if (bedtimeTimer !== null) window.clearInterval(bedtimeTimer);
+    bedtimeTimer = null;
+    veil.style.opacity = '0';
+    veil.classList.remove('on');
+    root.classList.remove('bedtime');
+    root.style.removeProperty('--bedtime-hud');
+    renderer.resume();
+    tick();
+  };
+  const startBedtime = (): void => {
+    bedtimeAt = clock();
+    root.classList.add('bedtime');
+    renderer.resume();
+    if (bedtimeTimer === null) bedtimeTimer = window.setInterval(() => tick(), 2_000);
+    tick();
+  };
+  veil.addEventListener('click', () => {
+    if (veil.classList.contains('on')) stopBedtime();
+  });
+  const bedtimeAllowed = (): boolean => !introMode && !demoJourney && demoDay === null && (bedtimeParam !== null || isBedtimeHour(now()));
+
   const tick = (): void => {
     const t = now();
     const wall = clock();
@@ -779,6 +818,15 @@ async function main(): Promise<void> {
     syncMail(position);
     world = { ...buildWorldState(t, location, weatherFor(t), position), surprises: showSurprises(wall) };
     render = direct(world);
+    let bedtimeOver = false;
+    if (bedtimeAt !== null) {
+      const look = bedtimeLook((clock() - bedtimeAt) * bedtimeSpeed + bedtimeHead);
+      render = applyBedtime(render, look);
+      veil.style.opacity = String(look.fade);
+      veil.classList.toggle('on', look.fade > 0.5);
+      root.style.setProperty('--bedtime-hud', String(1 - 0.7 * look.dim));
+      bedtimeOver = look.over;
+    }
     if (forcedTerrain) render = { ...render, land: { ...render.land, terrain: forcedTerrain, relief: TERRAIN[forcedTerrain].relief, sea: TERRAIN[forcedTerrain].sea } };
     // Falling asleep: the firefly's one line, once.
     // A beat later, so it is not covered by the postcard line that may follow an arrival.
@@ -790,6 +838,12 @@ async function main(): Promise<void> {
     hadCat = cat;
     renderer.setState(render);
     hud.update(world, render);
+    // Black and still: nothing draws until a touch (or the next opening) wakes it.
+    if (bedtimeOver) {
+      if (bedtimeTimer !== null) window.clearInterval(bedtimeTimer);
+      bedtimeTimer = null;
+      window.setTimeout(() => renderer.pause(), 1_200);
+    }
     root.querySelector('.intro')?.classList.toggle('dark-ink', render.darkInk);
     hud.setJourney(describeJourney(position, wall));
     if (map.isOpen) map.update(route, position, visibleCards(), routeOptions(journey, route, ROUTES));
@@ -859,6 +913,7 @@ async function main(): Promise<void> {
       if (!allowed) declineMotion();
     });
   };
+  if (bedtimeAllowed()) startBedtime();
   if (departure) hud.setNote(departure, 15_000);
   // A read-only peek for debugging and screenshots: window.__wanderling.render
   Object.defineProperty(window, '__wanderling', {
@@ -881,10 +936,16 @@ async function main(): Promise<void> {
   // The weather cache lasts 45 minutes; checking every 5 is cheap and catches it.
   window.setInterval(() => void weather.refresh(location), 5 * 60_000);
 
+  let hiddenAt = Date.now();
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) renderer.pause();
-    else {
-      renderer.resume();
+    if (document.hidden) {
+      hiddenAt = Date.now();
+      renderer.pause();
+    } else {
+      // Back after a while, late at night: it is opening the app again.
+      if (bedtimeAllowed() && Date.now() - hiddenAt >= REOPEN_AFTER_MS && (bedtimeAt === null || veil.classList.contains('on'))) {
+        startBedtime();
+      } else if (bedtimeAt === null || !veil.classList.contains('on')) renderer.resume();
       tick();
       void weather.refresh(location);
     }
