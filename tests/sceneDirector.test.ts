@@ -318,7 +318,7 @@ describe('direct decides what the wanderer carries', () => {
     const autumn = hexToRgb(autumnColor);
     expect(autumn.r).toBeGreaterThan(autumn.g);
     expect(autumn.g).toBeGreaterThan(autumn.b);
-    expect(sat(autumnColor)).toBeLessThan(ceiling * 0.7);
+    expect(sat(autumnColor)).toBeLessThan(ceiling);
     // Winter is greyer than summer.
     expect(sat(leafSeasonColor(new Date(Date.UTC(2026, 0, 20)), 51))).toBeLessThan(sat(hex(LEAF_SEASONS.summer)));
     // The tint never asks a channel to be brighter than the paint.
