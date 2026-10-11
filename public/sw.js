@@ -15,10 +15,14 @@ const SHELL = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',
-  // The wanderling's parts, so the figure is there offline too.
-  ...['body', 'leaf', 'scarf-band', 'scarf-tail', 'backpack', 'boot', 'hand', 'leaf-umbrella', 'lantern'].map((n) => `./art/${n}.png`),
-  // The hills terrain kit: bands and props.
-  ...['hills-far', 'hills-mid', 'hills-near', 'hills-ground', 'grass-1', 'grass-2', 'grass-3', 'grass-4', 'stone-1', 'stone-2', 'stone-3', 'flower-1', 'flower-2', 'flower-3', 'cloud-1', 'cloud-2', 'cloud-3', 'cloud-4', 'signpost', 'lamp', 'cottage'].map((n) => `./art/terrain/${n}.png`),
+  // The wanderling's parts, so the figure is there offline too (WebP; the PNG twins are the fallback for old browsers).
+  ...['body', 'leaf', 'scarf-band', 'scarf-tail', 'backpack', 'boot', 'hand', 'leaf-umbrella', 'lantern'].map((n) => `./art/${n}.webp`),
+  // The terrain kit: the shared props, and the bands of the first days' land (the home town, the fields, the hills).
+  ...[
+    'grass-1', 'grass-2', 'grass-3', 'grass-4', 'stone-1', 'stone-2', 'stone-3', 'flower-1', 'flower-2', 'flower-3',
+    'cloud-1', 'cloud-2', 'cloud-3', 'cloud-4', 'signpost', 'lamp', 'cottage', 'bench', 'postbox', 'hay-bale', 'haystack',
+    ...['city', 'plain', 'hills'].flatMap((t) => ['far', 'mid', 'near', 'ground'].map((b) => `${t}-${b}`)),
+  ].map((n) => `./art/terrain/${n}.webp`),
 ];
 
 self.addEventListener('install', (event) => {

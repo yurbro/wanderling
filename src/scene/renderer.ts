@@ -12,7 +12,7 @@ import { Wanderer, loadParts } from './wanderer';
 import { WeatherPainter } from './weatherLayers';
 import { Campfire } from './campfire';
 import { pickProp } from '../core/props';
-import { EXTRA_HEIGHT, TERRAIN_EXTRAS, bandSetFor, loadBands, loadProps, type BandName, type BandSet, type TerrainProps } from './terrain';
+import { EXTRA_HEIGHT, TERRAIN_EXTRAS, bandSetFor, loadBands, loadExtras, loadProps, type BandName, type BandSet, type TerrainProps } from './terrain';
 import type { Terrain } from '../core/types';
 
 /** Fraction of the screen height where the sky meets the land. */
@@ -155,6 +155,8 @@ export class SceneRenderer {
   private elapsed = 0;
   private paused = false;
   private readonly campfire = new Campfire();
+  /** Resolves once the wanderling's pictures are in (or have failed): everything else queues behind him. */
+  private partsReady: Promise<void> = Promise.resolve();
 
   private readonly hillSpecs: Record<'far' | 'mid' | 'near', HillSpec> = {
     far: { base: 0.52, amps: [0.045, 0.02, 0.008], freqs: [1.7, 4.1, 9.3], phases: [0.4, 2.1, 5.2] },
@@ -248,7 +250,11 @@ export class SceneRenderer {
 
     this.app.renderer.on('resize', () => this.layout());
     this.layout();
-    void loadProps()
+    // The wanderling first (nine small pictures), the roadside things after, so
+    // on a slow connection he is standing there before the grass comes in.
+    this.partsReady = loadParts().then(() => undefined, () => undefined);
+    void this.partsReady
+      .then(() => loadProps())
       .then((props) => this.dressProps(props))
       .catch((err) => console.warn('[wanderling] terrain props not loaded', err));
     this.app.ticker.add((ticker) => this.frame(ticker.deltaMS));
@@ -769,8 +775,9 @@ export class SceneRenderer {
         for (const n of names) if (o.g.texture === props.extras[n]) inView[n] = (inView[n] ?? 0) + 1;
       }
       const picked = pickProp(names, inView, rng());
-      if (!picked) return this.dressDetail(sprite, 'stone', rng);
-      const name = picked as keyof typeof props.extras;
+      // Nothing left to pick, or the terrain's own pictures not here yet: a stone instead.
+      if (!picked || !props.extras[picked]) return this.dressDetail(sprite, 'stone', rng);
+      const name = picked;
       sprite.texture = props.extras[name];
       return (ground * EXTRA_HEIGHT[name]) / sprite.texture.height;
     }
@@ -922,6 +929,9 @@ export class SceneRenderer {
   /** The shared props have loaded: painted clouds, ground details and place props. */
   private dressProps(props: TerrainProps): void {
     this.props = props;
+    // The painted things ease in rather than popping over the drawn ones.
+    this.detailLayer.alpha = 0;
+    this.marker.alpha = 0;
     this.weather.setCloudTextures(props.clouds, this.app.renderer);
     this.makeDetails();
     this.drawMarker();
@@ -933,7 +943,15 @@ export class SceneRenderer {
     const key = bandSetFor(terrain);
     if (key === this.bandsFor || key === this.wantBands) return;
     this.wantBands = key;
-    void loadBands(key)
+    // The terrain's own things (a lighthouse, a haystack) come with its bands, and take their places when in.
+    void this.partsReady
+      .then(() => loadExtras(terrain))
+      .then(() => {
+        if (this.props && this.state?.land.terrain === terrain) this.redressDetails();
+      })
+      .catch((err) => console.warn('[wanderling] terrain extras not loaded', err));
+    void this.partsReady
+      .then(() => loadBands(key))
       .then((set) => {
         if (this.wantBands !== key) return;
         this.applyBands(set, key);
@@ -982,7 +1000,7 @@ export class SceneRenderer {
 
   /** New bands ease in over a second or so instead of popping. */
   private fadeBands(dt: number): void {
-    const sprites = [this.hills.far.band, this.hills.mid.band, this.hills.near.band, this.groundBand];
+    const sprites = [this.hills.far.band, this.hills.mid.band, this.hills.near.band, this.groundBand, this.detailLayer, this.marker];
     for (const b of sprites) {
       if (b && b.alpha < 1) b.alpha = Math.min(1, b.alpha + dt * 0.9);
     }
