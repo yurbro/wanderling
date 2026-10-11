@@ -105,10 +105,19 @@ export interface Place {
   zh?: { name: string; region?: string; note?: string };
   /** A stop on the way that is not a destination: he changes there and no postcard is sent. */
   transit?: boolean;
+  /** How long he rests here, in days; half a day when unset (the long main line rests longer in the north). */
+  restDays?: number;
+  /** Only passed in these months (1 to 12); out of season the place is left out and the way goes straight on. */
+  months?: number[];
+  /** A journey's end with a letter for each season (the long main line's last place). */
+  endings?: Record<EndingSeason, { en: string; zh: string }>;
 }
 
-/** How a leg is covered: on foot, or by train or plane between routes. */
-export type LegMode = 'walk' | 'ride' | 'fly';
+/** What the end of the long main line is like, by the time of year (decisions.md section 9, ruling 24). */
+export type EndingSeason = 'aurora' | 'midnightSun' | 'brightNight';
+
+/** How a leg is covered: on foot; by train or plane between routes; by ferry or coastal ship on the long main line. */
+export type LegMode = 'walk' | 'ride' | 'fly' | 'ferry' | 'ship';
 
 export interface Leg {
   /** Real-world distance in kilometres. */
@@ -130,6 +139,8 @@ export interface Route {
   /** Ordered places; legs[i] joins places[i] to places[i + 1]. */
   places: Place[];
   legs: Leg[];
+  /** The long main line: it comes after the first short route, never first (section 9, ruling 19). */
+  long?: boolean;
 }
 
 export interface Arrival {
@@ -160,6 +171,8 @@ export interface JourneyState {
   next?: string | null;
   /** A new journey's going-out stretch (ruling 14): the walk to the little station and the night train. */
   outset?: Outset;
+  /** Places left out of this route this time round, being out of season when he reached the place before (section 9, ruling 25). */
+  skipped?: string[];
 }
 
 /** Where the wanderer is on the route right now, derived from JourneyState. */

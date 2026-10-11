@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BAG_ITEMS, SKELETONS, skyLine, skyVars, storiesFor } from '../src/data/letterTexts';
 import { STATION_PLACE } from '../src/core/outset';
 import { setLang, t } from '../src/core/i18n';
-import { ROUTES } from '../src/data/routes';
+import { NORTH_LIGHT, ROUTES } from '../src/data/routes';
 
 /**
  * The red lines from docs/design/decisions.md section 6, checked on every
@@ -47,6 +47,8 @@ const lines: Line[] = [
   ...SKELETONS.flatMap((s) => (s.options ?? []).map((o) => ({ where: `option ${s.id}/${o.id}`, en: o.en, zh: o.zh, reminderAllowed: false }))),
   ...Object.entries(BAG_ITEMS).map(([id, b]) => ({ where: `pack ${id}`, en: `${b.en}. ${b.short.en}.`, zh: `${b.zh}。${b.short.zh}。`, reminderAllowed: false })),
   { where: 'station', en: STATION_PLACE.en.note, zh: STATION_PLACE.zh.note, reminderAllowed: false },
+  // The three endings of the long main line (section 9, ruling 24).
+  ...Object.entries(NORTH_LIGHT.places[NORTH_LIGHT.places.length - 1].endings ?? {}).map(([season, l]) => ({ where: `ending ${season}`, en: l.en, zh: l.zh, reminderAllowed: false })),
   ...ROUTES.flatMap((r) =>
     r.places
       .filter((p) => p.note)

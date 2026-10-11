@@ -16,6 +16,8 @@ export interface MapPoint {
   y: number;
   /** Where the name goes relative to the dot, chosen so names do not collide. */
   labelSide: LabelSide;
+  /** On a crowded sheet (the long main line) a name that would sit on another is left off; the dot stays. */
+  labelHidden?: boolean;
 }
 
 export interface MapLayout {
@@ -115,14 +117,22 @@ function outsideArea(box: Box, sheet: Box): number {
   return dx * h + dy * w;
 }
 
+/** More places than this on one sheet and names that would collide are left off. */
+export const CROWDED = 20;
+
 /**
  * Pick a side for every name so that names keep off each other, off other
  * dots and on the sheet. Greedy, north to south: each name takes the
  * candidate with the least overlap, preferring the side away from the
- * nearer edge, then the opposite side, then above, then below.
+ * nearer edge, then the opposite side, then above, then below. On a
+ * crowded sheet a name with nowhere clean to go is hidden, except the
+ * first and last place's.
  */
 export function placeLabels(points: MapPoint[], width: number, height: number): void {
-  const order = [...points].sort((a, b) => a.y - b.y);
+  const crowded = points.length > CROWDED;
+  const keep = new Set([points[0], points[points.length - 1]]);
+  // The ends of the route first, so that a name kept on a crowded sheet is never the one that overlaps.
+  const order = [...points].sort((a, b) => Number(keep.has(b)) - Number(keep.has(a)) || a.y - b.y);
   const placed: Box[] = [];
   const dots: Box[] = points.map((p) => ({ x1: p.x - DOT_R, y1: p.y - DOT_R, x2: p.x + DOT_R, y2: p.y + DOT_R }));
   const sheet: Box = { x1: 4, y1: 40, x2: width - 4, y2: height - 6 };
@@ -145,6 +155,11 @@ export function placeLabels(points: MapPoint[], width: number, height: number): 
       if (penalty === 0) break;
     }
     p.labelSide = chosen;
+    if (crowded && best > 0 && !keep.has(p)) {
+      p.labelHidden = true;
+      continue;
+    }
+    p.labelHidden = false;
     placed.push(labelBox(p, chosen));
   }
 }

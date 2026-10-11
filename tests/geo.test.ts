@@ -111,6 +111,8 @@ describe('the wider world', () => {
     expect(nearestRoute(ROUTES, { lat: 34.05, lon: -118.24 }).route.id).toBe('pacific-coast-v1'); // Los Angeles
     expect(nearestRoute(ROUTES, { lat: -33.87, lon: 151.21 }).route.id).toBe('great-ocean-v1'); // Sydney
     expect(nearestRoute(ROUTES, { lat: 39.9, lon: 116.4 }).route.id).toBe('jiangnan-v1'); // Beijing
-    expect(ROUTES.length).toBe(7);
+    // Seven short routes and the long main line.
+    expect(ROUTES.length).toBe(8);
+    expect(ROUTES.filter((r) => !r.long).length).toBe(7);
   });
 });

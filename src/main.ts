@@ -1,6 +1,6 @@
 import './style.css';
 import { direct, terrainAt } from './core/sceneDirector';
-import type { GeoPoint, Home, JourneyState, Position, RenderState, Route, WeatherCondition, WeatherState, WorldState, Terrain } from './core/types';
+import type { GeoPoint, Home, JourneyState, Position, RenderState, Route, WeatherCondition, WeatherState, WorldState, Terrain, EndingSeason } from './core/types';
 import { buildSegmentRoute, chooseNext, departureNote, nextSegment, routeOptions } from './core/chain';
 import { homeFrom } from './core/geo';
 import { dayAt, outsetDestination, planOutset, withOutset } from './core/outset';
@@ -22,7 +22,8 @@ import {
 } from './core/script';
 import { eveningOf, fullMoonEvenings, skyLetters } from './core/skyCalendar';
 import { detectLang, placeName, placeNote, setLang, t } from './core/i18n';
-import { REST_MS, advance, describeJourney, hold, lastArrival, locate, startJourney, TERRAIN } from './core/journey';
+import { advance, advanceAlong, describeJourney, hold, lastArrival, locate, restMs, seasonalSkips, startJourney, TERRAIN } from './core/journey';
+import { endingSeason } from './core/ending';
 import { deliveredCards, demoPostcards, isDeparture, makePostcard, missingArrivals, pendingCards } from './core/postcards';
 import { EMPTY_MAIL, dayKey, deliver, fillSlots, markAllRead, momentTime, type Candidate, unreadCount, visibleLetters, weatherTime, bundled, type Letter } from './core/letters';
 import { BAG_DEFAULT, BAG_ITEMS, GENERAL_QUESTIONS, momentsFor, skeletonById, skyLetterPool, skyLine, skyVars, storiesFor, weatherSkeletons } from './data/letterTexts';
@@ -71,6 +72,7 @@ import { createMap } from './ui/map';
  *   ?postcards=demo    add three sample postcards to the album (not saved)
  *   ?postcards=now     hand over postcards the moment they are posted (slow post off)
  *   ?mail=demo         drop a few sample letters in the box (not saved)
+ *   ?ending=aurora     the long line's end letter for a season: aurora, midnightSun, brightNight (not saved)
  *   ?intro=reset       start over as a brand-new person: forget everything saved here
  *                      (except the language) and play the first minute
  *   ?intro=play        play the first minute again, changing nothing that is saved
@@ -221,7 +223,7 @@ async function main(): Promise<void> {
       // Opening the box reads everything that has arrived.
       mail = markAllRead(mail, clock());
       // Demo letters stay out of the saved box.
-      if (!demoJourney && !mailDemo) saveMail(mail);
+      if (!demoJourney && !mailDemo && !endingDemo) saveMail(mail);
       hud.setMail(0);
       mailbox.setPack(packLine());
     },
@@ -327,9 +329,12 @@ async function main(): Promise<void> {
   // A demo peek at another route: start it afresh, unsaved.
   const demoRoute = params.get('route') ? routeById(params.get('route')!) : undefined;
   if (demoRoute) {
-    route = demoRoute;
-    journey = { ...startJourney(route, clock()), home: null, from: null, walked: [] };
+    // Places out of season are left out as they would be on the way (ruling 25).
+    journey = { ...startJourney(demoRoute, clock()), home: null, from: null, walked: [], skipped: seasonalSkips(demoRoute, clock()) };
+    route = buildSegmentRoute(journey, ROUTES) ?? demoRoute;
   }
+  /** The route as travelled for a state: the saved skips applied, the transfer or the going-out stretch in front. */
+  const routeFor = (s: JourneyState): Route => buildSegmentRoute(s, ROUTES) ?? route;
   const kmJump = Number(params.get('km'));
   const jumpNext = params.get('journey') === 'next';
   const demoJourney = (params.has('km') && Number.isFinite(kmJump)) || jumpNext || !!demoRoute || demoDay !== null;
@@ -345,8 +350,9 @@ async function main(): Promise<void> {
     journey = { ...journey, km: Math.max(0, kmJump), restingUntil: null, updatedAt: clock() };
   }
   // A ?day= run walks its days in the replay below, not in one stride here.
-  const first = demoDay !== null ? { state: journey, arrived: [] } : advance(route, journey, clock());
+  const first = demoDay !== null ? { state: journey, arrived: [] } : advanceAlong(routeFor, journey, clock());
   journey = first.state;
+  if ('route' in first) route = first.route;
   if (!demoJourney) saveJourney(journey);
 
   // The first week's script (decisions D8). A new traveller's week begins with
@@ -456,6 +462,12 @@ async function main(): Promise<void> {
       const p = r?.places.find((x) => x.id === placeId);
       if (p?.note) return [placeNote(p)];
     }
+    if (l.skeleton.startsWith('ending:')) {
+      const [, routeId, placeId, season] = l.skeleton.split(':');
+      const r = routeId === route.id ? route : findRoute(routeId);
+      const ending = r?.places.find((x) => x.id === placeId)?.endings?.[season as EndingSeason];
+      if (ending) return [lang === 'zh' ? ending.zh : ending.en];
+    }
     const sk = skeletonById(l.skeleton);
     if (!sk) return [];
     // The pack's thing is named in the reader's language when the letter is shown.
@@ -513,6 +525,12 @@ async function main(): Promise<void> {
         },
       });
     }
+    // The end of the long main line: one letter for the season he got there in (ruling 24), the night of his arrival.
+    for (const a of journey.arrivals) {
+      const p = route.places.find((x) => x.id === a.placeId);
+      if (!p?.endings) continue;
+      candidates.push({ id: `ending:${route.id}:${a.at}`, kind: 'sky', wantAt: a.at + 6 * 3_600_000, skeleton: `ending:${route.id}:${p.id}:${endingSeason(a.at)}`, vars: { name: nameNow(), place: placeName(p) } });
+    }
     // One small thing from the road a day, at its steady hour, from where he
     // is; in the first week, only on the days without a letter of their own.
     const momentAt = momentTime(today);
@@ -543,7 +561,7 @@ async function main(): Promise<void> {
     const next = deliver(mail, candidates, now, { quiet: bedtimeHolding });
     if (next !== mail) {
       mail = next;
-      if (!demoJourney && !mailDemo) saveMail(mail);
+      if (!demoJourney && !mailDemo && !endingDemo) saveMail(mail);
     }
     saveLog();
     const unread = unreadCount(mail, now);
@@ -611,6 +629,11 @@ async function main(): Promise<void> {
     return encodePanels(panels);
   };
 
+  // ?ending=aurora|midnightSun|brightNight drops the long line's letter for that season in the box (not saved).
+  const endingDemo = params.get('ending');
+  if (endingDemo === 'aurora' || endingDemo === 'midnightSun' || endingDemo === 'brightNight') {
+    mail = deliver(mail, [{ id: `demo:ending:${endingDemo}`, kind: 'sky', wantAt: clock() - 60_000, skeleton: `ending:north-light-v1:tromso:${endingDemo}`, vars: { name: nameNow(), place: lang === 'zh' ? '特罗姆瑟' : 'Tromsø' } }], clock());
+  }
   if (mailDemo) {
     const now = clock();
     mail = deliver(mail, [
@@ -824,8 +847,11 @@ async function main(): Promise<void> {
       rememberSlept();
       bedtimeCtx = { ...bedtimeCtx, sleptTonight: true };
     }
-    const step = bedtimeHolding ? hold(route, journey, wall) : advance(route, journey, wall);
+    const step = bedtimeHolding ? hold(route, journey, wall) : advanceAlong(routeFor, journey, wall);
+    const hadSkips = journey.skipped?.length ?? 0;
     journey = step.state;
+    // A place found out of season: the way now goes straight past it.
+    if ((journey.skipped?.length ?? 0) !== hadSkips) route = routeFor(journey);
     if (step.arrived.length > 0) {
       if (!demoJourney) saveJourney(journey);
       const place = step.arrived[step.arrived.length - 1];
@@ -834,7 +860,7 @@ async function main(): Promise<void> {
     // A finished route, rest over: set off on the next segment of the chain.
     const posNow = locate(route, journey, wall);
     const rested = lastArrival(journey);
-    if (posNow.finished && rested && wall >= rested.at + REST_MS) {
+    if (posNow.finished && rested && wall >= rested.at + restMs(route.places[route.places.length - 1])) {
       const seg = nextSegment(journey, route, ROUTES, wall);
       route = seg.route;
       journey = seg.journey;

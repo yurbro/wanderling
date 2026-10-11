@@ -12,6 +12,10 @@ import { drawCloud } from './weatherLayers';
  * seated by the glass. Plane: the land is gone, a sea of clouds drifts below
  * and the wanderer looks out of a porthole in the fuselage.
  *
+ * Ferry and coastal ship (the long main line): the same window, but the
+ * poles are gone, the roll is slow and long, and what runs past outside is
+ * the sea the leg's terrain paints.
+ *
  * `behind` goes between the land and the wanderer, `front` above the wanderer.
  */
 
@@ -87,6 +91,12 @@ export class TransportPainter {
       this.front.y = this.sway;
       this.behind.y = this.sway * 0.5;
       this.movePoles(dt, groundSpeed);
+    } else if (this.mode === 'ferry' || this.mode === 'ship') {
+      // At sea: a long slow roll, the ship a little livelier than the ferry.
+      const k = this.mode === 'ship' ? 1.3 : 1;
+      this.sway = Math.sin(elapsed * 0.9 * k) * 2.2 * k + Math.sin(elapsed * 0.35) * 1.4;
+      this.front.y = this.sway;
+      this.behind.y = 0;
     } else if (this.mode === 'fly') {
       this.sway = Math.sin(elapsed * 1.7) * 2 + Math.sin(elapsed * 0.6) * 1.5;
       this.front.y = this.sway;
@@ -104,7 +114,7 @@ export class TransportPainter {
   private setMode(mode: LegMode): void {
     this.mode = mode;
     this.poles.visible = mode === 'ride';
-    this.carriage.visible = mode === 'ride';
+    this.carriage.visible = mode === 'ride' || mode === 'ferry' || mode === 'ship';
     this.cloudSea.visible = mode === 'fly';
     this.cloudFloor.visible = mode === 'fly';
     this.fuselage.visible = mode === 'fly';

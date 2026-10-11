@@ -215,15 +215,16 @@ describe('sleeping from 2:00 to 4:00 (review 3, ruling 1)', () => {
     expect(ticked.km).toBeCloseTo(advance(ROUTE, saved, at(5, 9), utc).state.km, 6);
   });
 
-  it('keeps the rhythm at about 2.5 days a stop over all seven routes', () => {
+  it('keeps the rhythm at about 2.5 days a stop over all seven short routes', () => {
     const gaps: number[] = [];
-    for (const route of ROUTES) {
+    const short = ROUTES.filter((r) => !r.long);
+    for (const route of short) {
       const s = startJourney(route, at(1, 9));
       const done = advance(route, s, at(1, 9) + 400 * 24 * H, utc).state;
       for (let i = 1; i < done.arrivals.length; i++) gaps.push(done.arrivals[i].at - done.arrivals[i - 1].at);
     }
     // The first gap of a route has no rest before it; add one so every gap is a full stop.
-    const days = (gaps.reduce((a, b) => a + b, 0) + ROUTES.length * REST_MS) / gaps.length / (24 * H);
+    const days = (gaps.reduce((a, b) => a + b, 0) + short.length * REST_MS) / gaps.length / (24 * H);
     expect(days).toBeGreaterThan(2.4);
     expect(days).toBeLessThan(2.6);
   });

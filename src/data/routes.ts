@@ -1,4 +1,7 @@
 import type { Route } from '../core/types';
+import { NORTH_LIGHT } from './northLight';
+
+export { NORTH_LIGHT };
 
 /**
  * The first route: out of London and down to the sea. Real places, rough
@@ -160,7 +163,10 @@ export const JIANGNAN_WATERS: Route = {
   ],
 };
 
-export const ROUTES: Route[] = [TO_THE_SEA, TO_THE_HOT_SPRINGS, DOWN_THE_SEINE, UP_THE_HUDSON, PACIFIC_COAST, GREAT_OCEAN, JIANGNAN_WATERS];
+/** The seven short routes, and the long main line after them. */
+export const ROUTES: Route[] = [TO_THE_SEA, TO_THE_HOT_SPRINGS, DOWN_THE_SEINE, UP_THE_HUDSON, PACIFIC_COAST, GREAT_OCEAN, JIANGNAN_WATERS, NORTH_LIGHT];
+/** The short routes alone: the going-out stretch and the first segment pick from these. */
+export const SHORT_ROUTES: Route[] = ROUTES.filter((r) => !r.long);
 
 export function routeById(id: string): Route | undefined {
   return ROUTES.find((r) => r.id === id);

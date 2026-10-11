@@ -1,5 +1,5 @@
 import { nearestRoute, transferMode, withTransfer } from './geo';
-import { startJourney } from './journey';
+import { startJourney, withoutPlaces } from './journey';
 import { withOutset } from './outset';
 import type { Home, JourneyState, LegMode, Place, Route } from './types';
 import { haversineKm } from './geo';
@@ -8,8 +8,9 @@ import { t } from './i18n';
 /**
  * The chain: what happens when a route is finished. The wanderer sets off
  * for the nearest route not yet walked since leaving home, on foot if it is
- * close, by train or plane if not. When every route has been walked, they
- * head home; after a rest at home the chain begins again.
+ * close, by train or plane if not. The long main line comes once the first
+ * short route is done (section 9, ruling 19). When every route has been
+ * walked, they head home; after a rest at home the chain begins again.
  */
 
 export const HOME_RETURN_ID = 'home-return-v1';
@@ -51,8 +52,10 @@ export function buildSegmentRoute(state: JourneyState, routes: Route[]): Route |
   if (state.routeId === HOME_RETURN_ID) {
     return state.from && state.home ? homewardRoute(state.from, state.home) : null;
   }
-  const base = routes.find((r) => r.id === state.routeId);
-  if (!base) return null;
+  const found = routes.find((r) => r.id === state.routeId);
+  if (!found) return null;
+  // Places found out of season on the way are left out, as they were when he passed.
+  const base = withoutPlaces(found, state.skipped);
   if (state.outset) return withOutset(base, state.outset);
   if (state.from) return withTransfer(base, state.from, 'from', leavingNote(state.from.name));
   return withTransfer(base, state.home, 'home');
@@ -65,6 +68,10 @@ export function departureNote(mode: LegMode, to: string): string {
       return t('offByTrain', { name: to });
     case 'fly':
       return t('offFlying', { name: to });
+    case 'ferry':
+      return t('offByFerry', { name: to });
+    case 'ship':
+      return t('offByShip', { name: to });
     default:
       return t('offOnFoot', { name: to });
   }
@@ -107,6 +114,7 @@ export function chooseNext(state: JourneyState, routeId: string | null): Journey
 /**
  * The next segment once the current route is done and the rest is over.
  * Order of preference: the route picked on the map, if any;
+ * then the long main line, once one short route has been walked;
  * then the nearest route not yet walked in this chain;
  * then home, if known and not already here; then the chain starts over.
  */
@@ -129,6 +137,7 @@ export function nextSegment(state: JourneyState, route: Route, routes: Route[], 
     return { route: next, journey };
   };
 
+  const short = routes.filter((r) => !r.long);
   const picked = state.next ? routes.find((r) => r.id === state.next && r.id !== state.routeId) : undefined;
   if (picked) {
     const start = from ?? home;
@@ -137,10 +146,16 @@ export function nextSegment(state: JourneyState, route: Route, routes: Route[], 
 
   if (cameHome && home) {
     // Rested at home: the whole chain begins again from the front door.
-    return begin(nearestRoute(routes, home).route, home, 'home', []);
+    return begin(nearestRoute(short.length ? short : routes, home).route, home, 'home', []);
   }
 
-  const candidates = routes.filter((r) => !walked.includes(r.id));
+  // The first short route walked: the long main line comes next (ruling 19).
+  const longLine = routes.find((r) => r.long && !walked.includes(r.id) && r.id !== state.routeId);
+  if (longLine && from && walked.some((id) => short.some((r) => r.id === id))) {
+    return begin(longLine, from, 'from', walked);
+  }
+
+  const candidates = short.filter((r) => !walked.includes(r.id));
   if (candidates.length > 0 && from) {
     return begin(nearestRoute(candidates, from).route, from, 'from', walked);
   }
@@ -155,7 +170,7 @@ export function nextSegment(state: JourneyState, route: Route, routes: Route[], 
 
   // No home known, or already standing at it: start the chain over from here,
   // avoiding the route just finished when there is a choice.
-  const others = routes.filter((r) => r.id !== state.routeId);
-  const pool = others.length > 0 ? others : routes;
+  const others = short.filter((r) => r.id !== state.routeId);
+  const pool = others.length > 0 ? others : short.length > 0 ? short : routes;
   return begin(nearestRoute(pool, from ?? home ?? { lat: 0, lon: 0 }).route, from, 'from', []);
 }
