@@ -881,6 +881,8 @@ async function main(): Promise<void> {
     }
     if (!bedtimeHolding) syncMail(position);
     world = { ...buildWorldState(t, location, weatherFor(t), position), surprises: showSurprises(wall) };
+    // The forced full moon (?surprise=fullMoon) hangs a full moon in the sky whatever tonight's real one is doing, so the picture can be checked.
+    if (surpriseParam === 'fullMoon') world = { ...world, moon: { ...world.moon, altitude: Math.max(world.moon.altitude, 42), azimuth: 200, phase: 0.5, fraction: 1 } };
     render = direct(world);
     let bedtimeOver = false;
     if (look) {
