@@ -500,6 +500,25 @@ describe('direct aboard trains and planes', () => {
     }
   });
 
+  it('darkens the deck with the land by night and reads the ink off the carriage wall on a train', () => {
+    const train = routeFromHome(TO_THE_SEA, { name: 'Berlin', lat: 52.52, lon: 13.4 });
+    const pos = locate(train, advance(train, startJourney(train, t0), t0 + 3_600_000).state, t0 + 3_600_000);
+    const midnight = new Date(Date.UTC(2026, 0, 15, 0, 30, 0));
+    const lum = (c: number): number => {
+      const { r, g, b } = hexToRgb(c);
+      return r + g + b;
+    };
+    const day = direct(buildWorldState(noon, LONDON, null, { ...pos, mode: 'ship' }));
+    const night = direct(buildWorldState(midnight, LONDON, null, { ...pos, mode: 'ship' }));
+    expect(day.land.tint).toBe(0xffffff);
+    expect(lum(night.land.tint)).toBeLessThan(lum(night.wanderer.tint));
+    // The ink follows the wall, not the sky: by night the sky wants paper, the
+    // half-lit carriage wall is still a mid tone that wants ink.
+    expect(direct(buildWorldState(noon, LONDON, null, pos)).darkInk).toBe(true);
+    expect(direct(buildWorldState(midnight, LONDON, null, pos)).darkInk).toBe(true);
+    expect(direct(buildWorldState(midnight, LONDON, null, { ...pos, mode: 'walk' })).darkInk).toBe(false);
+  });
+
   it('is on foot while resting, even on a flight segment', () => {
     const flown = routeFromHome(TO_THE_SEA, { name: 'Tokyo', lat: 35.68, lon: 139.69 });
     const landed = t0 + (flown.legs[0].km / 700 + 0.5) * 3_600_000;

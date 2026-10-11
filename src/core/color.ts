@@ -38,6 +38,13 @@ export function mix(a: number | string, b: number | string, t: number): number {
   });
 }
 
+/** Multiply two colours channel by channel, as a tint does to a picture. */
+export function multiply(a: number | string, b: number | string): number {
+  const ca = hexToRgb(a);
+  const cb = hexToRgb(b);
+  return rgbToHex({ r: (ca.r * cb.r) / 255, g: (ca.g * cb.g) / 255, b: (ca.b * cb.b) / 255 });
+}
+
 export function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
 }

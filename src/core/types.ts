@@ -356,6 +356,8 @@ export interface LandLayers {
   seaColor: number;
   /** The nearer water, a shade deeper. */
   seaNear: number;
+  /** Multiplicative tint for painted things out of doors (a deck, a bench): the land's own night and grey. */
+  tint: number;
 }
 
 /** The nearest place's marker: a signpost, and in towns a lamp and a cottage. */

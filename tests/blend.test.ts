@@ -53,3 +53,12 @@ describe('blendRenderState', () => {
     expect(easeInOut(0.25)).toBeLessThan(0.25);
   });
 });
+
+describe('multiply', () => {
+  it('tints a colour the way a sprite tint does', async () => {
+    const { multiply } = await import('../src/core/color');
+    expect(multiply(0xffffff, 0x336699)).toBe(0x336699);
+    expect(multiply(0x808080, 0x808080)).toBe(0x404040);
+    expect(multiply('#DDD2B8', 0xffffff)).toBe(0xddd2b8);
+  });
+});

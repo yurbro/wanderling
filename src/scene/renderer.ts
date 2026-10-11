@@ -701,7 +701,10 @@ export class SceneRenderer {
     ]) {
       layer.visible = land;
     }
-    for (const layer of [this.pathLayer, this.detailLayer, this.marker, this.markerLights]) layer.visible = near;
+    for (const layer of [this.pathLayer, this.marker, this.markerLights]) layer.visible = near;
+    // From the train the fields beyond the line still have their grass and stones, but nothing by the track.
+    this.detailLayer.visible = near || mode === 'ride';
+    for (const d of this.details) this.showDetail(d, mode);
     if (this.groundBand) this.groundBand.visible = land && !atSea;
     // In the carriage the rain falls outside the glass: behind the wall and the bench, not on him.
     const stage = this.app.stage;
@@ -793,6 +796,16 @@ export class SceneRenderer {
     d.g.position.set(d.x, d.y);
   }
 
+  /** Whether a roadside detail shows for this way of travelling: from a train only things beyond the track, and no town furniture. */
+  private showDetail(d: Detail, mode: LegMode): void {
+    if (mode !== 'ride') {
+      d.g.visible = true;
+      return;
+    }
+    const terrain = this.state?.land.terrain ?? 'hills';
+    d.g.visible = d.depth < 0.38 && !(d.kind === 'extra' && terrain === 'city');
+  }
+
   private moveDetails(dt: number, groundSpeed: number): void {
     for (const d of this.details) {
       // Things at the path's depth move with the path; nearer ones a bit faster.
@@ -802,6 +815,7 @@ export class SceneRenderer {
         // Coming round again: take the picture of the terrain being walked now.
         if (this.props && d.g instanceof Sprite) d.base = this.dressDetail(d.g, d.kind, Math.random);
         this.dropDetail(d, Math.random());
+        if (this.state) this.showDetail(d, this.state.travel.mode);
       }
       d.g.x = d.x;
     }
