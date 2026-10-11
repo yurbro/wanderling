@@ -22,7 +22,7 @@ import {
 } from './core/script';
 import { eveningOf, fullMoonEvenings, skyLetters } from './core/skyCalendar';
 import { detectLang, placeName, placeNote, setLang, t } from './core/i18n';
-import { REST_MS, advance, describeJourney, lastArrival, locate, startJourney, TERRAIN } from './core/journey';
+import { REST_MS, advance, describeJourney, hold, lastArrival, locate, startJourney, TERRAIN } from './core/journey';
 import { deliveredCards, demoPostcards, isDeparture, makePostcard, missingArrivals, pendingCards } from './core/postcards';
 import { EMPTY_MAIL, dayKey, deliver, fillSlots, markAllRead, momentTime, type Candidate, unreadCount, visibleLetters, weatherTime, bundled, type Letter } from './core/letters';
 import { BAG_DEFAULT, BAG_ITEMS, GENERAL_QUESTIONS, momentsFor, skeletonById, skyLetterPool, skyLine, skyVars, storiesFor, weatherSkeletons } from './data/letterTexts';
@@ -50,7 +50,7 @@ import { WeatherService, fetchHistory, fetchPlaceWeather } from './data/weather'
 import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
 import { createCityChooser } from './ui/city';
-import { applyBedtime, bedtimeLook, isBedtimeHour, REOPEN_AFTER_MS } from './core/bedtime';
+import { applyBedtime, bedtimeHolds, bedtimeLook, bedtimePlan, nightOf, REOPEN_AFTER_MS, type BedtimeContext } from './core/bedtime';
 import { createHud } from './ui/hud';
 import { createSettings } from './ui/settings';
 import { setupInstallHint } from './ui/install';
@@ -178,6 +178,10 @@ async function main(): Promise<void> {
 
   /** When bedtime mode began (the app's clock), or null while it is not on. */
   let bedtimeAt: number | null = null;
+  /** How this bedtime looks: aboard a vehicle (no fire), or opened again after he slept tonight. */
+  let bedtimeCtx: BedtimeContext = {};
+  /** True while the mode holds the road still and the post back (ruling 26). */
+  let bedtimeHolding = false;
   const hud = createHud(root, {
     demo: params.get('demo') === '1',
     onPlace: () => city.open(),
@@ -366,7 +370,7 @@ async function main(): Promise<void> {
   let postcards = loadPostcards();
   const deliverNow = params.get('postcards') === 'now';
   const sampleCards = params.get('postcards') === 'demo' ? demoPostcards(route, location, clock()) : [];
-  const visibleCards = () => [...sampleCards, ...deliveredCards(postcards, deliverNow ? Infinity : clock())];
+  const visibleCards = () => [...sampleCards, ...deliveredCards(postcards, deliverNow ? Infinity : bedtimeHolding && bedtimeAt !== null ? bedtimeAt : clock())];
   const SEEN_KEY = 'wanderling.postcardsSeen';
   let seenCount = 0;
   try {
@@ -536,7 +540,7 @@ async function main(): Promise<void> {
     // The sky: full moons, falling stars, the turning days (the calendar is the one source).
     candidates.push(...skyLetters(surprises, now, script.start ?? script.anchor, location.lat, SKY_POOLS));
     syncSurprises(position, candidates);
-    const next = deliver(mail, candidates, now);
+    const next = deliver(mail, candidates, now, { quiet: bedtimeHolding });
     if (next !== mail) {
       mail = next;
       if (!demoJourney && !mailDemo) saveMail(mail);
@@ -754,7 +758,7 @@ async function main(): Promise<void> {
   // Bedtime mode (decisions D9): opened late at night, he sits by a fire, the
   // sky darkens, ten minutes on he sleeps and the picture fades to black and
   // stops. ?bedtime=1 forces it at any hour, ?bedtime=30 runs it 30 times faster,
-  // ?bedtimeMin=6 starts it six minutes in.
+  // ?bedtimeMin=6 starts it six minutes in, ?slept=1 shows the second opening of a night (ruling 28).
   const bedtimeParam = params.get('bedtime');
   const bedtimeSpeed = Math.max(1, Number(bedtimeParam) || 1);
   const veil = document.createElement('div');
@@ -762,8 +766,26 @@ async function main(): Promise<void> {
   root.appendChild(veil);
   const bedtimeHead = Math.max(0, Number(params.get('bedtimeMin')) || 0) * 60_000;
   let bedtimeTimer: number | null = null;
+  // Once a night (ruling 28): the night he last fell asleep by the fire.
+  const SLEPT_KEY = 'wanderling.bedtimeSlept';
+  const sleptNight = (): string | null => {
+    try {
+      return localStorage.getItem(SLEPT_KEY);
+    } catch {
+      return null;
+    }
+  };
+  const rememberSlept = (): void => {
+    if (demoJourney || bedtimeParam !== null) return;
+    try {
+      localStorage.setItem(SLEPT_KEY, nightOf(now()));
+    } catch {
+      // Fine: the fire may be lit twice.
+    }
+  };
   const stopBedtime = (): void => {
     bedtimeAt = null;
+    bedtimeHolding = false;
     if (bedtimeTimer !== null) window.clearInterval(bedtimeTimer);
     bedtimeTimer = null;
     veil.style.opacity = '0';
@@ -774,7 +796,14 @@ async function main(): Promise<void> {
     tick();
   };
   const startBedtime = (): void => {
+    // Up to now he walked as usual; the hold begins here.
+    journey = advance(route, journey, clock()).state;
+    if (!demoJourney) saveJourney(journey);
+    const pos = locate(route, journey, clock());
+    const aboard = pos.mode !== 'walk' && !pos.resting && !pos.finished;
+    bedtimeCtx = { aboard, sleptTonight: bedtimeParam === null ? bedtimePlan(now(), sleptNight()) === 'asleep' : params.get('slept') === '1' };
     bedtimeAt = clock();
+    bedtimeHolding = true;
     root.classList.add('bedtime');
     renderer.resume();
     if (bedtimeTimer === null) bedtimeTimer = window.setInterval(() => tick(), 2_000);
@@ -783,12 +812,19 @@ async function main(): Promise<void> {
   veil.addEventListener('click', () => {
     if (veil.classList.contains('on')) stopBedtime();
   });
-  const bedtimeAllowed = (): boolean => !introMode && !demoJourney && demoDay === null && (bedtimeParam !== null || isBedtimeHour(now()));
+  const bedtimeAllowed = (): boolean => !introMode && !demoJourney && demoDay === null && (bedtimeParam !== null || bedtimePlan(now(), null) !== null);
 
   const tick = (): void => {
     const t = now();
     const wall = clock();
-    const step = advance(route, journey, wall);
+    // By the fire the road waits (ruling 26), until the picture has gone black.
+    const look = bedtimeAt !== null ? bedtimeLook((wall - bedtimeAt) * bedtimeSpeed + bedtimeHead, bedtimeCtx) : null;
+    bedtimeHolding = look !== null && bedtimeHolds(look);
+    if (look?.asleep && !bedtimeCtx.sleptTonight) {
+      rememberSlept();
+      bedtimeCtx = { ...bedtimeCtx, sleptTonight: true };
+    }
+    const step = bedtimeHolding ? hold(route, journey, wall) : advance(route, journey, wall);
     journey = step.state;
     if (step.arrived.length > 0) {
       if (!demoJourney) saveJourney(journey);
@@ -806,8 +842,10 @@ async function main(): Promise<void> {
       const firstLeg = route.legs[0];
       hud.setNote(departureNote(firstLeg?.mode ?? 'walk', route.places[1] ? placeName(route.places[1]) : route.name), 15_000);
     }
-    syncPostcards(step.arrived.length > 0);
-    syncDelivered(true);
+    if (!bedtimeHolding) {
+      syncPostcards(step.arrived.length > 0);
+      syncDelivered(true);
+    }
     recordDiary();
     const position = locate(route, journey, wall);
     // Off the platform and onto the night train: say so, once.
@@ -815,12 +853,11 @@ async function main(): Promise<void> {
       if (lastLeg === 0 && position.legIndex === 1 && position.mode === 'ride') hud.setNote(say('boardedNight', { name: nameNow() }), 15_000);
       lastLeg = position.legIndex;
     }
-    syncMail(position);
+    if (!bedtimeHolding) syncMail(position);
     world = { ...buildWorldState(t, location, weatherFor(t), position), surprises: showSurprises(wall) };
     render = direct(world);
     let bedtimeOver = false;
-    if (bedtimeAt !== null) {
-      const look = bedtimeLook((clock() - bedtimeAt) * bedtimeSpeed + bedtimeHead);
+    if (look) {
       render = applyBedtime(render, look);
       veil.style.opacity = String(look.fade);
       veil.classList.toggle('on', look.fade > 0.5);
@@ -943,8 +980,12 @@ async function main(): Promise<void> {
       renderer.pause();
     } else {
       // Back after a while, late at night: it is opening the app again.
-      if (bedtimeAllowed() && Date.now() - hiddenAt >= REOPEN_AFTER_MS && (bedtimeAt === null || veil.classList.contains('on'))) {
+      const reopened = Date.now() - hiddenAt >= REOPEN_AFTER_MS;
+      if (bedtimeAllowed() && reopened && (bedtimeAt === null || veil.classList.contains('on'))) {
         startBedtime();
+      } else if (bedtimeAt !== null && reopened && !bedtimeAllowed()) {
+        // Away long enough to count as leaving: the mode ended then, the road goes on.
+        stopBedtime();
       } else if (bedtimeAt === null || !veil.classList.contains('on')) renderer.resume();
       tick();
       void weather.refresh(location);

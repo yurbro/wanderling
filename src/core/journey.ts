@@ -212,6 +212,23 @@ export function advance(route: Route, state: JourneyState, now: number, sleep: S
 }
 
 /**
+ * Hold the journey still up to `now` (bedtime mode, section 9, ruling 26):
+ * the minutes pass, the kilometres do not, and a rest under way ends that
+ * much later. Only his own feet stop: a train, a ship or a plane carries a
+ * dozing passenger on as usual (ruling 11), so aboard one this is `advance`.
+ */
+export function hold(route: Route, state: JourneyState, now: number, sleep: SleepClock = localNights): AdvanceResult {
+  if (now <= state.updatedAt) return { state: { ...state }, arrived: [] };
+  const pos = locate(route, state, state.updatedAt);
+  if (pos.mode !== 'walk' && !pos.resting && !pos.finished) return advance(route, state, now, sleep);
+  const paused = now - state.updatedAt;
+  return {
+    state: { ...state, updatedAt: now, restingUntil: state.restingUntil !== null ? state.restingUntil + paused : null },
+    arrived: [],
+  };
+}
+
+/**
  * Real-world activity pushes the wanderer ahead; it never slows them down.
  * Places crossed by the push count as reached now, and any rest is cut short.
  */

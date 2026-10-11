@@ -1,0 +1,897 @@
+{
+ "route": "north-light-v1",
+ "title": {
+  "en": "North Light",
+  "zh": "北方之光"
+ },
+ "places": [
+  {
+   "order": 1,
+   "id": "lisbon",
+   "name": {
+    "en": "Lisbon",
+    "zh": "里斯本"
+   },
+   "country": "Portugal",
+   "lat": 38.71,
+   "lon": -9.14,
+   "terrain": "city",
+   "arriveBy": "arrive",
+   "legKm": 0,
+   "restDays": 0.5,
+   "estDay": 0.5,
+   "line": {
+    "en": "Seven hills, and trams that climb them slowly. Like me.",
+    "zh": "七座山丘，电车慢慢往上爬。和我一样。"
+   }
+  },
+  {
+   "order": 2,
+   "id": "sintra",
+   "name": {
+    "en": "Sintra",
+    "zh": "辛特拉"
+   },
+   "country": "Portugal",
+   "lat": 38.8,
+   "lon": -9.39,
+   "terrain": "forest",
+   "arriveBy": "walk",
+   "legKm": 30,
+   "restDays": 0.5,
+   "estDay": 2.4,
+   "line": {
+    "en": "The forest here is full of castles. And moss. Mostly moss.",
+    "zh": "这里的森林里全是城堡。还有青苔。主要是青苔。"
+   }
+  },
+  {
+   "order": 3,
+   "id": "cabo-da-roca",
+   "name": {
+    "en": "Cabo da Roca",
+    "zh": "罗卡角"
+   },
+   "country": "Portugal",
+   "lat": 38.78,
+   "lon": -9.5,
+   "terrain": "coast",
+   "arriveBy": "walk",
+   "legKm": 12,
+   "restDays": 0.5,
+   "estDay": 3.5,
+   "line": {
+    "en": "The land stops here. The sea just keeps going.",
+    "zh": "陆地到这里就停了。海还一直往前。"
+   }
+  },
+  {
+   "order": 4,
+   "id": "ericeira",
+   "name": {
+    "en": "Ericeira",
+    "zh": "埃里塞拉"
+   },
+   "country": "Portugal",
+   "lat": 38.96,
+   "lon": -9.42,
+   "terrain": "coast",
+   "arriveBy": "walk",
+   "legKm": 26,
+   "restDays": 0.5,
+   "estDay": 5.2,
+   "line": {
+    "en": "People ride the waves here. I watched from a rock.",
+    "zh": "这里的人踩着浪走。我坐在石头上看。"
+   }
+  },
+  {
+   "order": 5,
+   "id": "obidos",
+   "name": {
+    "en": "Óbidos",
+    "zh": "奥比多斯"
+   },
+   "country": "Portugal",
+   "lat": 39.36,
+   "lon": -9.16,
+   "terrain": "hills",
+   "arriveBy": "walk",
+   "legKm": 62,
+   "restDays": 0.5,
+   "estDay": 8.6,
+   "line": {
+    "en": "A whole town inside a wall. I walked around it twice.",
+    "zh": "整座小镇住在一圈城墙里。我绕着走了两圈。"
+   }
+  },
+  {
+   "order": 6,
+   "id": "nazare",
+   "name": {
+    "en": "Nazaré",
+    "zh": "纳扎雷"
+   },
+   "country": "Portugal",
+   "lat": 39.6,
+   "lon": -9.07,
+   "terrain": "coast",
+   "arriveBy": "walk",
+   "legKm": 35,
+   "restDays": 0.5,
+   "estDay": 10.7,
+   "line": {
+    "en": "The waves here are as tall as houses. I stayed very far back.",
+    "zh": "这里的浪有房子那么高。我站得远远的。"
+   }
+  },
+  {
+   "order": 7,
+   "id": "figueira-da-foz",
+   "name": {
+    "en": "Figueira da Foz",
+    "zh": "菲格拉达福什"
+   },
+   "country": "Portugal",
+   "lat": 40.15,
+   "lon": -8.86,
+   "terrain": "coast",
+   "arriveBy": "walk",
+   "legKm": 80,
+   "restDays": 0.5,
+   "estDay": 14.9,
+   "line": {
+    "en": "The beach is so wide it takes a whole morning to cross.",
+    "zh": "沙滩宽得要走一整个上午。"
+   }
+  },
+  {
+   "order": 8,
+   "id": "aveiro",
+   "name": {
+    "en": "Aveiro",
+    "zh": "阿威罗"
+   },
+   "country": "Portugal",
+   "lat": 40.64,
+   "lon": -8.65,
+   "terrain": "lake",
+   "arriveBy": "walk",
+   "legKm": 72,
+   "restDays": 0.5,
+   "estDay": 18.7,
+   "line": {
+    "en": "Painted boats on quiet canals. Nobody was in a hurry.",
+    "zh": "彩色的小船停在安静的水道上。谁都不着急。"
+   }
+  },
+  {
+   "order": 9,
+   "id": "porto",
+   "name": {
+    "en": "Porto",
+    "zh": "波尔图"
+   },
+   "country": "Portugal",
+   "lat": 41.15,
+   "lon": -8.61,
+   "terrain": "city",
+   "arriveBy": "walk",
+   "legKm": 71,
+   "restDays": 0.5,
+   "estDay": 22.5,
+   "line": {
+    "en": "A river, a bridge, and a thousand orange roofs.",
+    "zh": "一条河，一座桥，一千个橘色屋顶。"
+   }
+  },
+  {
+   "order": 10,
+   "id": "viana-do-castelo",
+   "name": {
+    "en": "Viana do Castelo",
+    "zh": "维亚纳堡"
+   },
+   "country": "Portugal",
+   "lat": 41.69,
+   "lon": -8.83,
+   "terrain": "coast",
+   "arriveBy": "walk",
+   "legKm": 78,
+   "restDays": 0.5,
+   "estDay": 26.6,
+   "line": {
+    "en": "A church on a hill looks after the whole bay.",
+    "zh": "山上的教堂看着整片海湾。"
+   }
+  },
+  {
+   "order": 11,
+   "id": "tui",
+   "name": {
+    "en": "Tui",
+    "zh": "图伊"
+   },
+   "country": "Spain",
+   "lat": 42.05,
+   "lon": -8.64,
+   "terrain": "hills",
+   "arriveBy": "walk",
+   "legKm": 54,
+   "restDays": 0.5,
+   "estDay": 29.6,
+   "line": {
+    "en": "I crossed a bridge and the language changed.",
+    "zh": "过了一座桥，人们说的话就变了。"
+   }
+  },
+  {
+   "order": 12,
+   "id": "pontevedra",
+   "name": {
+    "en": "Pontevedra",
+    "zh": "蓬特韦德拉"
+   },
+   "country": "Spain",
+   "lat": 42.43,
+   "lon": -8.64,
+   "terrain": "city",
+   "arriveBy": "walk",
+   "legKm": 53,
+   "restDays": 0.5,
+   "estDay": 32.6,
+   "line": {
+    "en": "Stone squares, and rain that comes and goes.",
+    "zh": "石头铺的广场，雨来了又走。"
+   }
+  },
+  {
+   "order": 13,
+   "id": "santiago-de-compostela",
+   "name": {
+    "en": "Santiago de Compostela",
+    "zh": "圣地亚哥-德孔波斯特拉"
+   },
+   "country": "Spain",
+   "lat": 42.88,
+   "lon": -8.54,
+   "terrain": "city",
+   "arriveBy": "walk",
+   "legKm": 63,
+   "restDays": 0.5,
+   "estDay": 36.0,
+   "line": {
+    "en": "Many walkers end here. I sat with them for a while.",
+    "zh": "很多走路的人在这里走到终点。我陪他们坐了一会儿。"
+   }
+  },
+  {
+   "order": 14,
+   "id": "bordeaux",
+   "name": {
+    "en": "Bordeaux",
+    "zh": "波尔多"
+   },
+   "country": "France",
+   "lat": 44.84,
+   "lon": -0.58,
+   "terrain": "city",
+   "arriveBy": "train",
+   "legKm": 876,
+   "restDays": 0.5,
+   "estDay": 37.1,
+   "line": {
+    "en": "A long river front. The pavement holds a mirror of the sky.",
+    "zh": "长长的河岸。地上有一面镜子，照着天空。"
+   }
+  },
+  {
+   "order": 15,
+   "id": "saint-emilion",
+   "name": {
+    "en": "Saint-Émilion",
+    "zh": "圣埃米利永"
+   },
+   "country": "France",
+   "lat": 44.89,
+   "lon": -0.16,
+   "terrain": "hills",
+   "arriveBy": "walk",
+   "legKm": 42,
+   "restDays": 0.5,
+   "estDay": 39.6,
+   "line": {
+    "en": "Rows and rows of vines, all leaning the same way.",
+    "zh": "一排又一排葡萄藤，都朝同一个方向歪着。"
+   }
+  },
+  {
+   "order": 16,
+   "id": "amboise",
+   "name": {
+    "en": "Amboise",
+    "zh": "昂布瓦斯"
+   },
+   "country": "France",
+   "lat": 47.41,
+   "lon": 0.98,
+   "terrain": "lake",
+   "arriveBy": "train",
+   "legKm": 382,
+   "restDays": 0.5,
+   "estDay": 40.3,
+   "line": {
+    "en": "A castle above a slow, wide river.",
+    "zh": "一座城堡，下面是一条又宽又慢的河。"
+   }
+  },
+  {
+   "order": 17,
+   "id": "chambord",
+   "name": {
+    "en": "Chambord",
+    "zh": "香波尔"
+   },
+   "country": "France",
+   "lat": 47.62,
+   "lon": 1.52,
+   "terrain": "forest",
+   "arriveBy": "walk",
+   "legKm": 58,
+   "restDays": 0.5,
+   "estDay": 43.5,
+   "line": {
+    "en": "A castle so big it has its own forest.",
+    "zh": "城堡大得自己有一片森林。"
+   }
+  },
+  {
+   "order": 18,
+   "id": "mont-saint-michel",
+   "name": {
+    "en": "Mont-Saint-Michel",
+    "zh": "圣米歇尔山"
+   },
+   "country": "France",
+   "lat": 48.64,
+   "lon": -1.51,
+   "terrain": "coast",
+   "arriveBy": "train",
+   "legKm": 327,
+   "restDays": 0.5,
+   "estDay": 44.3,
+   "line": {
+    "en": "At high tide it becomes an island. I waited for low tide.",
+    "zh": "涨潮时它变成一座岛。我等到退潮才过去。"
+   }
+  },
+  {
+   "order": 19,
+   "id": "saint-malo",
+   "name": {
+    "en": "Saint-Malo",
+    "zh": "圣马洛"
+   },
+   "country": "France",
+   "lat": 48.65,
+   "lon": -2.03,
+   "terrain": "coast",
+   "arriveBy": "walk",
+   "legKm": 48,
+   "restDays": 0.5,
+   "estDay": 47.0,
+   "line": {
+    "en": "Grey walls, grey sea, and very good wind.",
+    "zh": "灰色的城墙，灰色的海，风很好。"
+   }
+  },
+  {
+   "order": 20,
+   "id": "chamonix",
+   "name": {
+    "en": "Chamonix",
+    "zh": "霞慕尼"
+   },
+   "country": "France",
+   "lat": 45.92,
+   "lon": 6.87,
+   "terrain": "mountain",
+   "arriveBy": "train",
+   "legKm": 957,
+   "restDays": 0.5,
+   "estDay": 48.2,
+   "line": {
+    "en": "The biggest mountain I have seen wears snow all year.",
+    "zh": "我见过最大的山，一年四季都戴着雪。"
+   }
+  },
+  {
+   "order": 21,
+   "id": "lauterbrunnen",
+   "name": {
+    "en": "Lauterbrunnen",
+    "zh": "劳特布龙嫩"
+   },
+   "country": "Switzerland",
+   "lat": 46.59,
+   "lon": 7.91,
+   "terrain": "mountain",
+   "arriveBy": "train",
+   "legKm": 142,
+   "restDays": 0.5,
+   "estDay": 48.8,
+   "line": {
+    "en": "Seventy waterfalls in one valley. I counted nine.",
+    "zh": "一个山谷里有七十道瀑布。我数到了九。"
+   }
+  },
+  {
+   "order": 22,
+   "id": "brienz",
+   "name": {
+    "en": "Brienz",
+    "zh": "布里恩茨"
+   },
+   "country": "Switzerland",
+   "lat": 46.75,
+   "lon": 8.04,
+   "terrain": "lake",
+   "arriveBy": "walk",
+   "legKm": 25,
+   "restDays": 0.5,
+   "estDay": 50.4,
+   "line": {
+    "en": "The lake here is a colour I had no word for.",
+    "zh": "这里的湖是一种我叫不出名字的颜色。"
+   }
+  },
+  {
+   "order": 23,
+   "id": "lucerne",
+   "name": {
+    "en": "Lucerne",
+    "zh": "卢塞恩"
+   },
+   "country": "Switzerland",
+   "lat": 47.05,
+   "lon": 8.31,
+   "terrain": "lake",
+   "arriveBy": "walk",
+   "legKm": 49,
+   "restDays": 0.5,
+   "estDay": 53.2,
+   "line": {
+    "en": "A wooden bridge with paintings in its roof.",
+    "zh": "一座木桥，屋顶下面画着画。"
+   }
+  },
+  {
+   "order": 24,
+   "id": "rudesheim",
+   "name": {
+    "en": "Rüdesheim",
+    "zh": "吕德斯海姆"
+   },
+   "country": "Germany",
+   "lat": 49.98,
+   "lon": 7.92,
+   "terrain": "hills",
+   "arriveBy": "train",
+   "legKm": 425,
+   "restDays": 0.5,
+   "estDay": 54.0,
+   "line": {
+    "en": "Vineyards so steep the grapes must hold on tight.",
+    "zh": "葡萄园陡得葡萄要抓紧才不掉下去。"
+   }
+  },
+  {
+   "order": 25,
+   "id": "bacharach",
+   "name": {
+    "en": "Bacharach",
+    "zh": "巴哈拉赫"
+   },
+   "country": "Germany",
+   "lat": 50.06,
+   "lon": 7.77,
+   "terrain": "hills",
+   "arriveBy": "walk",
+   "legKm": 17,
+   "restDays": 0.5,
+   "estDay": 55.3,
+   "line": {
+    "en": "Small timber houses, and a castle on every hill.",
+    "zh": "木头小房子，每座山上都有一座城堡。"
+   }
+  },
+  {
+   "order": 26,
+   "id": "loreley",
+   "name": {
+    "en": "Loreley",
+    "zh": "罗蕾莱"
+   },
+   "country": "Germany",
+   "lat": 50.14,
+   "lon": 7.73,
+   "terrain": "hills",
+   "arriveBy": "walk",
+   "legKm": 12,
+   "restDays": 0.5,
+   "estDay": 56.3,
+   "line": {
+    "en": "The river bends hard here. Boats slow down to think.",
+    "zh": "河在这里拐了个急弯。船都放慢了想一想。"
+   }
+  },
+  {
+   "order": 27,
+   "id": "koblenz",
+   "name": {
+    "en": "Koblenz",
+    "zh": "科布伦茨"
+   },
+   "country": "Germany",
+   "lat": 50.36,
+   "lon": 7.59,
+   "terrain": "city",
+   "arriveBy": "walk",
+   "legKm": 33,
+   "restDays": 0.5,
+   "estDay": 58.4,
+   "line": {
+    "en": "Two rivers meet here and become one.",
+    "zh": "两条河在这里遇见，变成了一条。"
+   }
+  },
+  {
+   "order": 28,
+   "id": "cologne",
+   "name": {
+    "en": "Cologne",
+    "zh": "科隆"
+   },
+   "country": "Germany",
+   "lat": 50.94,
+   "lon": 6.96,
+   "terrain": "city",
+   "arriveBy": "train",
+   "legKm": 102,
+   "restDays": 0.5,
+   "estDay": 58.9,
+   "line": {
+    "en": "A church so tall it took six hundred years.",
+    "zh": "一座教堂高得盖了六百年。"
+   }
+  },
+  {
+   "order": 29,
+   "id": "hamburg",
+   "name": {
+    "en": "Hamburg",
+    "zh": "汉堡"
+   },
+   "country": "Germany",
+   "lat": 53.55,
+   "lon": 9.99,
+   "terrain": "city",
+   "arriveBy": "train",
+   "legKm": 463,
+   "restDays": 0.5,
+   "estDay": 59.8,
+   "line": {
+    "en": "Ships, cranes and gulls. The harbour never sleeps.",
+    "zh": "船、吊车和海鸥。港口从来不睡觉。"
+   }
+  },
+  {
+   "order": 30,
+   "id": "lubeck",
+   "name": {
+    "en": "Lübeck",
+    "zh": "吕贝克"
+   },
+   "country": "Germany",
+   "lat": 53.87,
+   "lon": 10.69,
+   "terrain": "city",
+   "arriveBy": "walk",
+   "legKm": 73,
+   "restDays": 0.5,
+   "estDay": 63.6,
+   "line": {
+    "en": "A gate with two round towers. And the best marzipan.",
+    "zh": "一座有两个圆塔的城门。还有最好吃的杏仁糖。"
+   }
+  },
+  {
+   "order": 31,
+   "id": "copenhagen",
+   "name": {
+    "en": "Copenhagen",
+    "zh": "哥本哈根"
+   },
+   "country": "Denmark",
+   "lat": 55.68,
+   "lon": 12.57,
+   "terrain": "city",
+   "arriveBy": "train",
+   "legKm": 305,
+   "restDays": 0.5,
+   "estDay": 64.4,
+   "line": {
+    "en": "Bicycles everywhere. Nobody rang a bell at me.",
+    "zh": "到处都是自行车。没有人冲我按铃。"
+   }
+  },
+  {
+   "order": 32,
+   "id": "helsingor",
+   "name": {
+    "en": "Helsingør",
+    "zh": "赫尔辛格"
+   },
+   "country": "Denmark",
+   "lat": 56.04,
+   "lon": 12.61,
+   "terrain": "coast",
+   "arriveBy": "walk",
+   "legKm": 50,
+   "restDays": 0.5,
+   "estDay": 67.2,
+   "line": {
+    "en": "A castle on the water, looking across at Sweden.",
+    "zh": "水边一座城堡，隔着海望着瑞典。"
+   }
+  },
+  {
+   "order": 33,
+   "id": "oslo",
+   "name": {
+    "en": "Oslo",
+    "zh": "奥斯陆"
+   },
+   "country": "Norway",
+   "lat": 59.91,
+   "lon": 10.75,
+   "terrain": "city",
+   "arriveBy": "ferry",
+   "legKm": 577,
+   "restDays": 1.5,
+   "estDay": 69.2,
+   "line": {
+    "en": "I slept on a ship all night and woke up in Norway.",
+    "zh": "我在船上睡了一整夜，醒来就到了挪威。"
+   }
+  },
+  {
+   "order": 34,
+   "id": "finse",
+   "name": {
+    "en": "Finse",
+    "zh": "芬瑟"
+   },
+   "country": "Norway",
+   "lat": 60.6,
+   "lon": 7.5,
+   "terrain": "mountain",
+   "arriveBy": "train",
+   "legKm": 253,
+   "restDays": 1.5,
+   "estDay": 70.9,
+   "line": {
+    "en": "The highest station on the line. Snow, even now.",
+    "zh": "这条铁路上最高的一站。到现在还有雪。"
+   }
+  },
+  {
+   "order": 35,
+   "id": "flam",
+   "name": {
+    "en": "Flåm",
+    "zh": "弗洛姆"
+   },
+   "country": "Norway",
+   "lat": 60.86,
+   "lon": 7.11,
+   "terrain": "coast",
+   "arriveBy": "train",
+   "legKm": 47,
+   "restDays": 1.5,
+   "estDay": 72.4,
+   "line": {
+    "en": "The little train went down and down to the fjord.",
+    "zh": "小火车一直往下，一直往下，开到了峡湾边。"
+   }
+  },
+  {
+   "order": 36,
+   "id": "bergen",
+   "name": {
+    "en": "Bergen",
+    "zh": "卑尔根"
+   },
+   "country": "Norway",
+   "lat": 60.39,
+   "lon": 5.32,
+   "terrain": "city",
+   "arriveBy": "train",
+   "legKm": 144,
+   "restDays": 1.5,
+   "estDay": 74.0,
+   "line": {
+    "en": "Wooden houses by the harbour. It rained. It rains here a lot.",
+    "zh": "港口边的木头房子。下雨了。这里常常下雨。"
+   }
+  },
+  {
+   "order": 37,
+   "id": "alesund",
+   "name": {
+    "en": "Ålesund",
+    "zh": "奥勒松"
+   },
+   "country": "Norway",
+   "lat": 62.47,
+   "lon": 6.15,
+   "terrain": "coast",
+   "arriveBy": "ship",
+   "legKm": 306,
+   "restDays": 1.5,
+   "estDay": 76.0,
+   "line": {
+    "en": "A town of towers and turrets, all looking at the sea.",
+    "zh": "一座满是小塔楼的城，都在看着海。"
+   }
+  },
+  {
+   "order": 38,
+   "id": "geiranger",
+   "name": {
+    "en": "Geiranger",
+    "zh": "盖朗厄尔"
+   },
+   "country": "Norway",
+   "lat": 62.1,
+   "lon": 7.21,
+   "terrain": "coast",
+   "arriveBy": "ship",
+   "legKm": 89,
+   "restDays": 1.5,
+   "estDay": 77.7,
+   "line": {
+    "en": "Waterfalls fall straight into the fjord. Seven sisters, they say.",
+    "zh": "瀑布直接落进峡湾。他们说是七姐妹。"
+   },
+   "months": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "note": "Outside April to September, skip this stop: the ship goes from Ålesund straight to Trondheim."
+  },
+  {
+   "order": 39,
+   "id": "trondheim",
+   "name": {
+    "en": "Trondheim",
+    "zh": "特隆赫姆"
+   },
+   "country": "Norway",
+   "lat": 63.43,
+   "lon": 10.4,
+   "terrain": "city",
+   "arriveBy": "ship",
+   "legKm": 285,
+   "restDays": 1.5,
+   "estDay": 79.7,
+   "line": {
+    "en": "Coloured warehouses standing on their toes in the river.",
+    "zh": "彩色的仓库踮着脚站在河里。"
+   }
+  },
+  {
+   "order": 40,
+   "id": "arctic-circle",
+   "name": {
+    "en": "Arctic Circle",
+    "zh": "北极圈"
+   },
+   "country": "Norway",
+   "lat": 66.55,
+   "lon": 13.0,
+   "terrain": "coast",
+   "arriveBy": "ship",
+   "legKm": 478,
+   "restDays": 1.5,
+   "estDay": 82.0,
+   "line": {
+    "en": "The ship blew its horn. We crossed a line nobody can see.",
+    "zh": "船鸣了笛。我们越过了一条谁也看不见的线。"
+   }
+  },
+  {
+   "order": 41,
+   "id": "reine",
+   "name": {
+    "en": "Reine",
+    "zh": "雷讷"
+   },
+   "country": "Norway",
+   "lat": 67.93,
+   "lon": 13.09,
+   "terrain": "coast",
+   "arriveBy": "ship",
+   "legKm": 200,
+   "restDays": 1.5,
+   "estDay": 83.8,
+   "line": {
+    "en": "Red cabins, sharp mountains, still water. I forgot to walk.",
+    "zh": "红色小屋，尖尖的山，平静的水。我忘了走路。"
+   }
+  },
+  {
+   "order": 42,
+   "id": "henningsvaer",
+   "name": {
+    "en": "Henningsvær",
+    "zh": "亨宁斯韦尔"
+   },
+   "country": "Norway",
+   "lat": 68.15,
+   "lon": 14.21,
+   "terrain": "coast",
+   "arriveBy": "ship",
+   "legKm": 68,
+   "restDays": 1.5,
+   "estDay": 85.4,
+   "line": {
+    "en": "A football pitch on a rock in the sea.",
+    "zh": "海里的一块礁石上有个足球场。"
+   }
+  },
+  {
+   "order": 43,
+   "id": "tromso",
+   "name": {
+    "en": "Tromsø",
+    "zh": "特罗姆瑟"
+   },
+   "country": "Norway",
+   "lat": 69.65,
+   "lon": 18.96,
+   "terrain": "city",
+   "arriveBy": "ship",
+   "legKm": 329,
+   "restDays": 1.5,
+   "estDay": 87.5,
+   "line": {
+    "en": "I came to see the light up north. Now I will bring it home.",
+    "zh": "我来北方看光。现在我要把它带回家。"
+   },
+   "ending": {
+    "aurora": "Sep 1 to Apr 10",
+    "midnightSun": "May 20 to Jul 22",
+    "brightNight": "the rest of the year"
+   },
+   "endingLetters": {
+    "aurora": {
+     "en": "The sky moved tonight. Green, then quiet. I kept a little for you.",
+     "zh": "今晚天空动了。先是绿的，然后安静下来。我给你留了一点。"
+    },
+    "midnightSun": {
+     "en": "The sun did not set tonight. I stayed up with it.",
+     "zh": "今晚太阳没有落下。我陪它醒着。"
+    },
+    "brightNight": {
+     "en": "Midnight, and the sky is still blue. Light, all night long.",
+     "zh": "半夜了，天还是蓝的。光亮了一整夜。"
+    }
+   }
+  }
+ ]
+}
