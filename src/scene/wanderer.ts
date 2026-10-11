@@ -1,5 +1,6 @@
 import { Assets, Container, Graphics, MeshRope, Point, Sprite, Texture } from 'pixi.js';
 import { WANDERER } from '../core/palette';
+import { artUrl } from './art';
 import type { LeafState, RenderState, WandererState, LegMode } from '../core/types';
 
 /**
@@ -111,8 +112,7 @@ type PartName = (typeof PART_NAMES)[number];
 let partsPromise: Promise<Record<PartName, Texture>> | null = null;
 export function loadParts(): Promise<Record<PartName, Texture>> {
   if (!partsPromise) {
-    const base = import.meta.env.BASE_URL;
-    partsPromise = Promise.all(PART_NAMES.map((n) => Assets.load<Texture>(`${base}art/${n}.png`))).then((textures) => {
+    partsPromise = Promise.all(PART_NAMES.map((n) => Assets.load<Texture>(artUrl(n)))).then((textures) => {
       // Mipmaps: the pictures are drawn a little smaller than they are, and
       // without them the edges shimmer and step.
       for (const tex of textures) {
@@ -373,6 +373,7 @@ export class Wanderer {
     // A dawdling 1.1 steps a second.
     const pace = this.paused || this.still ? 0 : this.state.pace;
     this.phase += dt * Math.PI * 2 * 1.1 * pace;
+    if (this.view.alpha < 1) this.view.alpha = Math.min(1, this.view.alpha + dt * 2);
     this.pose();
   }
 
@@ -380,6 +381,8 @@ export class Wanderer {
 
   /** Hang the pictures on the skeleton: anchors at the joints, sizes in body units. */
   private dress(parts: Record<PartName, Texture>): void {
+    // He steps into the picture over half a second rather than popping.
+    this.view.alpha = 0;
     // Body: stands on the pivot, bottom centre.
     this.body.texture = parts.body;
     this.body.anchor.set(0.5, 1);

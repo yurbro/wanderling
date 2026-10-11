@@ -1,5 +1,6 @@
 import { Assets, Texture } from 'pixi.js';
 import type { Terrain } from '../core/types';
+import { artUrl } from './art';
 
 /**
  * The terrain kit: hand-drawn pictures the renderer hangs its layers on
@@ -40,7 +41,6 @@ export const EXTRA_HEIGHT: Record<string, number> = {
   'hay-bale': 0.11, haystack: 0.14, bridge: 0.12, 'stone-pile': 0.08, mushrooms: 0.07, stump: 0.09,
   lighthouse: 0.26, boat: 0.09, jetty: 0.11, reeds: 0.12, cactus: 0.18, shrub: 0.09, bench: 0.1, postbox: 0.14,
 };
-const EXTRA_NAMES = Object.values(TERRAIN_EXTRAS).flat();
 
 const PROP_NAMES = [
   'grass-1', 'grass-2', 'grass-3', 'grass-4',
@@ -59,11 +59,27 @@ export interface TerrainProps {
   signpost: Texture;
   lamp: Texture;
   cottage: Texture;
-  /** The terrain extras by name. */
+  /** The terrain extras by name, filled in as each terrain's are fetched (loadExtras). */
   extras: Record<string, Texture>;
 }
 
-const base = (): string => `${import.meta.env.BASE_URL}art/terrain/`;
+/** Each terrain's own things, loaded on first use and hung on the shared props. */
+const extraPromises = new Map<Terrain, Promise<void>>();
+const extras: Record<string, Texture> = {};
+
+/** Fetch a terrain's extras once; they appear in `props.extras` when done. */
+export function loadExtras(terrain: Terrain): Promise<void> {
+  let p = extraPromises.get(terrain);
+  if (!p) {
+    const names = TERRAIN_EXTRAS[terrain];
+    p = Promise.all(names.map((n) => Assets.load<Texture>(artUrl(`terrain/${n}`)))).then((all) => {
+      names.forEach((n, i) => (extras[n] = prepare(all[i], false)));
+    });
+    extraPromises.set(terrain, p);
+  }
+  return p;
+}
+
 
 function prepare(tex: Texture, repeat: boolean): Texture {
   tex.source.autoGenerateMipmaps = true;
@@ -81,7 +97,7 @@ export function loadBands(terrain: Terrain): Promise<BandSet> {
   const key = bandSetFor(terrain);
   let p = bandPromises.get(key);
   if (!p) {
-    p = Promise.all(BAND_NAMES.map((n) => Assets.load<Texture>(`${base()}${key}-${n}.png`))).then((all) => {
+    p = Promise.all(BAND_NAMES.map((n) => Assets.load<Texture>(artUrl(`terrain/${key}-${n}`)))).then((all) => {
       const set = {} as BandSet;
       BAND_NAMES.forEach((n, i) => (set[n] = prepare(all[i], true)));
       return set;
@@ -93,15 +109,12 @@ export function loadBands(terrain: Terrain): Promise<BandSet> {
 
 let propsPromise: Promise<TerrainProps> | null = null;
 
-/** Load the shared props once. */
+/** Load the shared props once (the terrains' own things come separately, see loadExtras). */
 export function loadProps(): Promise<TerrainProps> {
   if (!propsPromise) {
-    const names = [...PROP_NAMES, ...EXTRA_NAMES];
-    propsPromise = Promise.all(names.map((n) => Assets.load<Texture>(`${base()}${n}.png`))).then((all) => {
+    propsPromise = Promise.all(PROP_NAMES.map((n) => Assets.load<Texture>(artUrl(`terrain/${n}`)))).then((all) => {
       const props = {} as Record<PropName, Texture>;
       PROP_NAMES.forEach((n, i) => (props[n] = prepare(all[i], false)));
-      const extras: Record<string, Texture> = {};
-      EXTRA_NAMES.forEach((n, i) => (extras[n] = prepare(all[PROP_NAMES.length + i], false)));
       return {
         grass: [props['grass-1'], props['grass-2'], props['grass-3'], props['grass-4']],
         stones: [props['stone-1'], props['stone-2'], props['stone-3']],
