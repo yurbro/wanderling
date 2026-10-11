@@ -102,12 +102,24 @@ describe('bedtime mode (D9)', () => {
     expect(awake.wanderer.lantern).toBe(false);
     expect(awake.wanderer.asleep).toBe(false);
     expect(awake.bedtime.fire).toBeGreaterThan(0.9);
-    expect(awake.sky.top).not.toBe(rs.sky.top);
+    expect(awake.ground).not.toBe(rs.ground);
     expect(applyBedtime(rs, bedtimeLook(DIM_MS + 1)).wanderer.asleep).toBe(true);
     // Still awake by the fire when the clock reaches 2:00: the plain sleeping state takes over, no switch of pose.
     const twoAm = direct(buildWorldState(at(2, 30), { lat: 51.5, lon: -0.1, name: 'London' }, null, null));
     expect(twoAm.wanderer.asleep).toBe(true);
     expect(applyBedtime(twoAm, bedtimeLook(3 * MIN)).wanderer.asleep).toBe(true);
+  });
+
+  it('leaves the sky alone: the moon and the stars stay as they are, only the land and the HUD go dark (Q5)', () => {
+    const rs = nightScene();
+    const late = applyBedtime(rs, bedtimeLook(9 * MIN));
+    expect(late.sky).toEqual(rs.sky);
+    expect(late.moon).toEqual(rs.moon);
+    expect(late.starAlpha).toBe(rs.starAlpha);
+    expect(late.surprise).toEqual(rs.surprise);
+    expect(late.ground).not.toBe(rs.ground);
+    expect(late.hills.near).not.toBe(rs.hills.near);
+    expect(late.light).toBeLessThan(rs.light);
   });
 
   it('is not there in a normal scene', () => {

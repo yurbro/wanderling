@@ -33,6 +33,7 @@ const DIM_ASLEEP = 0.8;
 const NIGHT_BLUE = 0x070a14;
 
 export function isBedtimeHour(now: Date): boolean {
+  // (The sky's own night does the rest; bedtime only dims the ground and the HUD.)
   const h = now.getHours();
   return h >= BEDTIME_FROM_HOUR || h < BEDTIME_UNTIL_HOUR;
 }
@@ -93,18 +94,21 @@ export function bedtimeHolds(look: BedtimeLook): boolean {
   return !look.over;
 }
 
-/** The scene as bedtime sees it: darker, he sits by the fire, asleep once the time comes. */
+/**
+ * The scene as bedtime sees it: the land goes dark around the fire, he sits
+ * by it, asleep once the time comes. The sky is left exactly as it is: the
+ * moon and the stars are the real ones overhead (pillar 1), and on a full
+ * moon night he looks up at it from the fire (quality pass Q5).
+ */
 export function applyBedtime(rs: RenderState, look: BedtimeLook): RenderState {
   const d = look.dim;
   const dark = (c: number): number => mix(c, NIGHT_BLUE, d);
   return {
     ...rs,
-    sky: { top: dark(rs.sky.top), mid: dark(rs.sky.mid), horizon: dark(rs.sky.horizon) },
     hills: { far: dark(rs.hills.far), mid: dark(rs.hills.mid), near: dark(rs.hills.near) },
     ground: dark(rs.ground),
     path: dark(rs.path),
     light: rs.light * (1 - 0.6 * d),
-    starAlpha: Math.max(rs.starAlpha, d * 0.9),
     darkInk: false,
     wanderer: { ...rs.wanderer, pace: 0, lantern: false, asleep: look.asleep || rs.wanderer.asleep },
     bedtime: { fire: look.fire },
