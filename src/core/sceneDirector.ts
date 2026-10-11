@@ -90,10 +90,17 @@ export function direct(ws: WorldState): RenderState {
   const warmth = 1 - smoothstep(0, 15, alt);
   let cloudColor = mix(WEATHER_TONES.cloudNight, WEATHER_TONES.cloudDay, Math.pow(dayLight, 1.3));
   cloudColor = mix(cloudColor, sky.horizon, 0.18);
-  cloudColor = mix(cloudColor, mix(WEATHER_TONES.cloudGreyNight, WEATHER_TONES.cloudGreyDay, dayLight), gloom * 0.7);
+  cloudColor = mix(cloudColor, mix(WEATHER_TONES.cloudGreyNight, WEATHER_TONES.cloudGreyDay, dayLight), gloom * 0.85);
+  // The weather itself: rain clouds are heavier than an overcast, a thunderstorm's are
+  // darker still, snow clouds a pale grey. Fog takes them towards its own colour.
+  cloudColor = mix(cloudColor, mix(WEATHER_TONES.cloudRainNight, WEATHER_TONES.cloudRainDay, dayLight), smoothstep(0, 0.6, fx.rain) * 0.85);
+  cloudColor = mix(cloudColor, mix(WEATHER_TONES.cloudStormNight, WEATHER_TONES.cloudStormDay, dayLight), fx.lightning * 0.8);
+  cloudColor = mix(cloudColor, mix(WEATHER_TONES.cloudSnowNight, WEATHER_TONES.cloudSnowDay, dayLight), smoothstep(0, 0.6, fx.snow) * 0.7);
+  cloudColor = mix(cloudColor, fogColor, fx.fog * 0.6);
   cloudColor = mix(cloudColor, clearSky.horizon, warmth * (1 - gloom) * 0.35 * (alt > -6 ? 1 : 0));
-  // By night the clouds thin out so the sky and stars show through them; a storm keeps them solid.
-  const cloudAlpha = clamp01(0.5 + 0.45 * dayLight + storm * 0.3);
+  // By night the clouds thin out so the sky and stars show through them; a storm keeps
+  // them solid; in fog they go faint, their edges lost in the mist (the painter softens them).
+  const cloudAlpha = clamp01(0.5 + 0.45 * dayLight + storm * 0.3) * (1 - fx.fog * 0.45);
 
   const dropColor = mix(sky.mid, WEATHER_TONES.paper, 0.45);
 

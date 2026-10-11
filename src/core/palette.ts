@@ -87,6 +87,13 @@ export const WEATHER_TONES = {
   cloudNight: '#3A405E',
   cloudGreyDay: '#C3C7CB',
   cloudGreyNight: '#2A2E40',
+  // Rain clouds are darker than an overcast; a thunderstorm's darker still; snow clouds stay a pale grey.
+  cloudRainDay: '#A7ADB3',
+  cloudRainNight: '#232736',
+  cloudStormDay: '#878E96',
+  cloudStormNight: '#1D2130',
+  cloudSnowDay: '#D6D8D8',
+  cloudSnowNight: '#343A50',
   snowDay: '#E9E6DC',
   snowNight: '#4A5068',
   wetGround: '#6F7466',
