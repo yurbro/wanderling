@@ -1,5 +1,6 @@
 import { Container, FillGradient, Graphics, Sprite, Texture, type Renderer } from 'pixi.js';
-import { hexToCss } from '../core/color';
+import { hexToCss, mix } from '../core/color';
+import { hudCloudFade } from '../core/clouds';
 import { WEATHER_TONES } from '../core/palette';
 import type { RenderState, WeatherLayers } from '../core/types';
 
@@ -16,15 +17,22 @@ import type { RenderState, WeatherLayers } from '../core/types';
  * Particle counts are capped for battery: at most 150 drops or 110 flakes.
  */
 
+/** Clouds in the sky proper, and flat far ones lying along the horizon. */
 const MAX_CLOUDS = 10;
+const FAR_CLOUDS = 3;
+const ALL_CLOUDS = MAX_CLOUDS + FAR_CLOUDS;
 const MAX_DROPS = 200;
 const MAX_FLAKES = 110;
 
 interface Cloud {
   sprite: Sprite;
-  /** Position as fractions of the sky rectangle. */
+  /** The same picture a little bigger and fainter behind it: in fog the edges blur into the mist. */
+  halo: Sprite;
+  /** Position of the cloud's centre as fractions of the sky rectangle. */
   x: number;
   y: number;
+  /** A flat far cloud along the horizon: thinner, fainter, slower. */
+  far: boolean;
   /** Width in pixels after drawing, for wrap-around. */
   width: number;
   /** 0 = far and small, 1 = near and large. */
@@ -100,6 +108,8 @@ export class WeatherPainter {
   setCloudTextures(textures: Texture[], renderer: Renderer): void {
     this.paintedClouds = textures;
     this.makeClouds(renderer);
+    // The new sprites start out white: give them the weather's colour straight away.
+    if (this.layers) this.apply(this.layers);
   }
 
   private makeClouds(renderer: Renderer): void {
@@ -110,16 +120,23 @@ export class WeatherPainter {
     const rng = this.rng;
     const unit = Math.min(this.w, this.h);
     const resolution = Math.min(window.devicePixelRatio || 1, 2);
-    for (let i = 0; i < MAX_CLOUDS; i++) {
-      const depth = rng();
+    for (let i = 0; i < ALL_CLOUDS; i++) {
+      const far = i >= MAX_CLOUDS;
+      const depth = far ? 0 : rng();
       let sprite: Sprite;
+      let halo: Sprite;
       if (this.paintedClouds.length > 0) {
         const tex = this.paintedClouds[Math.floor(rng() * this.paintedClouds.length)];
         sprite = new Sprite(tex);
-        sprite.scale.set((unit * (0.16 + depth * 0.26)) / tex.width);
+        halo = new Sprite(tex);
+        // No two alike: a size of its own, some flipped, some squatter or taller; the far ones lie flat.
+        const size = (unit * (far ? 0.26 + rng() * 0.16 : 0.13 + depth * 0.22 + rng() * 0.1)) / tex.width;
+        const flip = rng() < 0.5 ? -1 : 1;
+        const aspect = far ? 0.38 + rng() * 0.14 : 0.78 + rng() * 0.34;
+        sprite.scale.set(size * flip, size * aspect);
       } else {
         const g = new Graphics();
-        const scale = unit * (0.045 + depth * 0.075);
+        const scale = unit * (far ? 0.09 + rng() * 0.03 : 0.04 + depth * 0.07 + rng() * 0.02);
         drawCloud(g, scale, rng);
         // Bake the shape: a sprite fades as one solid piece, a Graphics would
         // show every overlapping puff while translucent.
@@ -127,30 +144,43 @@ export class WeatherPainter {
         g.destroy();
         this.cloudTextures.push(texture);
         sprite = new Sprite(texture);
+        halo = new Sprite(texture);
+        sprite.scale.set(rng() < 0.5 ? -1 : 1, far ? 0.4 + rng() * 0.15 : 0.8 + rng() * 0.3);
       }
+      sprite.anchor.set(0.5);
+      halo.anchor.set(0.5);
+      halo.scale.set(sprite.scale.x * 1.14, sprite.scale.y * 1.22);
       const cloud: Cloud = {
         sprite,
+        halo,
         x: rng(),
-        // Spread through the upper half of the sky; near clouds a little lower.
-        y: 0.04 + rng() * 0.36 + depth * 0.1,
-        width: sprite.width,
+        // The sky's clouds sit in the upper two thirds, the near ones lower; far clouds lie just above the horizon.
+        y: far ? 0.7 + rng() * 0.16 : 0.08 + rng() * 0.42 + depth * 0.14,
+        far,
+        width: Math.abs(sprite.width),
         depth,
         rank: i,
         alpha: 0,
       };
       sprite.alpha = 0;
-      this.clouds.addChild(sprite);
+      halo.alpha = 0;
+      this.clouds.addChild(halo, sprite);
       this.cloudList.push(cloud);
     }
     // Shuffle ranks so the clouds that appear first are spread across the sky.
     const ranks = this.cloudList.map((_, i) => i).sort(() => rng() - 0.5);
     this.cloudList.forEach((c, i) => (c.rank = ranks[i]));
+    // Nearer clouds in front of farther ones.
+    [...this.cloudList].sort((a, b) => a.depth - b.depth).forEach((c) => this.clouds.addChild(c.halo, c.sprite));
     this.placeClouds();
   }
 
   private placeClouds(): void {
     for (const c of this.cloudList) {
-      c.sprite.position.set(c.x * (this.w + c.width) - c.width, c.y * this.skyH);
+      const x = c.x * (this.w + c.width) - c.width / 2;
+      const y = c.y * this.skyH;
+      c.sprite.position.set(x, y);
+      c.halo.position.set(x, y);
     }
   }
 
@@ -158,16 +188,24 @@ export class WeatherPainter {
     // Clouds always drift a little, faster and in the wind's direction when it blows.
     const dir = L.wind === 0 ? -1 : Math.sign(L.wind);
     const speed = (0.004 + Math.abs(L.wind) * 0.02) * dir; // sky widths per second
-    const shown = Math.round(L.cloud * MAX_CLOUDS);
+    const shown = Math.round(L.cloud * ALL_CLOUDS);
     for (const c of this.cloudList) {
-      c.x += speed * dt * (0.5 + c.depth * 0.8);
+      c.x += speed * dt * (c.far ? 0.3 : 0.5 + c.depth * 0.8);
       if (c.x > 1) c.x -= 1;
       if (c.x < 0) c.x += 1;
       const target = c.rank < shown ? 1 : 0;
       // Ease towards the target so clouds fade in and out instead of popping.
       c.alpha += (target - c.alpha) * Math.min(1, dt * 1.5);
-      c.sprite.alpha = c.alpha * L.cloudAlpha;
+      // Under the clock and the lines in the top left corner a cloud goes faint, so the time stays readable.
+      const cx = (c.x * (this.w + c.width) - c.width / 2) / this.w;
+      const cy = (c.y * this.skyH) / this.h;
+      const hud = hudCloudFade(cx, cy);
+      const a = c.alpha * L.cloudAlpha * hud * (c.far ? 0.75 : 1);
+      c.sprite.alpha = a;
       c.sprite.visible = c.alpha > 0.01;
+      // In fog the edges go: a bigger, fainter copy behind blurs them into the mist.
+      c.halo.alpha = a * L.fog * 0.55;
+      c.halo.visible = c.halo.alpha > 0.01;
     }
     this.placeClouds();
   }
@@ -273,7 +311,10 @@ export class WeatherPainter {
   /* ------------------------------------------------------------------- fog */
 
   private apply(L: WeatherLayers): void {
-    for (const c of this.cloudList) c.sprite.tint = L.cloudColor;
+    for (const c of this.cloudList) {
+      c.sprite.tint = L.cloudColor;
+      c.halo.tint = mix(L.cloudColor, L.fogColor, 0.5);
+    }
     this.drawFog(this.fogFar, 0.44, 0.6, L.fog * 0.85, L.fogColor);
     this.drawFog(this.fogMid, 0.5, 0.64, L.fog * 0.65, L.fogColor);
     this.drawFog(this.fogNear, 0.56, 0.78, L.fog * 0.45, L.fogColor);

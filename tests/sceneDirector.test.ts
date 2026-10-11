@@ -117,6 +117,22 @@ describe('direct with weather', () => {
     expect(stormy).toBeGreaterThan(night);
   });
 
+  it('colours the clouds by the weather: overcast grey, rain darker, a storm darker still, fog faint', () => {
+    const clear = direct(buildWorldState(noon, LONDON, demoWeather('partly-cloudy', noon))).weather;
+    const grey = direct(buildWorldState(noon, LONDON, demoWeather('overcast', noon))).weather;
+    const rain = direct(buildWorldState(noon, LONDON, demoWeather('rain', noon))).weather;
+    const storm = direct(buildWorldState(noon, LONDON, demoWeather('thunderstorm', noon))).weather;
+    const snow = direct(buildWorldState(noon, LONDON, demoWeather('snow', noon))).weather;
+    const fog = direct(buildWorldState(noon, LONDON, demoWeather('fog', noon))).weather;
+    expect(lum(grey.cloudColor)).toBeLessThan(lum(clear.cloudColor));
+    expect(lum(rain.cloudColor)).toBeLessThan(lum(grey.cloudColor));
+    expect(lum(storm.cloudColor)).toBeLessThan(lum(rain.cloudColor));
+    // Snow clouds are grey but not as heavy as rain clouds.
+    expect(lum(snow.cloudColor)).toBeGreaterThan(lum(rain.cloudColor));
+    expect(lum(snow.cloudColor)).toBeLessThan(lum(clear.cloudColor));
+    expect(fog.cloudAlpha).toBeLessThan(grey.cloudAlpha * 0.8);
+  });
+
   it('hides the stars and veils the moon under a cloudy night', () => {
     const clear = direct(buildWorldState(midnight, LONDON, null));
     const cloudy = direct(buildWorldState(midnight, LONDON, demoWeather('overcast', midnight)));
