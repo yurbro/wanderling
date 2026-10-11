@@ -1,5 +1,5 @@
-import { Container, Graphics, Sprite, Texture, type Renderer } from 'pixi.js';
-import { mix } from '../core/color';
+import { Container, FillGradient, Graphics, Sprite, Texture, type Renderer } from 'pixi.js';
+import { hexToRgb, mix } from '../core/color';
 import { PROPS, WANDERER } from '../core/palette';
 import type { LegMode, RenderState } from '../core/types';
 import { drawCloud } from './weatherLayers';
@@ -52,6 +52,8 @@ export class TransportPainter {
   private poles = new Graphics();
   private carriage = new Graphics();
   private deck = new Graphics();
+  /** The lantern's light on the deck planks by night; untinted, so it stays warm. */
+  private deckLight = new Graphics();
   private cloudSea = new Container();
   private cloudFloor = new Graphics();
   private fuselage = new Graphics();
@@ -66,7 +68,7 @@ export class TransportPainter {
 
   constructor() {
     this.outside.addChild(this.cloudFloor, this.cloudSea, this.poles);
-    this.cabin.addChild(this.carriage, this.deck);
+    this.cabin.addChild(this.carriage, this.deck, this.deckLight);
     this.behind.addChild(this.outside, this.cabin);
     this.front.addChild(this.fuselage);
     this.setMode('walk');
@@ -87,6 +89,7 @@ export class TransportPainter {
     this.rng = seeded(47);
     this.drawCarriage();
     this.drawDeck();
+    this.drawDeckLight();
     this.drawFuselage();
     this.makeCloudSea(renderer);
     this.poleXs = [w * 0.3, w * 1.1];
@@ -96,7 +99,9 @@ export class TransportPainter {
     this.setMode(rs.travel.mode);
     const tint = rs.wanderer.tint;
     this.carriage.tint = tint;
-    this.deck.tint = tint;
+    // The deck is out of doors: it takes the land's night, and the lantern makes a pool of light on it.
+    this.deck.tint = rs.land.tint;
+    this.deckLight.alpha = rs.wanderer.lantern ? rs.wanderer.lanternGlow : 0;
     this.fuselage.tint = tint;
     this.poles.tint = tint;
     // Cloud tops take the sky's cloud colour: paper by day, blue-grey by night.
@@ -136,6 +141,7 @@ export class TransportPainter {
     this.poles.visible = mode === 'ride';
     this.carriage.visible = mode === 'ride';
     this.deck.visible = atSea;
+    this.deckLight.visible = atSea;
     this.cloudSea.visible = mode === 'fly';
     this.cloudFloor.visible = mode === 'fly';
     this.fuselage.visible = mode === 'fly';
@@ -162,8 +168,8 @@ export class TransportPainter {
     // The window opening: the whole width on a phone, capped on a wide screen.
     const left = Math.max(w * 0.055, x - 2.4 * u);
     const right = Math.min(w * 0.945, x + 3.0 * u);
-    // Just under the HUD's wordmark, so the frame's top corners show.
-    const top = h * 0.046 + frame;
+    // The HUD's clock and lines sit on the wall above the window.
+    const top = h * 0.235 + frame;
     g.clear();
 
     // The wall, with the window cut out of it. The wainscot and the floor are drawn over it below.
@@ -294,6 +300,32 @@ export class TransportPainter {
     for (let i = 0; i < 2; i++) {
       g.roundRect(seatL, seatTop + i * 0.09 * u, seatR - seatL, 0.08 * u, 0.02 * u).fill({ color: PROPS.wood }).stroke(line);
     }
+  }
+
+  /** A warm pool on the planks under the lantern, soft to its edge. */
+  private drawDeckLight(): void {
+    const g = this.deckLight;
+    const { x, feetY, unit: u } = this.figure;
+    g.clear();
+    const lx = x + 0.45 * u;
+    const ly = feetY + 0.02 * u;
+    const { r, g: gg, b } = hexToRgb(WANDERER.glow);
+    const rgba = (a: number): string => `rgba(${Math.round(r)}, ${Math.round(gg)}, ${Math.round(b)}, ${a})`;
+    const pool = new FillGradient({
+      type: 'radial',
+      center: { x: 0.5, y: 0.5 },
+      innerRadius: 0,
+      outerCenter: { x: 0.5, y: 0.5 },
+      outerRadius: 0.5,
+      colorStops: [
+        { offset: 0, color: rgba(0.26) },
+        { offset: 0.35, color: rgba(0.14) },
+        { offset: 0.7, color: rgba(0.05) },
+        { offset: 1, color: rgba(0) },
+      ],
+      textureSpace: 'local',
+    });
+    g.ellipse(lx, ly, 2.0 * u, 0.95 * u).fill(pool);
   }
 
   /* --------------------------------------------------------------- plane */

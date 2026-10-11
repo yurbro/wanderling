@@ -1,5 +1,5 @@
-import { clamp01, hexToRgb, mix, smoothstep } from './color';
-import { CELESTIAL, LAND, WEATHER_TONES, skyAt } from './palette';
+import { clamp01, hexToRgb, mix, multiply, smoothstep } from './color';
+import { CELESTIAL, LAND, PROPS, WEATHER_TONES, skyAt } from './palette';
 import type { SurpriseShow, CelestialPlacement, DayPhase, Landmark, LeafState, LegMode, PlaceMarker, Position, RenderState, Terrain, WorldState } from './types';
 import { TERRAIN, approach, landAt } from './journey';
 import { NO_WEATHER, weatherIntensities } from './weather';
@@ -136,6 +136,8 @@ export function direct(ws: WorldState): RenderState {
     sea: atSea ? 1 : profile.sea,
     seaColor: mix(mix(LAND.seaNight, LAND.seaDay, dayLight), horizon, 0.3),
     seaNear: mix(mix(LAND.seaNearNight, LAND.seaNearDay, dayLight), horizon, 0.12),
+    // Out of doors things take nearly the land's full night, unlike the figure.
+    tint: mix(mix('#FFFFFF', tint, night * 0.85), WEATHER_TONES.landGreyDay, gloom * 0.2),
   };
 
   // The nearest place's marker: behind us just after leaving, ahead when close.
@@ -177,7 +179,8 @@ export function direct(ws: WorldState): RenderState {
     travel: { mode: travelMode },
     marker,
     landmark,
-    darkInk: luminance(sky.top) > 0.55,
+    // In the carriage the HUD sits on the wall above the window, not on the sky.
+    darkInk: luminance(travelMode === 'ride' ? multiply(PROPS.cabinWall, wanderer.tint) : sky.top) > 0.55,
     bedtime: { fire: 0 },
     // A rainbow stands opposite the sun; it needs the sun up and the walk outdoors.
     surprise: {

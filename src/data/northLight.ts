@@ -44,7 +44,8 @@ const MODE: Record<DataPlace['arriveBy'], LegMode> = { arrive: 'walk', walk: 'wa
 function legTerrain(from: DataPlace, to: DataPlace): Terrain {
   switch (to.arriveBy) {
     case 'train':
-      return 'plain';
+      // From the window: the land the line runs through, which is the ends' unless both are cities.
+      return from.terrain !== 'city' ? from.terrain : to.terrain !== 'city' ? to.terrain : 'plain';
     case 'ferry':
     case 'ship':
       return 'coast';

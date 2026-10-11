@@ -246,6 +246,19 @@
 - 下一步：品质打磨批 Q3（首屏加载）。
 - Yu 的作业：合并 PR；手机上开 `?weather=rain`、`?weather=thunderstorm`、`?weather=fog` 看云的颜色和虚边；看 `q2-clouds-compare.png` 说感受（雨云够不够灰、雷雨会不会太暗、远云要不要再多）。
 
+## 2026-10-11 会话 37：品质打磨批 Q1b，车厢和甲板的收尾
+
+- 前提：会话 36 的 PR 41 已合并。Cowork 验收 Q1（PR 40）整体通过，三处收尾写成 Q1b，加进路线图 Q1 和 Q2 之间。
+- 做了什么：
+  - 窗框下移：`transport.ts` 里窗框顶从 4.6% 高改到 23.5%，左上角的 HUD 坐在车厢墙面上。HUD 墨色：`sceneDirector.ts` 的 `darkInk` 在火车上按「墙色乘旅人夜色」的明度定（新加 `color.ts` 的 `multiply()`），白天和夜里都是深墨，不再跟天空走（有测试）。
+  - 窗外的风景：`renderer.ts` 坐火车时不再整层隐藏路边小物，只隐藏轨道这一侧（深度小于 0.38 的留下）和城镇家具（长椅、邮筒），循环回来时同样判断（`showDetail()`）。`northLight.ts` 的火车段地形改为两端地点的地形（两端都是城市才用平原），奥斯陆到卑尔根这段现在看得见海岸。
+  - 夜里的甲板：`RenderState.land.tint`（`types.ts`、`sceneDirector.ts`），户外物件吃接近大地的夜色（0.85），车厢仍用旅人的 0.4（车里有灯）。甲板上提灯脚下画一圈径向渐变的暖光（`drawDeckLight()`，不套色），随 `lanternGlow` 出现。
+  - 测试 267 个（新增 2 个）。
+- 产出：新 PR；`docs/screenshots/q1b-transport-compare.png`（火车白天、夜里，快船夜里，Q1 和 Q1b 并排），单张 `q1b-train-day.png`、`q1b-train-night.png`、`q1b-ship-night.png`。
+- 注意：窗框下移后，夏天正午很高的太阳会被窗上方的墙挡住，只看得到光；秋冬都看得见。夜里车厢墙面是半明的暖灰，HUD 用深墨，手机上看一下是否够清楚。
+- 下一步：品质打磨批 Q3（首屏加载）。
+- Yu 的作业：合并 PR；手机上开 `?route=north-light-v1&km=5950&t=12:00`（白天火车）、`?day=3&hour=21`（夜班火车）、`?route=north-light-v1&km=6100&t=22:40`（夜里快船）；看 `q1b-transport-compare.png` 说感受。
+
 ## 停车场（MVP 之外的想法）
 
 - Service Worker：添加到主屏幕后断网也能打开页面。
@@ -767,10 +780,10 @@
 - 已裁决（decisions.md 第 9 节第 19 条，会话 32 已做）：夜班火车去离家至少 250 公里的最近短路线；北方之光接在用户走完的第一条短路线之后。
 - 已裁决（第 20 到 22 条，会话 32 已做）：远处用户去海边大城；前 7 天不发睡觉的错过信；一周的天空带落款，小站对所有人都叫小站。
 
-## 下次会话开场清单（会话 37 的第一件事）
+## 下次会话开场清单（会话 38 的第一件事）
 
-1. 读 `CLAUDE.md`、`docs/design/decisions.md`、`docs/roadmap.md` 与本文件；`git fetch origin main` 看会话 36 的 PR 是否已合并；没合并就先提醒 Yu。
-2. `npm install`，`npm test`，确认 265 个测试通过。
-3. 先问 Yu 看了新云（`docs/screenshots/q2-clouds-compare.png`）和车厢甲板的感受，有要调的先调。
+1. 读 `CLAUDE.md`、`docs/design/decisions.md`、`docs/roadmap.md` 与本文件；`git fetch origin main` 看会话 37 的 PR 是否已合并；没合并就先提醒 Yu。
+2. `npm install`，`npm test`，确认 267 个测试通过。
+3. 先问 Yu 看了 Q1b 的收尾（`docs/screenshots/q1b-transport-compare.png`）和 Q2 的云的感受，有要调的先调。
 4. 本次目标：路线图「品质打磨批」的 Q3（首屏加载：贴图转 WebP 留 PNG 兜底，先加载天空和旅人，地形按需，资源没齐时淡入；目标 4G 下 3 秒内看到完整画面）。先量一下现在的体积和首屏时间再动手。
 5. 结束前：推送、开 PR；更新 `docs/roadmap.md` 和本日志，回复里给出线上地址和「这次看哪里」。
