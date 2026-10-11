@@ -25,3 +25,23 @@ describe('roadside prop density (ruling 17)', () => {
     expect(counts).toEqual({ bench: 2, postbox: 1 });
   });
 });
+
+describe('detailKind', () => {
+  it('gives each terrain its own odds, summing to one', async () => {
+    const { DETAIL_MIX, detailKind } = await import('../src/core/props');
+    for (const [terrain, mix] of Object.entries(DETAIL_MIX)) {
+      const sum = mix.extra + mix.tuft + mix.stone + mix.flower;
+      expect(Math.abs(sum - 1), terrain).toBeLessThan(1e-9);
+    }
+    // A desert is mostly stones; a plain mostly grass; the hills have nothing of their own.
+    const count = (terrain: 'desert' | 'plain' | 'hills', kind: string): number => {
+      let n = 0;
+      for (let i = 0; i < 1000; i++) if (detailKind(terrain, (i + 0.5) / 1000) === kind) n++;
+      return n;
+    };
+    expect(count('desert', 'stone')).toBeGreaterThan(count('desert', 'tuft'));
+    expect(count('plain', 'tuft')).toBeGreaterThan(count('plain', 'stone'));
+    expect(count('hills', 'extra')).toBe(0);
+    expect(detailKind('hills', 0.999)).toBe('flower');
+  });
+});

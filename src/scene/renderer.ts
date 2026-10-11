@@ -11,7 +11,7 @@ import { CatPainter } from './cat';
 import { Wanderer, loadParts } from './wanderer';
 import { WeatherPainter } from './weatherLayers';
 import { Campfire } from './campfire';
-import { pickProp } from '../core/props';
+import { detailKind, pickProp, type DetailKind } from '../core/props';
 import { EXTRA_HEIGHT, TERRAIN_EXTRAS, bandSetFor, loadBands, loadExtras, loadProps, type BandName, type BandSet, type TerrainProps } from './terrain';
 import type { Terrain } from '../core/types';
 import { BAND_FADE } from './bandFade';
@@ -42,7 +42,7 @@ interface Star {
 
 /** A tuft of grass, a stone or a small flower that scrolls past on the ground. */
 interface Detail {
-  kind: 'tuft' | 'stone' | 'flower' | 'extra';
+  kind: DetailKind;
   x: number;
   y: number;
   /** 0 = at the horizon, 1 = at the bottom edge. Closer things move faster. */
@@ -673,19 +673,28 @@ export class SceneRenderer {
   }
 
   /** Where the wanderer stands and how tall they are, shared with the vehicles. */
-  /** Seven thin paper bands, red outside, with the outer bands faintest, fading at the horizon. */
+  /**
+   * Seven paper bands, red outside, wide enough to read across the sky and
+   * soft at the edges: each band is drawn twice, once as itself and once
+   * wider and fainter, so the colours melt into each other and into the sky.
+   */
   private drawRainbow(strength: number, cx: number, w: number, skyH: number): void {
     this.rainbow.clear();
     if (strength <= 0.005) return;
-    const r = Math.max(w, skyH) * 0.62;
-    const band = Math.max(3, w * 0.011);
+    const r = Math.max(w, skyH) * 0.64;
+    const band = Math.max(5, w * 0.02);
     const x = cx * w;
     const y = skyH * 1.04;
     const colors = [0xd9736a, 0xe3a35a, 0xe6d06b, 0x9bbd7a, 0x7fb0b7, 0x7f93c4, 0xa98cc0];
+    // The soft pass first, so the crisp bands sit over it.
     colors.forEach((color, i) => {
-      const radius = r - i * band;
-      const edge = i === 0 || i === colors.length - 1 ? 0.7 : 1;
-      this.rainbow.arc(x, y, radius, Math.PI, 2 * Math.PI).stroke({ color, width: band, alpha: 0.34 * strength * edge });
+      const radius = r - (i + 0.5) * band;
+      this.rainbow.arc(x, y, radius, Math.PI, 2 * Math.PI).stroke({ color, width: band * 2.2, alpha: 0.1 * strength });
+    });
+    colors.forEach((color, i) => {
+      const radius = r - (i + 0.5) * band;
+      const edge = i === 0 || i === colors.length - 1 ? 0.75 : 1;
+      this.rainbow.arc(x, y, radius, Math.PI, 2 * Math.PI).stroke({ color, width: band, alpha: 0.36 * strength * edge });
     });
   }
 
@@ -751,9 +760,8 @@ export class SceneRenderer {
     const rng = seeded(23);
     const count = Math.round(14 + this.w / 40);
     for (let i = 0; i < count; i++) {
-      const r = rng();
-      // Every eighth or so is something that belongs to the terrain, when it has such things.
-      const kind: Detail['kind'] = r < 0.2 ? 'extra' : r < 0.65 ? 'tuft' : r < 0.86 ? 'stone' : 'flower';
+      // What stands here depends on the country: stones in the desert, haystacks on the plain.
+      const kind = detailKind(this.state?.land.terrain ?? 'hills', rng());
       let g: Container;
       let base = 1;
       if (this.props) {
@@ -840,8 +848,11 @@ export class SceneRenderer {
       d.x -= groundSpeed * dt * (0.62 + d.depth * 0.8);
       if (d.x < -40) {
         d.x = this.w + 20 + Math.random() * 60;
-        // Coming round again: take the picture of the terrain being walked now.
-        if (this.props && d.g instanceof Sprite) d.base = this.dressDetail(d.g, d.kind, Math.random);
+        // Coming round again: become whatever belongs to the terrain being walked now, with its picture.
+        if (this.props && d.g instanceof Sprite) {
+          d.kind = detailKind(this.state?.land.terrain ?? 'hills', Math.random());
+          d.base = this.dressDetail(d.g, d.kind, Math.random);
+        }
         this.dropDetail(d, Math.random());
         if (this.state) this.showDetail(d, this.state.travel.mode);
       }
@@ -1049,6 +1060,7 @@ export class SceneRenderer {
     if (!this.props) return;
     for (const d of this.details) {
       if (d.g instanceof Sprite) {
+        d.kind = detailKind(this.state?.land.terrain ?? 'hills', Math.random());
         d.base = this.dressDetail(d.g, d.kind, Math.random);
         d.g.scale.set(d.base * (0.7 + d.depth * 0.9));
       }

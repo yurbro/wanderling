@@ -265,7 +265,8 @@ export const LEAF_PAINT = '#9CA79A';
 export const LEAF_SEASONS = {
   spring: '#86A784',
   summer: '#9CA79A',
-  autumn: '#969183',
+  // Autumn: a greyed ochre, lifted a touch in light and warmth (quality pass Q6) so it reads as a leaf turning, not a dead one.
+  autumn: '#9C937D',
   winter: '#8C9290',
 };
 
