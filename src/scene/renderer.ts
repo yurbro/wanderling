@@ -14,6 +14,7 @@ import { Campfire } from './campfire';
 import { pickProp } from '../core/props';
 import { EXTRA_HEIGHT, TERRAIN_EXTRAS, bandSetFor, loadBands, loadExtras, loadProps, type BandName, type BandSet, type TerrainProps } from './terrain';
 import type { Terrain } from '../core/types';
+import { BAND_FADE } from './bandFade';
 
 /** Fraction of the screen height where the sky meets the land. */
 const HORIZON = 0.62;
@@ -73,6 +74,22 @@ const BAND_HEIGHT: Record<BandName, number> = { far: 0.1, mid: 0.13, near: 0.15,
 const BAND_DROP: Record<BandName, number> = { far: 0.05, mid: 0.075, near: 0.1, ground: 0 };
 /** Some sheets are drawn big: the city's houses and cobbles need to come down to the scene's scale. */
 const TERRAIN_BAND_SCALE: Partial<Record<Terrain, number>> = { city: 0.55 };
+/**
+ * The town's bands are small once scaled, so they sit closer together: the
+ * skyline, the roofs and the houses each show over the one in front, and the
+ * stone wall (its ground band) runs lower so the houses peek over it.
+ */
+const TERRAIN_BAND_DROP: Partial<Record<Terrain, Partial<Record<BandName, number>>>> = { city: { far: 0.04, mid: 0.026, near: 0.018 } };
+const TERRAIN_GROUND_LIFT: Partial<Record<Terrain, number>> = { city: 0.05 };
+const GROUND_LIFT = 0.4;
+/** Where the town's stone wall stands, in screen widths along the road: stretches of wall with open ground between. */
+const WALL_STRETCHES: [number, number][] = [
+  [0, 1.4],
+  [2.1, 0.9],
+  [3.6, 1.7],
+  [5.9, 0.6],
+];
+const WALL_PERIOD = 7.2;
 
 /**
  * Draws the scene from a RenderState. All layout is proportional so the same
@@ -107,6 +124,8 @@ export class SceneRenderer {
   private ground = new Graphics();
   /** The painted grass edge along the horizon, once the kit is in. */
   private groundBand: TilingSprite | null = null;
+  /** Cuts the town's wall into stretches; a Graphics mask costs nothing to speak of. */
+  private wallMask = new Graphics();
   private groundScroll = 0;
   /** The path and its pencil lines, above the grass band. */
   private pathLayer = new Graphics();
@@ -569,8 +588,9 @@ export class SceneRenderer {
       this.groundBand.tileScale.set(k);
       this.groundBand.width = w + 2;
       this.groundBand.height = bandH;
-      this.groundBand.position.set(-1, skyH - bandH * 0.4);
+      this.groundBand.position.set(-1, skyH - bandH * (TERRAIN_GROUND_LIFT[this.bandsFor ?? 'hills'] ?? GROUND_LIFT));
       this.groundBand.tint = st.ground;
+      this.maskWall();
     }
     // A lighter path band, with pencil lines along its edges.
     const pathY = skyH + (h - skyH) * 0.42;
@@ -648,6 +668,7 @@ export class SceneRenderer {
     if (this.groundBand) {
       this.groundScroll += groundSpeed * dt * 0.62;
       this.groundBand.tilePosition.x = -this.groundScroll;
+      this.maskWall();
     }
   }
 
@@ -894,7 +915,8 @@ export class SceneRenderer {
       // Mountains stand taller, plains flatter; but a painted band only stretches so far before it looks pulled.
       const bandH = h * BAND_HEIGHT[name] * Math.min(1.4, Math.max(0.12, relief)) * (TERRAIN_BAND_SCALE[this.bandsFor ?? 'hills'] ?? 1);
       const k = bandH / tex.height;
-      const bottom = h * (spec.base + BAND_DROP[name] + sink);
+      const terrain = this.bandsFor ?? 'hills';
+      const bottom = h * (spec.base + (TERRAIN_BAND_DROP[terrain]?.[name] ?? BAND_DROP[name]) + sink);
       layer.band.tileScale.set(k);
       layer.band.width = w + 2;
       layer.band.height = bandH;
@@ -902,7 +924,10 @@ export class SceneRenderer {
       // The scroll is in screen widths; the picture scrolls at the same pace in screen pixels.
       layer.band.tilePosition.x = -offset * w;
       layer.band.tint = color;
-      g.rect(0, bottom - 1, w, h - bottom + 1).fill({ color });
+      // The band's lower part fades out (tools/fade-bands.py); the flat fill behind it
+      // starts where that fade begins, so the two meet softly rather than on a line.
+      const fillTop = bottom - bandH * (1 - (BAND_FADE[`${terrain}-${name}`] ?? 0.6));
+      g.rect(0, fillTop, w, h - fillTop).fill({ color });
       return;
     }
     const step = 8;
@@ -924,6 +949,37 @@ export class SceneRenderer {
     if (relief > 0.05) {
       sketchLine(g, pts.slice(2, pts.length - 2), mix(color, WANDERER.ink, 0.6), 0.7, spec.phases[0] + offset * 40);
     }
+  }
+
+  /**
+   * A town's stone wall does not run the whole way: it stands in stretches,
+   * with open ground between, and the stretches slide past with the road.
+   * Elsewhere the ground band (a grass edge) runs unbroken.
+   */
+  private maskWall(): void {
+    const band = this.groundBand;
+    if (!band) return;
+    if (this.bandsFor !== 'city') {
+      if (band.mask) {
+        band.mask = null;
+        this.wallMask.clear();
+      }
+      return;
+    }
+    const { w } = this;
+    const m = this.wallMask;
+    m.clear();
+    const period = WALL_PERIOD * w;
+    const shift = ((this.groundScroll % period) + period) % period;
+    for (const [start, len] of WALL_STRETCHES) {
+      for (const rep of [-1, 0, 1]) {
+        const x = start * w - shift + rep * period;
+        if (x + len * w < -2 || x > w + 2) continue;
+        m.rect(x, band.y - 2, len * w, band.height + 4);
+      }
+    }
+    m.fill({ color: 0xffffff });
+    if (band.mask !== m) band.mask = m;
   }
 
   /** The shared props have loaded: painted clouds, ground details and place props. */
@@ -977,6 +1033,7 @@ export class SceneRenderer {
       this.groundBand = new TilingSprite({ texture: set.ground, width: 10, height: 10 });
       // Just above the ground fill, below the path.
       this.app.stage.addChildAt(this.groundBand, this.app.stage.getChildIndex(this.ground) + 1);
+      this.app.stage.addChild(this.wallMask);
     } else {
       this.groundBand.texture = set.ground;
     }
@@ -1002,7 +1059,9 @@ export class SceneRenderer {
   private fadeBands(dt: number): void {
     const sprites = [this.hills.far.band, this.hills.mid.band, this.hills.near.band, this.groundBand, this.detailLayer, this.marker];
     for (const b of sprites) {
-      if (b && b.alpha < 1) b.alpha = Math.min(1, b.alpha + dt * 0.9);
+      // The far band stays a touch see-through: air between here and there.
+      const cap = b === this.hills.far.band ? 0.9 : 1;
+      if (b && b.alpha < cap) b.alpha = Math.min(cap, b.alpha + dt * 0.9);
     }
   }
 
