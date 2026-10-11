@@ -10,6 +10,7 @@ import { TransportPainter } from './transport';
 import { CatPainter } from './cat';
 import { Wanderer, loadParts } from './wanderer';
 import { WeatherPainter } from './weatherLayers';
+import { Campfire } from './campfire';
 import { pickProp } from '../core/props';
 import { EXTRA_HEIGHT, TERRAIN_EXTRAS, bandSetFor, loadBands, loadProps, type BandName, type BandSet, type TerrainProps } from './terrain';
 import type { Terrain } from '../core/types';
@@ -153,6 +154,7 @@ export class SceneRenderer {
   private h = 1;
   private elapsed = 0;
   private paused = false;
+  private readonly campfire = new Campfire();
 
   private readonly hillSpecs: Record<'far' | 'mid' | 'near', HillSpec> = {
     far: { base: 0.52, amps: [0.045, 0.02, 0.008], freqs: [1.7, 4.1, 9.3], phases: [0.4, 2.1, 5.2] },
@@ -198,6 +200,7 @@ export class SceneRenderer {
       this.transport.behind,
       this.cat.view,
       this.wanderer.glow,
+      this.campfire.view,
       this.wanderer.view,
       this.wanderer.firefly,
       this.pack,
@@ -445,6 +448,10 @@ export class SceneRenderer {
       this.apply(next, false);
     }
     this.weather.frame(dt, this.elapsed);
+    {
+      const f = this.wanderer.footing();
+      this.campfire.frame(dt, this.state.bedtime.fire, f.x + 1.05 * f.u, f.y - 0.02 * f.u, f.u);
+    }
     this.sea.frame(dt, this.elapsed);
     this.fadeBands(dt);
     this.walk(dt);

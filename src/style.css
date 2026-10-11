@@ -1032,3 +1032,31 @@ canvas.scene {
 .settings-row[hidden] {
   display: none;
 }
+
+/* Bedtime mode: a quiet screen, no numbers, then black */
+
+.bedtime-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #05070d;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bedtime-veil.on {
+  pointer-events: auto;
+}
+
+.bedtime .hud {
+  opacity: var(--bedtime-hud, 1);
+  transition: opacity 2s ease;
+}
+
+/* No clock, weather, kilometres or counts by the fire. */
+.bedtime .hud .clock,
+.bedtime .hud .weather,
+.bedtime .hud .journey,
+.bedtime .hud .hud-bottom .hud-buttons {
+  display: none;
+}

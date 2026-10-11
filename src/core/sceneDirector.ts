@@ -169,6 +169,7 @@ export function direct(ws: WorldState): RenderState {
     marker,
     landmark,
     darkInk: luminance(sky.top) > 0.55,
+    bedtime: { fire: 0 },
     // A rainbow stands opposite the sun; it needs the sun up and the walk outdoors.
     surprise: {
       ...show,
