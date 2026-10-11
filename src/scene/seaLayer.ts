@@ -38,12 +38,17 @@ export class SeaPainter {
   readonly waves = new Graphics();
   /** Boats on the water, same layer as the waves. */
   readonly boats = new Container();
+  /** From a deck, the water right below the rail. Add above the ground, below the deck. */
+  readonly nearWaves = new Graphics();
   /** Gulls in the sky. Add above the clouds. */
   readonly gulls = new Graphics();
 
   private w = 1;
   private h = 1;
   private waveList: Wave[] = [];
+  /** From a deck the water comes much nearer: longer strokes lower down, sliding past the ship. */
+  private nearWaveList: Wave[] = [];
+  private aboard = false;
   private boatList: Boat[] = [];
   private gullList: Gull[] = [];
   private amount = 0;
@@ -62,6 +67,13 @@ export class SeaPainter {
       x: rng() * w,
       y: top + rng() * (bottom - top),
       len: 10 + rng() * 18,
+      phase: rng() * Math.PI * 2,
+    }));
+
+    this.nearWaveList = Array.from({ length: 14 }, () => ({
+      x: rng() * w,
+      y: h * (0.6 + rng() * 0.13),
+      len: 18 + rng() * 30,
       phase: rng() * Math.PI * 2,
     }));
 
@@ -89,12 +101,14 @@ export class SeaPainter {
 
   setState(rs: RenderState): void {
     this.amount = smoothstep(0.35, 0.85, rs.land.sea);
+    this.aboard = rs.travel.mode === 'ferry' || rs.travel.mode === 'ship';
     this.daylight = rs.light;
     this.waveColor = mix(rs.land.seaNear, WANDERER.glow, 0.55);
     for (const b of this.boatList) b.view.tint = rs.wanderer.tint;
     const show = this.amount > 0.01;
     this.waves.visible = show;
     this.boats.visible = show;
+    this.nearWaves.visible = show && this.aboard;
     this.gulls.visible = show && this.daylight > 0.45;
     this.boats.alpha = this.amount;
   }
@@ -112,6 +126,19 @@ export class SeaPainter {
       const a = (0.3 + 0.18 * Math.sin(elapsed * 0.9 + wv.phase)) * this.amount;
       g.moveTo(wv.x, wv.y).quadraticCurveTo(wv.x + wv.len / 2, wv.y - 1.2, wv.x + wv.len, wv.y);
       g.stroke({ color: this.waveColor, width: 1.2, alpha: a, cap: 'round' });
+    }
+    if (this.aboard) {
+      // The ship moves on: the near water slides back past the rail, faster the nearer it is.
+      const ng = this.nearWaves;
+      ng.clear();
+      for (const wv of this.nearWaveList) {
+        wv.x -= (14 + (wv.y / this.h - 0.6) * 90) * dt;
+        if (wv.x < -60) wv.x += w + 120;
+        const a = (0.3 + 0.16 * Math.sin(elapsed * 1.1 + wv.phase)) * this.amount;
+        const width = 1.2 + (wv.y / this.h - 0.6) * 8;
+        ng.moveTo(wv.x, wv.y).quadraticCurveTo(wv.x + wv.len / 2, wv.y - 1.6, wv.x + wv.len, wv.y);
+        ng.stroke({ color: this.waveColor, width, alpha: a, cap: 'round' });
+      }
     }
 
     // Boats: cross the water and come back round after a long while.

@@ -193,6 +193,16 @@ canvas.scene {
   opacity: 0.9;
 }
 
+/* His line gets a soft pill of its own, so it reads over a dark carriage or a pale deck alike. */
+.note.visible:not(:empty) {
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
 .journey {
   font-size: 14px;
   opacity: 0.8;

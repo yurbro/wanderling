@@ -121,10 +121,12 @@ export function direct(ws: WorldState): RenderState {
 
   // The land: shaped by the terrain of the current leg, flat sea at the coast.
   const profile = journey ? landAt(journey.route, journey) : TERRAIN.hills;
+  // Aboard a ferry or the coastal ship there is water all round, whatever the ports' land is.
+  const atSea = travelMode === 'ferry' || travelMode === 'ship';
   const landLayers = {
     terrain: journey ? terrainAt(journey) : 'hills',
     relief: profile.relief,
-    sea: profile.sea,
+    sea: atSea ? 1 : profile.sea,
     seaColor: mix(mix(LAND.seaNight, LAND.seaDay, dayLight), horizon, 0.3),
     seaNear: mix(mix(LAND.seaNearNight, LAND.seaNearDay, dayLight), horizon, 0.12),
   };

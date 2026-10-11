@@ -472,6 +472,18 @@ describe('direct aboard trains and planes', () => {
     expect(rs.wanderer.pace).toBe(0);
   });
 
+  it('puts water all round from a ferry or the coastal ship, whatever land the ports stand on', () => {
+    const train = routeFromHome(TO_THE_SEA, { name: 'Berlin', lat: 52.52, lon: 13.4 });
+    const pos = locate(train, advance(train, startJourney(train, t0), t0 + 3_600_000).state, t0 + 3_600_000);
+    expect(direct(buildWorldState(noon, LONDON, null, pos)).land.sea).toBe(0);
+    for (const mode of ['ferry', 'ship'] as const) {
+      const rs = direct(buildWorldState(noon, LONDON, null, { ...pos, mode }));
+      expect(rs.travel.mode).toBe(mode);
+      expect(rs.land.sea).toBe(1);
+      expect(rs.wanderer.pace).toBe(0);
+    }
+  });
+
   it('is on foot while resting, even on a flight segment', () => {
     const flown = routeFromHome(TO_THE_SEA, { name: 'Tokyo', lat: 35.68, lon: 139.69 });
     const landed = t0 + (flown.legs[0].km / 700 + 0.5) * 3_600_000;

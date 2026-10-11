@@ -1,7 +1,7 @@
 import { Application, Container, FillGradient, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
 import { mix } from '../core/color';
 import { CELESTIAL } from '../core/palette';
-import type { RenderState } from '../core/types';
+import type { LegMode, RenderState } from '../core/types';
 import { blendRenderState, easeInOut } from '../core/blend';
 import { KM_PER_HOUR } from '../core/journey';
 import { PROPS, WANDERER } from '../core/palette';
@@ -161,6 +161,8 @@ export class SceneRenderer {
     mid: { base: 0.565, amps: [0.03, 0.014, 0.006], freqs: [2.3, 5.9, 11.7], phases: [1.9, 0.3, 3.8] },
     near: { base: 0.6, amps: [0.014, 0.008, 0.004], freqs: [3.1, 7.7, 15.1], phases: [4.2, 1.1, 2.6] },
   };
+  /** The far shore from a ship: steep walls rising straight out of the water. */
+  private readonly fjordSpec: HillSpec = { base: 0.565, amps: [0.085, 0.035, 0.012], freqs: [1.3, 3.7, 8.9], phases: [0.9, 2.6, 4.4] };
 
   async init(parent: HTMLElement): Promise<void> {
     await this.app.init({
@@ -194,6 +196,7 @@ export class SceneRenderer {
       this.hills.near.view,
       this.ground,
       this.pathLayer,
+      this.sea.nearWaves,
       this.detailLayer,
       this.marker,
       this.markerLights,
@@ -271,7 +274,7 @@ export class SceneRenderer {
     this.wanderer.setState(state);
     this.sea.setState(state);
     this.transport.setState(state);
-    this.showLand(state.travel.mode !== 'fly');
+    this.showLayers(state.travel.mode);
     this.tintDetails(state);
     this.redraw(syncMarker);
   }
@@ -533,8 +536,26 @@ export class SceneRenderer {
     if (syncMarker) this.placeSignpost();
 
     // Ground: a flat fill, and with the kit a painted grass edge along the horizon.
+    // From a deck it is water all the way down to the bulwark.
+    const atSea = st.travel.mode === 'ferry' || st.travel.mode === 'ship';
     this.ground.clear();
-    this.ground.rect(0, skyH, w, h - skyH).fill({ color: st.ground });
+    if (atSea) {
+      // The water deepens in colour as it comes nearer, with no hard edge.
+      const water = new FillGradient({
+        type: 'linear',
+        start: { x: 0, y: 0 },
+        end: { x: 0, y: 1 },
+        colorStops: [
+          { offset: 0, color: st.land.seaColor },
+          { offset: 0.3, color: st.land.seaNear },
+          { offset: 1, color: st.land.seaNear },
+        ],
+        textureSpace: 'local',
+      });
+      this.ground.rect(0, skyH - 1, w, h - skyH + 1).fill(water);
+    } else {
+      this.ground.rect(0, skyH, w, h - skyH).fill({ color: st.ground });
+    }
     if (this.groundBand && this.bands) {
       const tex = this.bands.ground;
       const bandH = h * 0.07 * (TERRAIN_BAND_SCALE[this.bandsFor ?? 'hills'] ?? 1);
@@ -641,13 +662,13 @@ export class SceneRenderer {
     });
   }
 
-  private figure(): { x: number; feetY: number; height: number } {
+  private figure(): { x: number; feetY: number; height: number; unit: number } {
     const { w, h } = this;
     const skyH = h * HORIZON;
     const ground = h - skyH;
     const pathY = skyH + ground * 0.42;
     const pathH = ground * 0.1;
-    return { x: w * 0.42, feetY: pathY + pathH * 0.6, height: ground * 0.36 };
+    return { x: w * 0.42, feetY: pathY + pathH * 0.6, height: ground * 0.36, unit: h * WANDERLING_HEIGHT };
   }
 
   private placeWanderer(): void {
@@ -655,18 +676,22 @@ export class SceneRenderer {
     this.wanderer.layout(f.x, f.feetY, this.h * WANDERLING_HEIGHT);
   }
 
-  /** In the air there is no land to draw: hills, ground, sea, fog and markers all go. */
-  private showLand(show: boolean): void {
+  /**
+   * Which of the land shows for each way of travelling. In the air there is
+   * no land at all. From a train window and from a deck the far land shows
+   * but nothing near: no path, no roadside things, no place marker. At sea the
+   * grass edge goes too, the water comes right up to the bulwark.
+   */
+  private showLayers(mode: LegMode): void {
+    const land = mode !== 'fly';
+    const near = mode === 'walk';
+    const atSea = mode === 'ferry' || mode === 'ship';
     for (const layer of [
       this.hills.far.view,
       this.landmark,
       this.hills.mid.view,
       this.hills.near.view,
       this.ground,
-      this.pathLayer,
-      this.detailLayer,
-      this.marker,
-      this.markerLights,
       this.sea.waves,
       this.sea.boats,
       this.sea.gulls,
@@ -674,9 +699,20 @@ export class SceneRenderer {
       this.weather.fogMid,
       this.weather.fogNear,
     ]) {
-      layer.visible = show;
+      layer.visible = land;
     }
-    if (!show) this.markerLights.visible = false;
+    for (const layer of [this.pathLayer, this.detailLayer, this.marker, this.markerLights]) layer.visible = near;
+    if (this.groundBand) this.groundBand.visible = land && !atSea;
+    // In the carriage the rain falls outside the glass: behind the wall and the bench, not on him.
+    const stage = this.app.stage;
+    const precip = this.weather.precip;
+    const wantBelow = mode === 'ride';
+    const isBelow = stage.getChildIndex(precip) < stage.getChildIndex(this.transport.behind);
+    if (wantBelow !== isBelow) {
+      stage.removeChild(precip);
+      if (wantBelow) stage.addChildAt(precip, stage.getChildIndex(this.transport.behind));
+      else stage.addChildAt(precip, stage.getChildIndex(this.weather.fogNear) + 1);
+    }
   }
 
   private makeDetails(): void {
@@ -808,6 +844,17 @@ export class SceneRenderer {
     const st = this.state;
     if (!st) return;
     const { relief, sea, seaColor, seaNear } = st.land;
+    const mode = st.travel.mode;
+    if (mode === 'ferry' || mode === 'ship') {
+      // From the deck: the fjord's walls stand across the water on the far
+      // layer, and everything nearer is water down to the bulwark.
+      const wall = mix(mix(st.hills.far, st.hills.mid, 0.45), seaColor, 0.15);
+      this.drawHill(this.hills.far, this.fjordSpec, wall, this.scroll.far, 1, 0, 'far', false);
+      // The water comes up a little higher than at the coast, to the walls' feet.
+      this.drawHill(this.hills.mid, this.hillSpecs.mid, seaColor, this.scroll.mid, 0, -0.03, 'mid', false);
+      this.drawHill(this.hills.near, this.hillSpecs.near, seaNear, this.scroll.near, 0, 0.03, 'near', false);
+      return;
+    }
     // At the coast the far and mid layers lie down flat and turn to water,
     // the mid one a little lower so the water has some width to it.
     this.drawHill(this.hills.far, this.hillSpecs.far, mix(st.hills.far, seaColor, sea), this.scroll.far, relief * (1 - sea), 0, 'far');
@@ -815,11 +862,12 @@ export class SceneRenderer {
     this.drawHill(this.hills.near, this.hillSpecs.near, st.hills.near, this.scroll.near, relief, 0, 'near');
   }
 
-  private drawHill(layer: HillLayer, spec: HillSpec, color: number, offset: number, relief: number, sink: number, name: BandName): void {
+  private drawHill(layer: HillLayer, spec: HillSpec, color: number, offset: number, relief: number, sink: number, name: BandName, painted = true): void {
     const { w, h } = this;
     const g = layer.fill;
     g.clear();
-    if (layer.band && this.bands) {
+    if (layer.band) layer.band.visible = painted;
+    if (layer.band && this.bands && painted) {
       // The painted band: its ridge is the picture's own; the land below it is a flat fill.
       const tex = this.bands[name];
       // Mountains stand taller, plains flatter; but a painted band only stretches so far before it looks pulled.
@@ -901,6 +949,8 @@ export class SceneRenderer {
       this.groundBand.texture = set.ground;
     }
     this.groundBand.alpha = 0;
+    // The grass edge is new: it has to learn where it may show (not from a deck).
+    if (this.state) this.showLayers(this.state.travel.mode);
     this.redressDetails();
     this.redraw();
   }
