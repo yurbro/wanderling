@@ -1,6 +1,6 @@
 import './style.css';
 import { direct, terrainAt } from './core/sceneDirector';
-import type { GeoPoint, Home, JourneyState, Position, RenderState, Route, WeatherCondition, WeatherState, WorldState, Terrain } from './core/types';
+import type { GeoPoint, Home, JourneyState, Position, RenderState, Route, WeatherCondition, WeatherState, WorldState, Terrain, EndingSeason } from './core/types';
 import { buildSegmentRoute, chooseNext, departureNote, nextSegment, routeOptions } from './core/chain';
 import { homeFrom } from './core/geo';
 import { dayAt, outsetDestination, planOutset, withOutset } from './core/outset';
@@ -22,7 +22,8 @@ import {
 } from './core/script';
 import { eveningOf, fullMoonEvenings, skyLetters } from './core/skyCalendar';
 import { detectLang, placeName, placeNote, setLang, t } from './core/i18n';
-import { REST_MS, advance, describeJourney, lastArrival, locate, startJourney, TERRAIN } from './core/journey';
+import { advance, advanceAlong, describeJourney, hold, lastArrival, locate, restMs, seasonalSkips, startJourney, TERRAIN } from './core/journey';
+import { endingSeason } from './core/ending';
 import { deliveredCards, demoPostcards, isDeparture, makePostcard, missingArrivals, pendingCards } from './core/postcards';
 import { EMPTY_MAIL, dayKey, deliver, fillSlots, markAllRead, momentTime, type Candidate, unreadCount, visibleLetters, weatherTime, bundled, type Letter } from './core/letters';
 import { BAG_DEFAULT, BAG_ITEMS, GENERAL_QUESTIONS, momentsFor, skeletonById, skyLetterPool, skyLine, skyVars, storiesFor, weatherSkeletons } from './data/letterTexts';
@@ -50,7 +51,7 @@ import { WeatherService, fetchHistory, fetchPlaceWeather } from './data/weather'
 import { SceneRenderer } from './scene/renderer';
 import { createAlbum } from './ui/album';
 import { createCityChooser } from './ui/city';
-import { applyBedtime, bedtimeLook, isBedtimeHour, REOPEN_AFTER_MS } from './core/bedtime';
+import { applyBedtime, bedtimeHolds, bedtimeLook, bedtimePlan, nightOf, REOPEN_AFTER_MS, type BedtimeContext } from './core/bedtime';
 import { createHud } from './ui/hud';
 import { createSettings } from './ui/settings';
 import { setupInstallHint } from './ui/install';
@@ -71,6 +72,7 @@ import { createMap } from './ui/map';
  *   ?postcards=demo    add three sample postcards to the album (not saved)
  *   ?postcards=now     hand over postcards the moment they are posted (slow post off)
  *   ?mail=demo         drop a few sample letters in the box (not saved)
+ *   ?ending=aurora     the long line's end letter for a season: aurora, midnightSun, brightNight (not saved)
  *   ?intro=reset       start over as a brand-new person: forget everything saved here
  *                      (except the language) and play the first minute
  *   ?intro=play        play the first minute again, changing nothing that is saved
@@ -178,6 +180,10 @@ async function main(): Promise<void> {
 
   /** When bedtime mode began (the app's clock), or null while it is not on. */
   let bedtimeAt: number | null = null;
+  /** How this bedtime looks: aboard a vehicle (no fire), or opened again after he slept tonight. */
+  let bedtimeCtx: BedtimeContext = {};
+  /** True while the mode holds the road still and the post back (ruling 26). */
+  let bedtimeHolding = false;
   const hud = createHud(root, {
     demo: params.get('demo') === '1',
     onPlace: () => city.open(),
@@ -217,7 +223,7 @@ async function main(): Promise<void> {
       // Opening the box reads everything that has arrived.
       mail = markAllRead(mail, clock());
       // Demo letters stay out of the saved box.
-      if (!demoJourney && !mailDemo) saveMail(mail);
+      if (!demoJourney && !mailDemo && !endingDemo) saveMail(mail);
       hud.setMail(0);
       mailbox.setPack(packLine());
     },
@@ -323,9 +329,12 @@ async function main(): Promise<void> {
   // A demo peek at another route: start it afresh, unsaved.
   const demoRoute = params.get('route') ? routeById(params.get('route')!) : undefined;
   if (demoRoute) {
-    route = demoRoute;
-    journey = { ...startJourney(route, clock()), home: null, from: null, walked: [] };
+    // Places out of season are left out as they would be on the way (ruling 25).
+    journey = { ...startJourney(demoRoute, clock()), home: null, from: null, walked: [], skipped: seasonalSkips(demoRoute, clock()) };
+    route = buildSegmentRoute(journey, ROUTES) ?? demoRoute;
   }
+  /** The route as travelled for a state: the saved skips applied, the transfer or the going-out stretch in front. */
+  const routeFor = (s: JourneyState): Route => buildSegmentRoute(s, ROUTES) ?? route;
   const kmJump = Number(params.get('km'));
   const jumpNext = params.get('journey') === 'next';
   const demoJourney = (params.has('km') && Number.isFinite(kmJump)) || jumpNext || !!demoRoute || demoDay !== null;
@@ -341,8 +350,9 @@ async function main(): Promise<void> {
     journey = { ...journey, km: Math.max(0, kmJump), restingUntil: null, updatedAt: clock() };
   }
   // A ?day= run walks its days in the replay below, not in one stride here.
-  const first = demoDay !== null ? { state: journey, arrived: [] } : advance(route, journey, clock());
+  const first = demoDay !== null ? { state: journey, arrived: [] } : advanceAlong(routeFor, journey, clock());
   journey = first.state;
+  if ('route' in first) route = first.route;
   if (!demoJourney) saveJourney(journey);
 
   // The first week's script (decisions D8). A new traveller's week begins with
@@ -366,7 +376,7 @@ async function main(): Promise<void> {
   let postcards = loadPostcards();
   const deliverNow = params.get('postcards') === 'now';
   const sampleCards = params.get('postcards') === 'demo' ? demoPostcards(route, location, clock()) : [];
-  const visibleCards = () => [...sampleCards, ...deliveredCards(postcards, deliverNow ? Infinity : clock())];
+  const visibleCards = () => [...sampleCards, ...deliveredCards(postcards, deliverNow ? Infinity : bedtimeHolding && bedtimeAt !== null ? bedtimeAt : clock())];
   const SEEN_KEY = 'wanderling.postcardsSeen';
   let seenCount = 0;
   try {
@@ -452,6 +462,12 @@ async function main(): Promise<void> {
       const p = r?.places.find((x) => x.id === placeId);
       if (p?.note) return [placeNote(p)];
     }
+    if (l.skeleton.startsWith('ending:')) {
+      const [, routeId, placeId, season] = l.skeleton.split(':');
+      const r = routeId === route.id ? route : findRoute(routeId);
+      const ending = r?.places.find((x) => x.id === placeId)?.endings?.[season as EndingSeason];
+      if (ending) return [lang === 'zh' ? ending.zh : ending.en];
+    }
     const sk = skeletonById(l.skeleton);
     if (!sk) return [];
     // The pack's thing is named in the reader's language when the letter is shown.
@@ -509,6 +525,12 @@ async function main(): Promise<void> {
         },
       });
     }
+    // The end of the long main line: one letter for the season he got there in (ruling 24), the night of his arrival.
+    for (const a of journey.arrivals) {
+      const p = route.places.find((x) => x.id === a.placeId);
+      if (!p?.endings) continue;
+      candidates.push({ id: `ending:${route.id}:${a.at}`, kind: 'sky', wantAt: a.at + 6 * 3_600_000, skeleton: `ending:${route.id}:${p.id}:${endingSeason(a.at)}`, vars: { name: nameNow(), place: placeName(p) } });
+    }
     // One small thing from the road a day, at its steady hour, from where he
     // is; in the first week, only on the days without a letter of their own.
     const momentAt = momentTime(today);
@@ -536,10 +558,10 @@ async function main(): Promise<void> {
     // The sky: full moons, falling stars, the turning days (the calendar is the one source).
     candidates.push(...skyLetters(surprises, now, script.start ?? script.anchor, location.lat, SKY_POOLS));
     syncSurprises(position, candidates);
-    const next = deliver(mail, candidates, now);
+    const next = deliver(mail, candidates, now, { quiet: bedtimeHolding });
     if (next !== mail) {
       mail = next;
-      if (!demoJourney && !mailDemo) saveMail(mail);
+      if (!demoJourney && !mailDemo && !endingDemo) saveMail(mail);
     }
     saveLog();
     const unread = unreadCount(mail, now);
@@ -607,6 +629,11 @@ async function main(): Promise<void> {
     return encodePanels(panels);
   };
 
+  // ?ending=aurora|midnightSun|brightNight drops the long line's letter for that season in the box (not saved).
+  const endingDemo = params.get('ending');
+  if (endingDemo === 'aurora' || endingDemo === 'midnightSun' || endingDemo === 'brightNight') {
+    mail = deliver(mail, [{ id: `demo:ending:${endingDemo}`, kind: 'sky', wantAt: clock() - 60_000, skeleton: `ending:north-light-v1:tromso:${endingDemo}`, vars: { name: nameNow(), place: lang === 'zh' ? '特罗姆瑟' : 'Tromsø' } }], clock());
+  }
   if (mailDemo) {
     const now = clock();
     mail = deliver(mail, [
@@ -754,7 +781,7 @@ async function main(): Promise<void> {
   // Bedtime mode (decisions D9): opened late at night, he sits by a fire, the
   // sky darkens, ten minutes on he sleeps and the picture fades to black and
   // stops. ?bedtime=1 forces it at any hour, ?bedtime=30 runs it 30 times faster,
-  // ?bedtimeMin=6 starts it six minutes in.
+  // ?bedtimeMin=6 starts it six minutes in, ?slept=1 shows the second opening of a night (ruling 28).
   const bedtimeParam = params.get('bedtime');
   const bedtimeSpeed = Math.max(1, Number(bedtimeParam) || 1);
   const veil = document.createElement('div');
@@ -762,8 +789,26 @@ async function main(): Promise<void> {
   root.appendChild(veil);
   const bedtimeHead = Math.max(0, Number(params.get('bedtimeMin')) || 0) * 60_000;
   let bedtimeTimer: number | null = null;
+  // Once a night (ruling 28): the night he last fell asleep by the fire.
+  const SLEPT_KEY = 'wanderling.bedtimeSlept';
+  const sleptNight = (): string | null => {
+    try {
+      return localStorage.getItem(SLEPT_KEY);
+    } catch {
+      return null;
+    }
+  };
+  const rememberSlept = (): void => {
+    if (demoJourney || bedtimeParam !== null) return;
+    try {
+      localStorage.setItem(SLEPT_KEY, nightOf(now()));
+    } catch {
+      // Fine: the fire may be lit twice.
+    }
+  };
   const stopBedtime = (): void => {
     bedtimeAt = null;
+    bedtimeHolding = false;
     if (bedtimeTimer !== null) window.clearInterval(bedtimeTimer);
     bedtimeTimer = null;
     veil.style.opacity = '0';
@@ -774,7 +819,14 @@ async function main(): Promise<void> {
     tick();
   };
   const startBedtime = (): void => {
+    // Up to now he walked as usual; the hold begins here.
+    journey = advance(route, journey, clock()).state;
+    if (!demoJourney) saveJourney(journey);
+    const pos = locate(route, journey, clock());
+    const aboard = pos.mode !== 'walk' && !pos.resting && !pos.finished;
+    bedtimeCtx = { aboard, sleptTonight: bedtimeParam === null ? bedtimePlan(now(), sleptNight()) === 'asleep' : params.get('slept') === '1' };
     bedtimeAt = clock();
+    bedtimeHolding = true;
     root.classList.add('bedtime');
     renderer.resume();
     if (bedtimeTimer === null) bedtimeTimer = window.setInterval(() => tick(), 2_000);
@@ -783,13 +835,23 @@ async function main(): Promise<void> {
   veil.addEventListener('click', () => {
     if (veil.classList.contains('on')) stopBedtime();
   });
-  const bedtimeAllowed = (): boolean => !introMode && !demoJourney && demoDay === null && (bedtimeParam !== null || isBedtimeHour(now()));
+  const bedtimeAllowed = (): boolean => !introMode && !demoJourney && demoDay === null && (bedtimeParam !== null || bedtimePlan(now(), null) !== null);
 
   const tick = (): void => {
     const t = now();
     const wall = clock();
-    const step = advance(route, journey, wall);
+    // By the fire the road waits (ruling 26), until the picture has gone black.
+    const look = bedtimeAt !== null ? bedtimeLook((wall - bedtimeAt) * bedtimeSpeed + bedtimeHead, bedtimeCtx) : null;
+    bedtimeHolding = look !== null && bedtimeHolds(look);
+    if (look?.asleep && !bedtimeCtx.sleptTonight) {
+      rememberSlept();
+      bedtimeCtx = { ...bedtimeCtx, sleptTonight: true };
+    }
+    const step = bedtimeHolding ? hold(route, journey, wall) : advanceAlong(routeFor, journey, wall);
+    const hadSkips = journey.skipped?.length ?? 0;
     journey = step.state;
+    // A place found out of season: the way now goes straight past it.
+    if ((journey.skipped?.length ?? 0) !== hadSkips) route = routeFor(journey);
     if (step.arrived.length > 0) {
       if (!demoJourney) saveJourney(journey);
       const place = step.arrived[step.arrived.length - 1];
@@ -798,7 +860,7 @@ async function main(): Promise<void> {
     // A finished route, rest over: set off on the next segment of the chain.
     const posNow = locate(route, journey, wall);
     const rested = lastArrival(journey);
-    if (posNow.finished && rested && wall >= rested.at + REST_MS) {
+    if (posNow.finished && rested && wall >= rested.at + restMs(route.places[route.places.length - 1])) {
       const seg = nextSegment(journey, route, ROUTES, wall);
       route = seg.route;
       journey = seg.journey;
@@ -806,8 +868,10 @@ async function main(): Promise<void> {
       const firstLeg = route.legs[0];
       hud.setNote(departureNote(firstLeg?.mode ?? 'walk', route.places[1] ? placeName(route.places[1]) : route.name), 15_000);
     }
-    syncPostcards(step.arrived.length > 0);
-    syncDelivered(true);
+    if (!bedtimeHolding) {
+      syncPostcards(step.arrived.length > 0);
+      syncDelivered(true);
+    }
     recordDiary();
     const position = locate(route, journey, wall);
     // Off the platform and onto the night train: say so, once.
@@ -815,12 +879,11 @@ async function main(): Promise<void> {
       if (lastLeg === 0 && position.legIndex === 1 && position.mode === 'ride') hud.setNote(say('boardedNight', { name: nameNow() }), 15_000);
       lastLeg = position.legIndex;
     }
-    syncMail(position);
+    if (!bedtimeHolding) syncMail(position);
     world = { ...buildWorldState(t, location, weatherFor(t), position), surprises: showSurprises(wall) };
     render = direct(world);
     let bedtimeOver = false;
-    if (bedtimeAt !== null) {
-      const look = bedtimeLook((clock() - bedtimeAt) * bedtimeSpeed + bedtimeHead);
+    if (look) {
       render = applyBedtime(render, look);
       veil.style.opacity = String(look.fade);
       veil.classList.toggle('on', look.fade > 0.5);
@@ -943,8 +1006,12 @@ async function main(): Promise<void> {
       renderer.pause();
     } else {
       // Back after a while, late at night: it is opening the app again.
-      if (bedtimeAllowed() && Date.now() - hiddenAt >= REOPEN_AFTER_MS && (bedtimeAt === null || veil.classList.contains('on'))) {
+      const reopened = Date.now() - hiddenAt >= REOPEN_AFTER_MS;
+      if (bedtimeAllowed() && reopened && (bedtimeAt === null || veil.classList.contains('on'))) {
         startBedtime();
+      } else if (bedtimeAt !== null && reopened && !bedtimeAllowed()) {
+        // Away long enough to count as leaving: the mode ended then, the road goes on.
+        stopBedtime();
       } else if (bedtimeAt === null || !veil.classList.contains('on')) renderer.resume();
       tick();
       void weather.refresh(location);

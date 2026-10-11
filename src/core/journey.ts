@@ -1,3 +1,4 @@
+import { haversineKm } from './geo';
 import { formatKm, placeName, t } from './i18n';
 import type { Arrival, JourneyState, Leg, LegMode, Place, Position, Route, Terrain } from './types';
 
@@ -26,13 +27,22 @@ import type { Arrival, JourneyState, Leg, LegMode, Place, Position, Route, Terra
  * there, so a new pace never rewinds or skips a place (see the journey tests).
  */
 export const KM_PER_HOUR = 0.98;
-/** How long the wanderling lingers at each place before walking on. */
+/** How long the wanderling lingers at each place before walking on, unless the place says otherwise (`restMs`). */
 export const REST_MS = 12 * 60 * 60_000;
 /** Between routes the wanderer may take a train, or a plane across the sea. */
 export const RIDE_KM_PER_HOUR = 60;
 export const FLY_KM_PER_HOUR = 700;
+/** On the long main line: the overnight ferry across the sea, and the coastal ship up the fjords. Both sail through the night. */
+export const FERRY_KM_PER_HOUR = 44;
+export const SHIP_KM_PER_HOUR = 25;
 
 const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
+
+/** The rest at a place: its own `restDays`, else half a day (D10). */
+export function restMs(place: Place | undefined): number {
+  return typeof place?.restDays === 'number' && place.restDays >= 0 ? place.restDays * DAY_MS : REST_MS;
+}
 
 /* ------------------------------------------------------------------------ */
 /* Sleep: no walking from 2:00 to 4:00 by the person's own clock             */
@@ -118,9 +128,82 @@ export function legSpeed(leg: Leg | undefined): number {
       return RIDE_KM_PER_HOUR;
     case 'fly':
       return FLY_KM_PER_HOUR;
+    case 'ferry':
+      return FERRY_KM_PER_HOUR;
+    case 'ship':
+      return SHIP_KM_PER_HOUR;
     default:
       return KM_PER_HOUR;
   }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Places with a season (section 9, ruling 25)                                */
+/* ------------------------------------------------------------------------ */
+
+/** True when the place is passed in the month of `at` (every month when it has no season). */
+export function inSeason(place: Place, at: number): boolean {
+  return !place.months || place.months.includes(new Date(at).getMonth() + 1);
+}
+
+/**
+ * The places right after `index` that are out of season at `at`: decided on
+ * arriving at the place before them, from that month, so a journey already
+ * under way is never rerouted behind its back.
+ */
+export function outOfSeason(route: Route, index: number, at: number): string[] {
+  const out: string[] = [];
+  for (let i = index + 1; i < route.places.length; i++) {
+    if (inSeason(route.places[i], at)) break;
+    out.push(route.places[i].id);
+  }
+  return out;
+}
+
+/** Every place with a season that `at` falls outside of (a demo peek at a route from its start). */
+export function seasonalSkips(route: Route, at: number): string[] {
+  return route.places.filter((p) => !inSeason(p, at)).map((p) => p.id);
+}
+
+/**
+ * The route without the given places. The legs either side of a left-out
+ * place become one leg of the way out of it (the coastal ship goes straight
+ * on), measured as the crow flies and a fifth more for the bends, or the
+ * two legs' sum when a place has no coordinates. Kilometres before the
+ * left-out place do not move, so a journey standing there carries on.
+ */
+export function withoutPlaces(route: Route, ids: string[] | undefined): Route {
+  if (!ids || ids.length === 0) return route;
+  const skip = new Set(ids);
+  const places: Place[] = [];
+  const legs: Leg[] = [];
+  let pendingKm = 0;
+  let via = false;
+  for (let i = 0; i < route.places.length; i++) {
+    const p = route.places[i];
+    const legIn = route.legs[i - 1];
+    if (i > 0 && skip.has(p.id) && i < route.places.length - 1 && places.length > 0) {
+      pendingKm += legIn.km;
+      via = true;
+      continue;
+    }
+    if (i > 0 && legIn) {
+      if (via) {
+        const prev = places[places.length - 1];
+        const direct =
+          typeof prev.lat === 'number' && typeof prev.lon === 'number' && typeof p.lat === 'number' && typeof p.lon === 'number'
+            ? Math.round(haversineKm({ lat: prev.lat, lon: prev.lon }, { lat: p.lat, lon: p.lon }) * 1.2)
+            : pendingKm + legIn.km;
+        legs.push({ ...legIn, km: Math.max(1, direct) });
+        pendingKm = 0;
+        via = false;
+      } else {
+        legs.push(legIn);
+      }
+    }
+    places.push(p);
+  }
+  return { ...route, places, legs };
 }
 
 /** Journey km at which each place sits, starting at 0. */
@@ -202,12 +285,58 @@ export function advance(route: Route, state: JourneyState, now: number, sleep: S
     const place = route.places[nextIndex];
     arrivals.push({ placeId: place.id, at: arriveAt });
     arrived.push(place);
-    restingUntil = arriveAt + REST_MS;
+    restingUntil = arriveAt + restMs(place);
+    // The next place out of season: leave it out and stop here, so the caller
+    // can rebuild the route (`advanceAlong`) before he walks on.
+    const skip = outOfSeason(route, nextIndex, arriveAt);
+    if (skip.length > 0) {
+      return {
+        state: { ...state, km: Math.min(km, end), updatedAt: t, restingUntil, arrivals, skipped: [...(state.skipped ?? []), ...skip] },
+        arrived,
+      };
+    }
   }
 
   return {
     state: { ...state, km: Math.min(km, end), updatedAt: now, restingUntil, arrivals },
     arrived,
+  };
+}
+
+/**
+ * `advance`, rebuilding the route whenever a place is found out of season:
+ * `routeFor` gives the route as travelled for a state (the saved skips
+ * applied). Up to one rebuild per place with a season.
+ */
+export function advanceAlong(routeFor: (state: JourneyState) => Route, state: JourneyState, now: number, sleep: SleepClock = localNights): AdvanceResult & { route: Route } {
+  let route = routeFor(state);
+  let current = state;
+  const arrived: Place[] = [];
+  for (let guard = 0; guard < 8; guard++) {
+    const step = advance(route, current, now, sleep);
+    arrived.push(...step.arrived);
+    current = step.state;
+    if ((step.state.skipped?.length ?? 0) === (state.skipped?.length ?? 0) || step.state.updatedAt >= now) break;
+    route = routeFor(current);
+    state = current;
+  }
+  return { state: current, arrived, route: routeFor(current) };
+}
+
+/**
+ * Hold the journey still up to `now` (bedtime mode, section 9, ruling 26):
+ * the minutes pass, the kilometres do not, and a rest under way ends that
+ * much later. Only his own feet stop: a train, a ship or a plane carries a
+ * dozing passenger on as usual (ruling 11), so aboard one this is `advance`.
+ */
+export function hold(route: Route, state: JourneyState, now: number, sleep: SleepClock = localNights): AdvanceResult {
+  if (now <= state.updatedAt) return { state: { ...state }, arrived: [] };
+  const pos = locate(route, state, state.updatedAt);
+  if (pos.mode !== 'walk' && !pos.resting && !pos.finished) return advance(route, state, now, sleep);
+  const paused = now - state.updatedAt;
+  return {
+    state: { ...state, updatedAt: now, restingUntil: state.restingUntil !== null ? state.restingUntil + paused : null },
+    arrived: [],
   };
 }
 
@@ -285,8 +414,8 @@ export function locate(route: Route, state: JourneyState, now: number): Position
   };
 }
 
-const VERB: Record<LegMode, 'walkingTo' | 'ridingTo' | 'flyingTo'> = { walk: 'walkingTo', ride: 'ridingTo', fly: 'flyingTo' };
-const NEAR_KM: Record<LegMode, number> = { walk: 1, ride: 10, fly: 50 };
+const VERB: Record<LegMode, 'walkingTo' | 'ridingTo' | 'flyingTo' | 'ferryingTo' | 'sailingTo'> = { walk: 'walkingTo', ride: 'ridingTo', fly: 'flyingTo', ferry: 'ferryingTo', ship: 'sailingTo' };
+const NEAR_KM: Record<LegMode, number> = { walk: 1, ride: 10, fly: 50, ferry: 10, ship: 5 };
 
 /**
  * How far into the "almost there" stretch, 0..1: 0 while the HUD still counts

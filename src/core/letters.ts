@@ -84,8 +84,11 @@ export function nextMorning(ms: number): number {
  * Take in candidates and place them in the box, honouring the daily limits.
  * Candidates already in the box are ignored; the rest are seated in
  * priority order, each pushed to later mornings until a day has room.
+ * `quiet` (bedtime mode) takes nothing in at all.
  */
-export function deliver(mail: Mail, candidates: Candidate[], now: number): Mail {
+export function deliver(mail: Mail, candidates: Candidate[], now: number, opts: { quiet?: boolean } = {}): Mail {
+  // By the fire nothing lands (bedtime mode, section 9, ruling 26): the candidates wait for the next opening.
+  if (opts.quiet) return mail;
   const have = new Set(mail.letters.map((l) => l.id));
   const fresh = candidates
     .filter((c) => !have.has(c.id))

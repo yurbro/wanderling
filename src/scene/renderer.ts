@@ -592,8 +592,9 @@ export class SceneRenderer {
       tint: st.wanderer.tint,
       width: this.w,
     });
-    const riding = st.travel.mode === 'ride';
-    const scrollPace = riding ? 5 : pace;
+    // A train runs past the land fast; a ferry and the coastal ship take the shore slowly.
+    const mode = st.travel.mode;
+    const scrollPace = mode === 'ride' ? 5 : mode === 'ferry' ? 2.2 : mode === 'ship' ? 1.6 : pace;
     const groundSpeed = GROUND_SPEED * scrollPace;
     this.transport.frame(dt, this.elapsed, groundSpeed);
     // Held still for the introduction the land still has to follow a change of place.

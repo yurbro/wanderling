@@ -1,6 +1,6 @@
 import { Assets, Container, Graphics, MeshRope, Point, Sprite, Texture } from 'pixi.js';
 import { WANDERER } from '../core/palette';
-import type { LeafState, RenderState, WandererState } from '../core/types';
+import type { LeafState, RenderState, WandererState, LegMode } from '../core/types';
 
 /**
  * The wanderling: a small egg-shaped creature with a leaf on its head, put
@@ -178,7 +178,7 @@ export class Wanderer {
   private asleep = false;
   /** Sat down, looking up at the full moon: the gaze is held for as long as it lasts. */
   private moonWatch = false;
-  private mode: 'walk' | 'ride' | 'fly' = 'walk';
+  private mode: LegMode = 'walk';
 
   private state: WandererState | null = null;
   private wind = 0;

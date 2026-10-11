@@ -37,20 +37,23 @@ describe('layoutRoute', () => {
   it('keeps names off each other and off other dots on every bundled route', () => {
     for (const route of ROUTES) {
       const layout = layoutRoute(route, 320, 440, 48);
-      const boxes = layout.points.map((p) => labelBox(p, p.labelSide));
+      // On the crowded long line some names are left off; the ones shown still keep apart.
+      const shown = layout.points.filter((p) => !p.labelHidden);
+      if (route.long) expect(shown.length).toBeGreaterThan(8);
+      const boxes = shown.map((p) => labelBox(p, p.labelSide));
       for (let i = 0; i < boxes.length; i++) {
         for (let j = i + 1; j < boxes.length; j++) {
           const a = boxes[i];
           const b = boxes[j];
           // A sliver of a few square pixels is invisible; a real overlap is not.
           const area = Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1)) * Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1));
-          expect(area, `${route.id}: ${layout.points[i].name} vs ${layout.points[j].name}`).toBeLessThan(20);
+          expect(area, `${route.id}: ${shown[i].name} vs ${shown[j].name}`).toBeLessThan(20);
         }
         for (let j = 0; j < layout.points.length; j++) {
-          if (j === i) continue;
           const q = layout.points[j];
+          if (q === shown[i]) continue;
           const hits = boxes[i].x1 < q.x + 6 && q.x - 6 < boxes[i].x2 && boxes[i].y1 < q.y + 6 && q.y - 6 < boxes[i].y2;
-          expect(hits, `${route.id}: ${layout.points[i].name} label over ${q.name}`).toBe(false);
+          expect(hits, `${route.id}: ${shown[i].name} label over ${q.name}`).toBe(false);
         }
       }
     }

@@ -129,7 +129,9 @@ function renderSvg(route: Route, layout: MapLayout, p: ReturnType<typeof mapProg
       const stampX = q.labelSide === 'right' ? q.x - 11 : q.labelSide === 'left' ? q.x + 11 : q.x + 11;
       const stamp = lit && stamped.has(q.id) ? `<text x="${stampX}" y="${q.y + 4}" font-size="9" fill="${BRICK}" text-anchor="middle" opacity="0.9">✦</text>` : '';
       const { tx, ty, anchor } = labelPos(q.x, q.y, q.labelSide);
-      const label = `<text x="${tx}" y="${ty}" font-size="${LABEL_FONT}" fill="${INK}" text-anchor="${anchor}" opacity="${lit ? 1 : 0.55}">${escape(q.name)}</text>`;
+      // On a crowded sheet some names are left off; the place he stands at or has reached last keeps its name.
+      const named = !q.labelHidden || q.id === p.reached[p.reached.length - 1];
+      const label = named ? `<text x="${tx}" y="${ty}" font-size="${LABEL_FONT}" fill="${INK}" text-anchor="${anchor}" opacity="${lit ? 1 : 0.55}">${escape(q.name)}</text>` : '';
       return dot + stamp + label;
     })
     .join('');

@@ -12,6 +12,7 @@
     "noEmit": true,
     "isolatedModules": true,
     "esModuleInterop": true,
+    "resolveJsonModule": true,
     "types": ["vite/client"]
   },
   "include": ["src", "tests"]

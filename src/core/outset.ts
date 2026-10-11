@@ -98,6 +98,9 @@ export function bearingTo(a: { lat: number; lon: number }, b: { lat: number; lon
 
 /** The route the night train goes to: the nearest that is worth a train, else simply the nearest. */
 export function outsetDestination(routes: Route[], origin: { lat: number; lon: number }): Route {
+  // The long main line never comes first (section 9, ruling 19).
+  const short = routes.filter((r) => !r.long);
+  if (short.length > 0) routes = short;
   const far = routes.filter((r) => {
     const p = r.places[0];
     return p && typeof p.lat === 'number' && typeof p.lon === 'number' && haversineKm(origin, { lat: p.lat, lon: p.lon }) >= NIGHT_TRAIN_MIN_KM;
